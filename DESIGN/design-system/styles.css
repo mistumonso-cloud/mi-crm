@@ -1,0 +1,6 @@
+/* Vibe Coder CRM — global stylesheet entry point.
+   Consumers link this single file; it only @imports tokens + fonts. */
+@import "tokens/colors.css";
+@import "tokens/typography.css";
+@import "tokens/spacing.css";
+@import "tokens/radii-shadows.css";

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="Pendientes del día" description="Pantalla de inicio de Carlos: seguimientos del día, atrasados, acciones rápidas y nav inferior." -->
+<helmet>
+  <script src="./ds-base.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  </style>
+</helmet>
+
+<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; background:#E5E7EB;">
+  <div style="width:375px; height:812px; background:#FAFAFA; border-radius:40px; box-shadow:0 8px 24px rgba(16,24,40,.12), 0 32px 64px rgba(16,24,40,.16); overflow:hidden; position:relative; display:flex; flex-direction:column;">
+
+    <!-- Status bar -->
+    <div style="height:44px; background:#fff; display:flex; align-items:center; justify-content:space-between; padding:0 24px; flex-shrink:0;">
+      <span style="font:600 14px/1 'Inter',system-ui; color:#1A1D24;">9:41</span>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <svg width="16" height="12" viewBox="0 0 16 12" fill="#1A1D24"><rect x="0" y="4" width="3" height="8" rx="1"/><rect x="4.5" y="2.5" width="3" height="9.5" rx="1"/><rect x="9" y="0.5" width="3" height="11.5" rx="1"/><rect x="13.5" y="0" width="2.5" height="12" rx="1"/></svg>
+        <svg width="20" height="12" viewBox="0 0 20 12" fill="none"><rect x=".75" y=".75" width="17" height="10.5" rx="2.25" stroke="#1A1D24" stroke-width="1.5"/><rect x="18.25" y="3.5" width="1.25" height="5" rx=".625" fill="#1A1D24"/><rect x="2" y="2" width="12" height="8" rx="1.5" fill="#1A1D24"/></svg>
+      </div>
+    </div>
+
+    <!-- Header -->
+    <div style="background:#fff; border-bottom:1px solid #E5E7EB; padding:10px 20px 14px; flex-shrink:0;">
+      <h1 style="font:700 20px/1.2 'Inter',system-ui; color:#1A1D24; letter-spacing:-0.02em; margin-bottom:3px;">Pendientes del día</h1>
+      <p style="font:400 13px/1 'Inter',system-ui; color:#6B7280;">{{ subtitle }}</p>
+    </div>
+
+    <!-- Contenido con scroll -->
+    <div style="flex:1; overflow-y:auto; padding-bottom:8px;">
+
+      <!-- Estado vacío -->
+      <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; padding:40px 32px; text-align:center; gap:16px;">
+          <div style="width:72px; height:72px; border-radius:999px; background:#EAEFF3; display:flex; align-items:center; justify-content:center;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#3B5266" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <span style="font:600 17px/1.2 'Inter',system-ui; color:#1A1D24;">Sin pendientes hoy</span>
+            <span style="font:400 13px/1.55 'Inter',system-ui; color:#6B7280;">Cuando programes un seguimiento,<br>aparecerá aquí</span>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- Lista -->
+      <sc-if value="{{ notEmpty }}" hint-placeholder-val="{{ true }}">
+
+        <!-- Sección atrasados -->
+        <sc-if value="{{ hasOverdue }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex; align-items:center; gap:8px; padding:14px 20px 6px;">
+            <span style="width:7px; height:7px; border-radius:999px; background:#F59E0B; flex-shrink:0;"></span>
+            <span style="font:600 11px/1 'Inter',system-ui; color:#B45309; letter-spacing:0.06em; text-transform:uppercase;">Atrasados</span>
+          </div>
+          <sc-for list="{{ overdueItems }}" as="item" hint-placeholder-count="1">
+            <div style="display:flex; align-items:flex-start; gap:12px; padding:14px 20px; background:#FFFBEB; border-bottom:1px solid #FEF3C7;">
+              {{ item.avatarEl }}
+              <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:5px;">
+                <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                  <span style="font:600 14px/1 'Inter',system-ui; color:#1A1D24;">{{ item.name }}</span>
+                  {{ item.badgeEl }}
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <span style="font:400 12px/1 'Inter',system-ui; color:#9CA3AF;">{{ item.time }}</span>
+                  <span style="font:600 11px/1 'Inter',system-ui; background:#FEF3C7; color:#B45309; padding:2px 8px; border-radius:999px;">Atrasado</span>
+                </div>
+                <span style="font:400 13px/1.4 'Inter',system-ui; color:#6B7280;">{{ item.reason }}</span>
+              </div>
+              <button
+                onClick="{{ item.markDone }}"
+                style="height:44px; padding:0 14px; background:#fff; border:1.5px solid #E5E7EB; border-radius:999px; font:500 13px/1 'Inter',system-ui; color:#374151; cursor:pointer; display:flex; align-items:center; gap:5px; flex-shrink:0; white-space:nowrap; transition:background .15s, border-color .15s;"
+                style-hover="background:#FAFAFA; border-color:#D1D5DB;"
+                style-active="background:#F3F4F6;">
+                <svg width="13" height="10" viewBox="0 0 13 10" fill="none"><polyline points="1 5 5 9 12 1" stroke="#374151" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Hecho
+              </button>
+            </div>
+          </sc-for>
+        </sc-if>
+
+        <!-- Sección hoy -->
+        <sc-if value="{{ hasTodayItems }}" hint-placeholder-val="{{ true }}">
+          <div style="padding:14px 20px 6px;">
+            <span style="font:600 11px/1 'Inter',system-ui; color:#9CA3AF; letter-spacing:0.06em; text-transform:uppercase;">Hoy</span>
+          </div>
+          <sc-for list="{{ todayItems }}" as="item" hint-placeholder-count="3">
+            <div style="display:flex; align-items:flex-start; gap:12px; padding:14px 20px; background:#fff; border-bottom:1px solid #F3F4F6;">
+              {{ item.avatarEl }}
+              <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:5px;">
+                <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                  <span style="font:600 14px/1 'Inter',system-ui; color:#1A1D24;">{{ item.name }}</span>
+                  {{ item.badgeEl }}
+                </div>
+                <span style="font:400 12px/1 'Inter',system-ui; color:#9CA3AF;">{{ item.time }}</span>
+                <span style="font:400 13px/1.4 'Inter',system-ui; color:#6B7280;">{{ item.reason }}</span>
+              </div>
+              <button
+                onClick="{{ item.markDone }}"
+                style="height:44px; padding:0 14px; background:#fff; border:1.5px solid #E5E7EB; border-radius:999px; font:500 13px/1 'Inter',system-ui; color:#374151; cursor:pointer; display:flex; align-items:center; gap:5px; flex-shrink:0; white-space:nowrap; transition:background .15s, border-color .15s;"
+                style-hover="background:#FAFAFA; border-color:#D1D5DB;"
+                style-active="background:#F3F4F6;">
+                <svg width="13" height="10" viewBox="0 0 13 10" fill="none"><polyline points="1 5 5 9 12 1" stroke="#374151" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Hecho
+              </button>
+            </div>
+          </sc-for>
+        </sc-if>
+
+      </sc-if>
+    </div>
+
+    <!-- Barra de navegación inferior -->
+    <div style="height:72px; background:#fff; border-top:1px solid #E5E7EB; display:flex; align-items:center; padding:0 8px; flex-shrink:0;">
+
+      <button
+        style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 0; background:none; border:none; cursor:pointer; color:#3B5266; transition:opacity .15s;"
+        style-hover="opacity:0.75;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span style="font:600 11px/1 'Inter',system-ui;">Pendientes</span>
+      </button>
+
+      <button
+        style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 0; background:none; border:none; cursor:pointer; color:#9CA3AF; transition:color .15s;"
+        style-hover="color:#6B7280;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span style="font:500 11px/1 'Inter',system-ui;">Contactos</span>
+      </button>
+
+      <button
+        style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 0; background:none; border:none; cursor:pointer; color:#9CA3AF; transition:color .15s;"
+        style-hover="color:#6B7280;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span style="font:500 11px/1 'Inter',system-ui;">Panel</span>
+      </button>
+
+    </div>
+
+    <!-- FAB -->
+    <button
+      style="position:absolute; bottom:84px; right:16px; width:52px; height:52px; border-radius:999px; background:#3B5266; color:#fff; border:none; cursor:pointer; font:300 26px/1 'Inter',system-ui; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 12px rgba(59,82,102,.35); transition:background .15s, transform .1s;"
+      style-hover="background:#2E4252;"
+      style-active="transform:scale(0.94); background:#233442;">
+      +
+    </button>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 423, &quot;height&quot;: 860 },
+  &quot;demoState&quot;: {
+    &quot;editor&quot;: &quot;enum&quot;,
+    &quot;options&quot;: [&quot;list&quot;, &quot;empty&quot;],
+    &quot;default&quot;: &quot;list&quot;,
+    &quot;section&quot;: &quot;Estado de demo&quot;
+  }
+}">
+class Component extends DCLogic {
+  state = { doneIds: new Set() };
+
+  markDone(id) {
+    this.setState(s => {
+      const next = new Set(s.doneIds);
+      next.add(id);
+      return { doneIds: next };
+    });
+  }
+
+  renderVals() {
+    const demo     = this.props.demoState ?? 'list';
+    const { doneIds } = this.state;
+
+    const STAGE_META = {
+      lead:        { label: 'Lead nuevo',        bg: '#E0F2FE', fg: '#0369A1' },
+      talking:     { label: 'En conversación',   bg: '#EAEFF3', fg: '#3B5266' },
+      proposal:    { label: 'Propuesta enviada', bg: '#F3E8FF', fg: '#7E22CE' },
+      negotiating: { label: 'Negociando',        bg: '#FFEDD5', fg: '#C2410C' },
+      won:         { label: 'Ganado',            bg: '#DCFCE7', fg: '#15803D' },
+    };
+
+    const ALL_ITEMS = [
+      { id: 1, overdue: true,  name: 'Sofía Méndez',  initial: 'S', avatarBg: '#F3E8FF', avatarFg: '#7E22CE', stage: 'talking',     time: 'Ayer 16:00', reason: 'Enviar propuesta revisada antes del cierre' },
+      { id: 2, overdue: false, name: 'Carlos Vega',   initial: 'C', avatarBg: '#FFEDD5', avatarFg: '#C2410C', stage: 'negotiating', time: '09:30',      reason: 'Llamar para cerrar presupuesto' },
+      { id: 3, overdue: false, name: 'Ana Torres',    initial: 'A', avatarBg: '#E0F2FE', avatarFg: '#0369A1', stage: 'lead',        time: '10:00',      reason: 'Primera llamada de presentación' },
+      { id: 4, overdue: false, name: 'Bruno Gil',     initial: 'B', avatarBg: '#DCFCE7', avatarFg: '#15803D', stage: 'proposal',    time: '12:00',      reason: 'Revisar feedback del presupuesto' },
+      { id: 5, overdue: false, name: 'Elena Soto',    initial: 'E', avatarBg: '#EAEFF3', avatarFg: '#3B5266', stage: 'won',         time: '16:00',      reason: 'Confirmar fecha de inicio del proyecto' },
+    ];
+
+    const active        = demo === 'empty' ? [] : ALL_ITEMS.filter(i => !doneIds.has(i.id));
+    const isEmpty       = active.length === 0;
+    const total         = active.length;
+
+    const makeItem = (item) => {
+      const s = STAGE_META[item.stage];
+      return {
+        ...item,
+        avatarEl: React.createElement('div', {
+          style: {
+            width: '40px', height: '40px', borderRadius: '999px',
+            background: item.avatarBg, color: item.avatarFg,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            font: "700 15px/1 'Inter',system-ui", flexShrink: 0, marginTop: '2px',
+          },
+        }, item.initial),
+        badgeEl: React.createElement('span', {
+          style: {
+            font: "600 11px/1 'Inter',system-ui",
+            background: s.bg, color: s.fg,
+            padding: '3px 8px', borderRadius: '999px', whiteSpace: 'nowrap',
+          },
+        }, s.label),
+        stageLabel: s.label,
+        stageBg:    s.bg,
+        stageFg:    s.fg,
+        markDone:   () => this.markDone(item.id),
+      };
+    };
+
+    const overdueItems  = active.filter(i =>  i.overdue).map(makeItem);
+    const todayItems    = active.filter(i => !i.overdue).map(makeItem);
+    const hasOverdue    = overdueItems.length > 0;
+    const hasTodayItems = todayItems.length > 0;
+
+    const subtitle = isEmpty
+      ? 'Jueves, 22 de junio · sin pendientes'
+      : `Jueves, 22 de junio · ${total} pendiente${total !== 1 ? 's' : ''}`;
+
+    return {
+      subtitle,
+      isEmpty,
+      notEmpty: !isEmpty,
+      hasOverdue,
+      hasTodayItems,
+      overdueItems,
+      todayItems,
+    };
+  }
+}
+</script>
+</body>
+</html>

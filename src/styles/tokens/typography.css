@@ -1,0 +1,24 @@
+/* Vibe Coder CRM — Typography tokens */
+/* Inter / JetBrains Mono are self-hosted via next/font in src/app/layout.tsx,
+   which sets --font-sans / --font-mono on <html>. */
+
+:root {
+  /* Escala */
+  --text-display: 24px;
+  --text-heading-lg: 20px;
+  --text-heading-sm: 18px;
+  --text-body-lg: 16px;
+  --text-body-sm: 14px;
+  --text-caption: 12px;
+
+  /* Pesos */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* Interlineado */
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.6;
+}

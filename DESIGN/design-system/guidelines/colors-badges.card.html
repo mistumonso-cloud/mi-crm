@@ -1,0 +1,25 @@
+<!-- @dsCard group="Colors" viewport="700x150" name="Badges de pipeline" subtitle="7 estados de venta" -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body{margin:0;font-family:var(--font-sans);background:var(--color-surface);padding:18px}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  .b{font-size:13px;font-weight:600;padding:6px 13px;border-radius:var(--radius-full);display:inline-flex;align-items:center;gap:6px}
+  .dot{width:7px;height:7px;border-radius:999px}
+</style>
+</head>
+<body>
+  <div class="row">
+    <span class="b" style="background:var(--status-lead-bg);color:var(--status-lead-fg)"><span class="dot" style="background:#0EA5E9"></span>Lead nuevo</span>
+    <span class="b" style="background:var(--status-talking-bg);color:var(--status-talking-fg)"><span class="dot" style="background:#5B7387"></span>En conversación</span>
+    <span class="b" style="background:var(--status-proposal-bg);color:var(--status-proposal-fg)"><span class="dot" style="background:#A855F7"></span>Propuesta enviada</span>
+    <span class="b" style="background:var(--status-negotiating-bg);color:var(--status-negotiating-fg)"><span class="dot" style="background:#F97316"></span>Negociando</span>
+    <span class="b" style="background:var(--status-won-bg);color:var(--status-won-fg)"><span class="dot" style="background:#22C55E"></span>Ganado</span>
+    <span class="b" style="background:var(--status-lost-bg);color:var(--status-lost-fg)"><span class="dot" style="background:#EF4444"></span>Perdido</span>
+    <span class="b" style="background:var(--status-inactive-bg);color:var(--status-inactive-fg)"><span class="dot" style="background:#9CA3AF"></span>Inactivo</span>
+  </div>
+</body>
+</html>

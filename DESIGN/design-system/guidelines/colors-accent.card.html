@@ -1,0 +1,26 @@
+<!-- @dsCard group="Colors" viewport="700x150" name="Acento & superficie" subtitle="Azul pizarra + grises de superficie" -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body{margin:0;font-family:var(--font-sans);background:var(--color-surface);padding:16px}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .sw{width:104px}
+  .chip{height:52px;border-radius:var(--radius-lg);border:1px solid rgba(0,0,0,.06)}
+  .nm{font-size:12px;font-weight:600;color:var(--text-primary);margin-top:7px}
+  .hx{font-family:var(--font-mono);font-size:11px;color:var(--text-tertiary);margin-top:1px}
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="sw"><div class="chip" style="background:var(--color-accent)"></div><div class="nm">accent</div><div class="hx">#3B5266</div></div>
+    <div class="sw"><div class="chip" style="background:var(--color-accent-hover)"></div><div class="nm">accent.hover</div><div class="hx">#2E4252</div></div>
+    <div class="sw"><div class="chip" style="background:var(--color-accent-tint)"></div><div class="nm">accent.tint</div><div class="hx">#EAEFF3</div></div>
+    <div class="sw"><div class="chip" style="background:var(--color-bg)"></div><div class="nm">bg</div><div class="hx">#FAFAFA</div></div>
+    <div class="sw"><div class="chip" style="background:var(--color-muted)"></div><div class="nm">muted</div><div class="hx">#F3F4F6</div></div>
+    <div class="sw"><div class="chip" style="background:var(--color-surface);border-color:var(--color-border)"></div><div class="nm">surface / border</div><div class="hx">#FFF · #E5E7EB</div></div>
+  </div>
+</body>
+</html>

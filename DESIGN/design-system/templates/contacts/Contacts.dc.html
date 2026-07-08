@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="Contactos" description="Lista de contactos con búsqueda en tiempo real, filtrado, chips de seguimiento y estados vacíos." -->
+<helmet>
+  <script src="./ds-base.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    input::placeholder { color: #9CA3AF; }
+  </style>
+</helmet>
+
+<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; background:#E5E7EB;">
+  <div style="width:375px; height:812px; background:#FAFAFA; border-radius:40px; box-shadow:0 8px 24px rgba(16,24,40,.12), 0 32px 64px rgba(16,24,40,.16); overflow:hidden; position:relative; display:flex; flex-direction:column;">
+
+    <!-- Status bar -->
+    <div style="height:44px; background:#fff; display:flex; align-items:center; justify-content:space-between; padding:0 24px; flex-shrink:0;">
+      <span style="font:600 14px/1 'Inter',system-ui; color:#1A1D24;">9:41</span>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <svg width="16" height="12" viewBox="0 0 16 12" fill="#1A1D24"><rect x="0" y="4" width="3" height="8" rx="1"/><rect x="4.5" y="2.5" width="3" height="9.5" rx="1"/><rect x="9" y="0.5" width="3" height="11.5" rx="1"/><rect x="13.5" y="0" width="2.5" height="12" rx="1"/></svg>
+        <svg width="20" height="12" viewBox="0 0 20 12" fill="none"><rect x=".75" y=".75" width="17" height="10.5" rx="2.25" stroke="#1A1D24" stroke-width="1.5"/><rect x="18.25" y="3.5" width="1.25" height="5" rx=".625" fill="#1A1D24"/><rect x="2" y="2" width="12" height="8" rx="1.5" fill="#1A1D24"/></svg>
+      </div>
+    </div>
+
+    <!-- Header + búsqueda sticky -->
+    <div style="background:#fff; padding:10px 20px 12px; flex-shrink:0; border-bottom:1px solid #E5E7EB;">
+      <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:12px;">
+        <h1 style="font:700 20px/1.2 'Inter',system-ui; color:#1A1D24; letter-spacing:-0.02em;">Contactos</h1>
+        <span style="font:500 13px/1 'Inter',system-ui; color:#9CA3AF;">{{ totalLabel }}</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; background:#F3F4F6; border-radius:10px; padding:10px 14px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input
+          type="text"
+          placeholder="Buscar por nombre o teléfono"
+          value="{{ searchVal }}"
+          onInput="{{ onSearch }}"
+          style="flex:1; border:none; background:transparent; font:400 14px/1.5 'Inter',system-ui; color:#1A1D24; outline:none; min-width:0;">
+        </input>
+        <sc-if value="{{ hasSearch }}" hint-placeholder-val="{{ false }}">
+          <button
+            onClick="{{ clearSearch }}"
+            style="background:none; border:none; cursor:pointer; padding:2px; display:flex; color:#9CA3AF; flex-shrink:0; transition:color .15s;"
+            style-hover="color:#6B7280;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </sc-if>
+      </div>
+    </div>
+
+    <!-- Área lista -->
+    <div style="flex:1; overflow-y:auto;">
+
+      <!-- Vacío: sin contactos -->
+      <sc-if value="{{ emptyNoContacts }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; padding:40px 32px; text-align:center; gap:16px;">
+          <div style="width:72px; height:72px; border-radius:999px; background:#EAEFF3; display:flex; align-items:center; justify-content:center;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#3B5266" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <span style="font:600 17px/1.2 'Inter',system-ui; color:#1A1D24;">Aún no hay contactos</span>
+            <span style="font:400 13px/1.55 'Inter',system-ui; color:#6B7280;">Empieza añadiendo tu primer contacto</span>
+          </div>
+          <button
+            style="background:#3B5266; color:#fff; border:none; border-radius:8px; font:600 14px/1 'Inter',system-ui; padding:12px 20px; cursor:pointer; transition:background .15s;"
+            style-hover="background:#2E4252;"
+            style-active="background:#233442;">
+            Añadir primer contacto
+          </button>
+        </div>
+      </sc-if>
+
+      <!-- Vacío: sin resultados -->
+      <sc-if value="{{ emptySearch }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; padding:40px 32px; text-align:center; gap:14px;">
+          <div style="width:72px; height:72px; border-radius:999px; background:#EAEFF3; display:flex; align-items:center; justify-content:center;">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#3B5266" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <span style="font:600 17px/1.2 'Inter',system-ui; color:#1A1D24;">Sin resultados para "{{ searchVal }}"</span>
+            <span style="font:400 13px/1.55 'Inter',system-ui; color:#6B7280;">Prueba con otro nombre o número</span>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- Lista -->
+      <sc-if value="{{ showList }}" hint-placeholder-val="{{ true }}">
+        <sc-for list="{{ visibleContacts }}" as="c" hint-placeholder-count="6">
+          <div
+            style="display:flex; align-items:center; gap:12px; padding:13px 20px; background:#fff; border-bottom:1px solid #F3F4F6; cursor:pointer; transition:background .12s;"
+            style-hover="background:#F9FAFB;"
+            style-active="background:#F3F4F6;">
+            {{ c.avatarEl }}
+            <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:4px;">
+              <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                <span style="font:600 14px/1.1 'Inter',system-ui; color:#1A1D24;">{{ c.name }}</span>
+                {{ c.badgeEl }}
+                <sc-if value="{{ c.pendingToday }}" hint-placeholder-val="{{ false }}">
+                  <span style="font:600 11px/1 'Inter',system-ui; background:#FEF3C7; color:#B45309; padding:2px 7px; border-radius:999px;">Hoy</span>
+                </sc-if>
+              </div>
+              <span style="font:400 12px/1 'Inter',system-ui; color:#9CA3AF;">{{ c.lastContact }}</span>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </sc-for>
+      </sc-if>
+
+    </div>
+
+    <!-- Navegación inferior -->
+    <div style="height:72px; background:#fff; border-top:1px solid #E5E7EB; display:flex; align-items:center; padding:0 8px; flex-shrink:0;">
+
+      <button
+        style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 0; background:none; border:none; cursor:pointer; color:#9CA3AF; transition:color .15s;"
+        style-hover="color:#6B7280;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span style="font:500 11px/1 'Inter',system-ui;">Pendientes</span>
+      </button>
+
+      <button
+        style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 0; background:none; border:none; cursor:pointer; color:#3B5266; transition:opacity .15s;"
+        style-hover="opacity:0.75;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span style="font:600 11px/1 'Inter',system-ui;">Contactos</span>
+      </button>
+
+      <button
+        style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 0; background:none; border:none; cursor:pointer; color:#9CA3AF; transition:color .15s;"
+        style-hover="color:#6B7280;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span style="font:500 11px/1 'Inter',system-ui;">Panel</span>
+      </button>
+
+    </div>
+
+    <!-- FAB -->
+    <button
+      style="position:absolute; bottom:84px; right:16px; width:52px; height:52px; border-radius:999px; background:#3B5266; color:#fff; border:none; cursor:pointer; font:300 26px/1 'Inter',system-ui; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 12px rgba(59,82,102,.35); transition:background .15s, transform .1s;"
+      style-hover="background:#2E4252;"
+      style-active="transform:scale(0.94); background:#233442;">
+      +
+    </button>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 423, &quot;height&quot;: 860 },
+  &quot;demoState&quot;: {
+    &quot;editor&quot;: &quot;enum&quot;,
+    &quot;options&quot;: [&quot;list&quot;, &quot;search-results&quot;, &quot;search-empty&quot;, &quot;no-contacts&quot;],
+    &quot;default&quot;: &quot;list&quot;,
+    &quot;section&quot;: &quot;Estado de demo&quot;
+  }
+}">
+class Component extends DCLogic {
+  state = { query: '' };
+
+  renderVals() {
+    const demo  = this.props.demoState ?? 'list';
+    const query = demo === 'search-empty'   ? 'xkzq'
+                : demo === 'search-results' ? 'mar'
+                : this.state.query;
+
+    const STAGE = {
+      lead:        { label: 'Lead nuevo',        bg: '#E0F2FE', fg: '#0369A1' },
+      talking:     { label: 'En conversación',   bg: '#EAEFF3', fg: '#3B5266' },
+      proposal:    { label: 'Propuesta enviada', bg: '#F3E8FF', fg: '#7E22CE' },
+      negotiating: { label: 'Negociando',        bg: '#FFEDD5', fg: '#C2410C' },
+      won:         { label: 'Ganado',            bg: '#DCFCE7', fg: '#15803D' },
+      lost:        { label: 'Perdido',           bg: '#FEE2E2', fg: '#B91C1C' },
+      inactive:    { label: 'Inactivo',          bg: '#F3F4F6', fg: '#6B7280' },
+    };
+
+    const ALL = [
+      { id:1, name:'Marta Sánchez',  initial:'M', aBg:'#F3E8FF', aFg:'#7E22CE', stage:'negotiating', lastContact:'hace 1 hora',    pendingToday:true  },
+      { id:2, name:'Carlos Vega',    initial:'C', aBg:'#FFEDD5', aFg:'#C2410C', stage:'negotiating', lastContact:'hace 3 horas',   pendingToday:false },
+      { id:3, name:'Ana Torres',     initial:'A', aBg:'#E0F2FE', aFg:'#0369A1', stage:'lead',        lastContact:'ayer',           pendingToday:false },
+      { id:4, name:'Marco Reyes',    initial:'M', aBg:'#DCFCE7', aFg:'#15803D', stage:'proposal',    lastContact:'hace 2 días',    pendingToday:false },
+      { id:5, name:'Elena Soto',     initial:'E', aBg:'#EAEFF3', aFg:'#3B5266', stage:'won',         lastContact:'hace 3 días',    pendingToday:false },
+      { id:6, name:'Mario Herrera',  initial:'M', aBg:'#F3E8FF', aFg:'#7E22CE', stage:'talking',     lastContact:'hace 5 días',    pendingToday:false },
+      { id:7, name:'Laura Jiménez',  initial:'L', aBg:'#DCFCE7', aFg:'#15803D', stage:'inactive',    lastContact:'hace 2 semanas', pendingToday:false },
+      { id:8, name:'Paco Martínez',  initial:'P', aBg:'#FEE2E2', aFg:'#B91C1C', stage:'lost',        lastContact:'hace 1 mes',     pendingToday:false },
+    ];
+
+    const makeContact = (c) => {
+      const s = STAGE[c.stage];
+      return {
+        ...c,
+        avatarEl: React.createElement('div', {
+          style: {
+            width:'40px', height:'40px', borderRadius:'999px',
+            background:c.aBg, color:c.aFg,
+            display:'flex', alignItems:'center', justifyContent:'center',
+            font:"700 15px/1 'Inter',system-ui", flexShrink:0,
+          },
+        }, c.initial),
+        badgeEl: React.createElement('span', {
+          style: {
+            font:"600 11px/1 'Inter',system-ui",
+            background:s.bg, color:s.fg,
+            padding:'3px 8px', borderRadius:'999px', whiteSpace:'nowrap',
+          },
+        }, s.label),
+      };
+    };
+
+    const q        = query.trim().toLowerCase();
+    const filtered = q ? ALL.filter(c => c.name.toLowerCase().includes(q)) : ALL;
+
+    const noContacts  = demo === 'no-contacts';
+    const emptySearch = !noContacts && q !== '' && filtered.length === 0;
+    const showList    = !noContacts && !emptySearch && filtered.length > 0;
+
+    return {
+      totalLabel:      `${ALL.length} contactos`,
+      searchVal:       query,
+      hasSearch:       query.length > 0,
+      onSearch:        (e) => this.setState({ query: e.target.value }),
+      clearSearch:     () => this.setState({ query: '' }),
+      visibleContacts: filtered.map(makeContact),
+      emptyNoContacts: noContacts,
+      emptySearch,
+      showList,
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+<!-- @dsCard group="Spacing" viewport="700x150" name="Radios & sombras" subtitle="Esquinas suaves, elevación sutil" -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body{margin:0;font-family:var(--font-sans);background:var(--color-muted);padding:20px}
+  .row{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+  .ra{width:60px;height:60px;background:var(--color-accent-tint);border:1.5px solid var(--color-accent)}
+  .nm{font-size:11px;font-weight:600;color:var(--text-secondary);text-align:center;margin-top:7px}
+  .card{width:120px;height:60px;background:var(--color-surface);border-radius:var(--radius-lg);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--text-secondary)}
+</style>
+</head>
+<body>
+  <div class="row">
+    <div><div class="ra" style="border-radius:var(--radius-sm)"></div><div class="nm">sm 4</div></div>
+    <div><div class="ra" style="border-radius:var(--radius-md)"></div><div class="nm">md 8</div></div>
+    <div><div class="ra" style="border-radius:var(--radius-lg)"></div><div class="nm">lg 12</div></div>
+    <div><div class="ra" style="border-radius:var(--radius-2xl)"></div><div class="nm">2xl 24</div></div>
+    <div style="width:1px;height:64px;background:var(--color-border)"></div>
+    <div class="card" style="box-shadow:var(--shadow-sm)">sm</div>
+    <div class="card" style="box-shadow:var(--shadow-md)">md</div>
+    <div class="card" style="box-shadow:var(--shadow-lg)">lg</div>
+  </div>
+</body>
+</html>

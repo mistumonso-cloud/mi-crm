@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="Login" description="Pantalla de inicio de sesión para el CRM" -->
+<helmet>
+  <script src="./ds-base.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; }
+    @keyframes login-spin { to { transform: rotate(360deg); } }
+  </style>
+</helmet>
+
+<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:32px 24px; background:var(--color-bg, #FAFAFA);">
+  <div style="width:100%; max-width:375px; display:flex; flex-direction:column; gap:52px;">
+
+    <!-- Marca -->
+    <div style="display:flex; flex-direction:column; align-items:center; gap:18px; text-align:center;">
+      <div style="width:52px; height:52px; background:var(--color-accent, #3B5266); border-radius:var(--radius-lg, 12px); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+        <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+          <path d="M5.5 8h15M5.5 13h9.5M5.5 18h12" stroke="white" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px; align-items:center;">
+        <h1 style="margin:0; font:700 22px/1.2 'Inter', system-ui, sans-serif; color:var(--text-primary, #1A1D24); letter-spacing:-0.02em;">Vibe Coder CRM</h1>
+        <p style="margin:0; font:400 14px/1.55 'Inter', system-ui, sans-serif; color:var(--text-secondary, #6B7280); max-width:252px;">Gestiona tus contactos y nunca pierdas una venta</p>
+      </div>
+    </div>
+
+    <!-- Formulario -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+      <!-- Email -->
+      <x-import
+        component-from-global-scope="VibeCoderCRMDesignSystem_cdaf1f.Input"
+        label="Email"
+        type="email"
+        placeholder="tucorreo@email.com"
+        value="{{ emailValue }}"
+        on-change="{{ onEmailChange }}"
+        auto-complete="email"
+        hint-size="100%,72px">
+      </x-import>
+
+      <!-- Contraseña -->
+      <x-import
+        component-from-global-scope="VibeCoderCRMDesignSystem_cdaf1f.Input"
+        label="Contraseña"
+        type="{{ passwordType }}"
+        placeholder="••••••••"
+        value="{{ passwordValue }}"
+        on-change="{{ onPasswordChange }}"
+        suffix="{{ toggleSuffix }}"
+        auto-complete="current-password"
+        hint-size="100%,72px">
+      </x-import>
+
+      <!-- Botón Entrar -->
+      <button
+        onClick="{{ onSubmit }}"
+        disabled="{{ isLoading }}"
+        type="submit"
+        style="width:100%; height:48px; background:var(--color-accent, #3B5266); color:#fff; border:none; border-radius:var(--radius-md, 8px); font:600 15px/1 'Inter', system-ui, sans-serif; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:9px; transition:background .18s ease-out, transform .12s ease-out; padding:0; margin-top:4px;"
+        style-hover="background:var(--color-accent-hover, #2E4252);"
+        style-active="transform:scale(0.97);">
+        <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
+          <span style="width:16px; height:16px; border:2.5px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:login-spin .65s linear infinite; display:block; flex-shrink:0;"></span>
+          <span style="font:600 15px/1 'Inter', system-ui, sans-serif;">Verificando…</span>
+        </sc-if>
+        <sc-if value="{{ notLoading }}" hint-placeholder-val="{{ true }}">
+          Entrar
+        </sc-if>
+      </button>
+
+      <!-- Error -->
+      <sc-if value="{{ hasError }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex; align-items:flex-start; gap:9px; padding:12px 14px; background:var(--color-danger-bg, #FEE2E2); border-radius:var(--radius-md, 8px);">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0; margin-top:1px;">
+            <circle cx="8" cy="8" r="6.5" stroke="var(--color-danger-fg, #B91C1C)" stroke-width="1.5"/>
+            <path d="M8 4.5v4" stroke="var(--color-danger-fg, #B91C1C)" stroke-width="1.5" stroke-linecap="round"/>
+            <circle cx="8" cy="10.75" r="0.85" fill="var(--color-danger-fg, #B91C1C)"/>
+          </svg>
+          <span style="font:400 14px/1.45 'Inter', system-ui, sans-serif; color:var(--color-danger-fg, #B91C1C);">Email o contraseña incorrectos</span>
+        </div>
+      </sc-if>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 390, &quot;height&quot;: 720 },
+  &quot;previewState&quot;: {
+    &quot;editor&quot;: &quot;enum&quot;,
+    &quot;options&quot;: [&quot;interactive&quot;, &quot;empty&quot;, &quot;filled&quot;, &quot;error&quot;, &quot;loading&quot;],
+    &quot;default&quot;: &quot;interactive&quot;,
+    &quot;section&quot;: &quot;Vista previa&quot;
+  }
+}">
+class Component extends DCLogic {
+  state = {
+    email: '',
+    password: '',
+    showPassword: false,
+    formState: 'idle', // idle | loading | error
+  };
+
+  handleSubmit() {
+    const preview = this.props.previewState || 'interactive';
+    if (preview !== 'interactive') return;
+    if (this.state.formState === 'loading') return;
+    this.setState({ formState: 'loading' });
+    setTimeout(() => this.setState({ formState: 'error' }), 1500);
+  }
+
+  renderVals() {
+    const { email, password, showPassword, formState } = this.state;
+    const preview = this.props.previewState || 'interactive';
+    const isPreview = preview !== 'interactive';
+
+    const showFilled = isPreview && preview !== 'empty';
+    const effectiveEmail = showFilled ? 'carlos@vibecoder.com' : email;
+    const effectivePass  = showFilled ? 'contraseña-segura'   : password;
+    const effectiveState = isPreview ? preview : formState;
+
+    const isLoading = effectiveState === 'loading';
+    const hasError  = effectiveState === 'error';
+
+    // Icono toggle contraseña
+    const toggleSuffix = React.createElement(
+      'button',
+      {
+        type: 'button',
+        onClick: () => this.setState(s => ({ showPassword: !s.showPassword })),
+        title: showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña',
+        style: {
+          background: 'none', border: 'none', cursor: 'pointer',
+          padding: '2px 0', color: '#9CA3AF',
+          display: 'flex', alignItems: 'center', flexShrink: 0,
+        },
+      },
+      React.createElement(
+        'svg',
+        {
+          width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none',
+          stroke: 'currentColor', strokeWidth: 1.5,
+          strokeLinecap: 'round', strokeLinejoin: 'round',
+        },
+        showPassword
+          ? [
+              React.createElement('path', { key: 'e', d: 'M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z' }),
+              React.createElement('circle', { key: 'c', cx: 8, cy: 8, r: 2.5 }),
+              React.createElement('line', { key: 'l', x1: 2, y1: 2, x2: 14, y2: 14 }),
+            ]
+          : [
+              React.createElement('path', { key: 'e', d: 'M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z' }),
+              React.createElement('circle', { key: 'c', cx: 8, cy: 8, r: 2.5 }),
+            ]
+      )
+    );
+
+    return {
+      emailValue:       effectiveEmail,
+      passwordValue:    effectivePass,
+      passwordType:     showPassword ? 'text' : 'password',
+      toggleSuffix,
+      isLoading,
+      notLoading:       !isLoading,
+      hasError,
+      onEmailChange:    isPreview ? () => {} : (e) => this.setState({ email: e.target.value }),
+      onPasswordChange: isPreview ? () => {} : (e) => this.setState({ password: e.target.value }),
+      onSubmit:         () => this.handleSubmit(),
+    };
+  }
+}
+</script>
+</body>
+</html>

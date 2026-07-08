@@ -1,0 +1,24 @@
+<!-- @dsCard group="Colors" viewport="700x150" name="Semánticos" subtitle="El color comunica estado, no decora" -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body{margin:0;font-family:var(--font-sans);background:var(--color-surface);padding:18px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .col{display:flex;flex-direction:column;gap:6px;width:150px}
+  .chip{height:44px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600}
+  .nm{font-size:11px;font-weight:600;color:var(--text-secondary)}
+  .hx{font-family:var(--font-mono);font-size:10px;color:var(--text-tertiary)}
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="col"><div class="chip" style="background:var(--color-success-bg);color:var(--color-success-fg)">Ganado</div><span class="nm">success</span><span class="hx">#DCFCE7 · #15803D</span></div>
+    <div class="col"><div class="chip" style="background:var(--color-warning-bg);color:var(--color-warning-fg)">Urgente</div><span class="nm">warning</span><span class="hx">#FEF3C7 · #B45309</span></div>
+    <div class="col"><div class="chip" style="background:var(--color-danger-bg);color:var(--color-danger-fg)">Perdido</div><span class="nm">danger</span><span class="hx">#FEE2E2 · #B91C1C</span></div>
+    <div class="col"><div class="chip" style="background:var(--color-neutral-bg);color:var(--color-neutral-fg)">Inactivo</div><span class="nm">neutral</span><span class="hx">#F3F4F6 · #374151</span></div>
+  </div>
+</body>
+</html>

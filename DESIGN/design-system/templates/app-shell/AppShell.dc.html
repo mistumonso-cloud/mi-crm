@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="App Shell – Navegación" description="Prototipo navegable: barra inferior, FAB y pantallas Pendientes/Contactos/Panel. Arranque por rol (Carlos → Pendientes, Marta → Panel)." -->
+<helmet>
+<script src="./ds-base.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:#D1D5DB;font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+  .done-btn{background:#fff;border:1.5px solid #E5E7EB;border-radius:999px;font:500 13px/1 'Inter',system-ui;color:#374151;cursor:pointer;height:36px;padding:0 14px;white-space:nowrap;flex-shrink:0}
+  .done-btn:active{background:#F3F4F6}
+  .search-input{width:100%;border:none;background:transparent;font:400 14px/1.5 'Inter',system-ui;color:#1A1D24;outline:none}
+  .search-input::placeholder{color:#9CA3AF}
+  .contact-row{display:flex;align-items:center;gap:12px;padding:13px 20px;background:#fff;border-bottom:1px solid #F3F4F6;cursor:pointer}
+  .contact-row:active{background:#F9FAFB}
+  .field-input{width:100%;padding:10px 12px;border:1.5px solid #D1D5DB;border-radius:8px;font:400 14px/1.5 'Inter',system-ui;color:#1A1D24;outline:none;transition:border-color .18s;background:#fff}
+  .field-input:focus{border-color:#3B5266;box-shadow:0 0 0 3px rgba(59,82,102,.18)}
+  .tab-btn{flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0}
+</style>
+</helmet>
+
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px">
+  <div style="width:375px;height:812px;border-radius:40px;background:#FAFAFA;box-shadow:0 8px 24px rgba(16,24,40,.12),0 32px 64px rgba(16,24,40,.16);overflow:hidden;position:relative;display:flex;flex-direction:column">
+
+    <!-- Status bar -->
+    <div style="height:44px;background:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 24px;flex-shrink:0">
+      <span style="font-size:14px;font-weight:600;color:#1A1D24">9:41</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <svg width="16" height="12" viewBox="0 0 16 12" fill="#1A1D24"><rect x="0" y="4" width="3" height="8" rx="1"/><rect x="4.5" y="2.5" width="3" height="9.5" rx="1"/><rect x="9" y="0.5" width="3" height="11.5" rx="1"/><rect x="13.5" y="0" width="2.5" height="12" rx="1"/></svg>
+        <svg width="20" height="12" viewBox="0 0 20 12" fill="none"><rect x=".75" y=".75" width="17" height="10.5" rx="2.25" stroke="#1A1D24" stroke-width="1.5"/><rect x="18.25" y="3.5" width="1.25" height="5" rx=".625" fill="#1A1D24"/><rect x="2" y="2" width="12" height="8" rx="1.5" fill="#1A1D24"/></svg>
+      </div>
+    </div>
+
+    <!-- Content area -->
+    <div style="flex:1;overflow:hidden;position:relative">
+
+      <!-- ════ PENDIENTES ════ -->
+      <sc-if value="{{ isPending }}" hint-placeholder-val="{{ true }}">
+        <div style="position:absolute;inset:0;overflow-y:auto;display:flex;flex-direction:column">
+          <div style="background:#fff;border-bottom:1px solid #E5E7EB;padding:10px 20px 14px;position:sticky;top:0;z-index:1;flex-shrink:0">
+            <h1 style="font-size:20px;font-weight:700;color:#1A1D24;letter-spacing:-.02em;margin-bottom:3px">Pendientes del día</h1>
+            <p style="font-size:13px;color:#6B7280">{{ pendingSubtitle }}</p>
+          </div>
+
+          <sc-if value="{{ hasOverdue }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:8px;padding:12px 20px 6px;flex-shrink:0">
+              <span style="width:7px;height:7px;border-radius:999px;background:#F59E0B;flex-shrink:0"></span>
+              <span style="font-size:11px;font-weight:600;color:#B45309;letter-spacing:.06em;text-transform:uppercase">Atrasados</span>
+            </div>
+            <sc-for list="{{ overdueItems }}" as="item" hint-placeholder-count="1">
+              <div style="display:flex;align-items:flex-start;gap:12px;padding:14px 20px;background:#FFFBEB;border-bottom:1px solid #FEF3C7">
+                {{ item.avatarEl }}
+                <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+                  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                    <span style="font-size:14px;font-weight:600;color:#1A1D24">{{ item.name }}</span>
+                    {{ item.badgeEl }}
+                  </div>
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <span style="font-size:12px;color:#9CA3AF">{{ item.time }}</span>
+                    <span style="font:600 11px/1 'Inter',system-ui;background:#FEF3C7;color:#B45309;padding:2px 8px;border-radius:999px">Atrasado</span>
+                  </div>
+                  <span style="font-size:13px;color:#6B7280;line-height:1.4">{{ item.reason }}</span>
+                </div>
+                <button class="done-btn" onClick="{{ item.markDone }}">✓ Hecho</button>
+              </div>
+            </sc-for>
+          </sc-if>
+
+          <sc-if value="{{ hasTodayItems }}" hint-placeholder-val="{{ true }}">
+            <div style="padding:12px 20px 6px;flex-shrink:0">
+              <span style="font-size:11px;font-weight:600;color:#9CA3AF;letter-spacing:.06em;text-transform:uppercase">Hoy</span>
+            </div>
+            <sc-for list="{{ todayItems }}" as="item" hint-placeholder-count="3">
+              <div style="display:flex;align-items:flex-start;gap:12px;padding:14px 20px;background:#fff;border-bottom:1px solid #F3F4F6">
+                {{ item.avatarEl }}
+                <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+                  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                    <span style="font-size:14px;font-weight:600;color:#1A1D24">{{ item.name }}</span>
+                    {{ item.badgeEl }}
+                  </div>
+                  <span style="font-size:12px;color:#9CA3AF">{{ item.time }}</span>
+                  <span style="font-size:13px;color:#6B7280;line-height:1.4">{{ item.reason }}</span>
+                </div>
+                <button class="done-btn" onClick="{{ item.markDone }}">✓ Hecho</button>
+              </div>
+            </sc-for>
+          </sc-if>
+
+          <sc-if value="{{ pendingEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:40px 32px;text-align:center;gap:16px;min-height:300px">
+              <div style="width:72px;height:72px;border-radius:999px;background:#EAEFF3;display:flex;align-items:center;justify-content:center">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#3B5266" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <span style="font-size:17px;font-weight:600;color:#1A1D24">Sin pendientes hoy</span>
+                <span style="font-size:13px;color:#6B7280;line-height:1.55">Cuando programes un seguimiento,<br>aparecerá aquí</span>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- ════ CONTACTOS ════ -->
+      <sc-if value="{{ isContacts }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;inset:0;overflow-y:auto;display:flex;flex-direction:column">
+          <div style="background:#fff;padding:10px 20px 0;position:sticky;top:0;z-index:1;flex-shrink:0">
+            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:12px">
+              <h1 style="font-size:20px;font-weight:700;color:#1A1D24;letter-spacing:-.02em">Contactos</h1>
+              <span style="font-size:13px;color:#9CA3AF;font-weight:500">{{ contactsTotalLabel }}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;background:#F3F4F6;border-radius:10px;padding:10px 14px;margin-bottom:12px">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input class="search-input" type="text" placeholder="Buscar por nombre o teléfono" value="{{ searchVal }}" onInput="{{ onSearch }}">
+              <sc-if value="{{ hasSearch }}" hint-placeholder-val="{{ false }}">
+                <button onClick="{{ clearSearch }}" style="background:none;border:none;cursor:pointer;padding:0;display:flex;color:#9CA3AF;flex-shrink:0">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </sc-if>
+            </div>
+          </div>
+
+          <sc-if value="{{ emptySearch }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:40px 32px;text-align:center;gap:14px;min-height:260px">
+              <div style="width:64px;height:64px;border-radius:999px;background:#EAEFF3;display:flex;align-items:center;justify-content:center">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#3B5266" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:5px">
+                <span style="font-size:16px;font-weight:600;color:#1A1D24">Sin resultados para "{{ searchVal }}"</span>
+                <span style="font-size:13px;color:#6B7280;line-height:1.55">Prueba con otro nombre o número</span>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showContactList }}" hint-placeholder-val="{{ true }}">
+            <sc-for list="{{ visibleContacts }}" as="c" hint-placeholder-count="5">
+              <div class="contact-row">
+                {{ c.avatarEl }}
+                <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                    <span style="font-size:14px;font-weight:600;color:#1A1D24">{{ c.name }}</span>
+                    {{ c.badgeEl }}
+                    <sc-if value="{{ c.pendingToday }}" hint-placeholder-val="{{ false }}">
+                      <span style="font:600 11px/1 'Inter',system-ui;background:#FEF3C7;color:#B45309;padding:2px 7px;border-radius:999px">Hoy</span>
+                    </sc-if>
+                  </div>
+                  <span style="font-size:12px;color:#9CA3AF">{{ c.lastContact }}</span>
+                </div>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="2" stroke-linecap="round" style="flex-shrink:0"><polyline points="9 18 15 12 9 6"/></svg>
+              </div>
+            </sc-for>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- ════ PANEL ════ -->
+      <sc-if value="{{ isPanel }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;inset:0;overflow-y:auto;display:flex;flex-direction:column">
+          <div style="background:#fff;border-bottom:1px solid #E5E7EB;padding:10px 20px 14px;position:sticky;top:0;z-index:1;flex-shrink:0">
+            <h1 style="font-size:20px;font-weight:700;color:#1A1D24;letter-spacing:-.02em;margin-bottom:3px">Panel</h1>
+            <p style="font-size:13px;color:#6B7280">Junio 2025</p>
+          </div>
+          <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="4">
+              <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:6px;box-shadow:0 1px 2px rgba(16,24,40,.06)">
+                <span style="font-size:12px;color:#6B7280;font-weight:500;line-height:1.3">{{ k.label }}</span>
+                <span style="font-size:22px;font-weight:700;color:#1A1D24;letter-spacing:-.02em;font-family:'JetBrains Mono',monospace">{{ k.value }}</span>
+                <sc-if value="{{ k.hasTrend }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-size:11px;font-weight:500;color:#15803D">{{ k.trend }}</span>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div style="padding:0 16px 20px">
+            <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(16,24,40,.06)">
+              <div style="padding:14px 16px;border-bottom:1px solid #F3F4F6">
+                <span style="font-size:14px;font-weight:600;color:#1A1D24">Pipeline por etapa</span>
+              </div>
+              <sc-for list="{{ pipelineStages }}" as="ps" hint-placeholder-count="5">
+                <div style="display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid #F9FAFB">
+                  {{ ps.badgeEl }}
+                  <span style="flex:1;font-size:13px;color:#6B7280">{{ ps.count }} negocios</span>
+                  <span style="font-size:13px;font-weight:600;color:#1A1D24;font-family:'JetBrains Mono',monospace">{{ ps.amount }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+
+    <!-- Bottom nav -->
+    <div style="height:72px;background:#fff;border-top:1px solid #E5E7EB;display:flex;align-items:center;padding:0 4px;flex-shrink:0;z-index:10">
+
+      <button class="tab-btn" onClick="{{ goToPending }}">
+        <sc-if value="{{ isPending }}" hint-placeholder-val="{{ true }}">
+          <div style="width:40px;height:30px;border-radius:999px;background:#EAEFF3;display:flex;align-items:center;justify-content:center">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B5266" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <span style="font-size:10px;font-weight:600;color:#3B5266">Pendientes</span>
+        </sc-if>
+        <sc-if value="{{ notPending }}" hint-placeholder-val="{{ false }}">
+          <div style="width:40px;height:30px;display:flex;align-items:center;justify-content:center">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <span style="font-size:10px;font-weight:500;color:#9CA3AF">Pendientes</span>
+        </sc-if>
+      </button>
+
+      <button class="tab-btn" onClick="{{ goToContacts }}">
+        <sc-if value="{{ isContacts }}" hint-placeholder-val="{{ false }}">
+          <div style="width:40px;height:30px;border-radius:999px;background:#EAEFF3;display:flex;align-items:center;justify-content:center">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B5266" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <span style="font-size:10px;font-weight:600;color:#3B5266">Contactos</span>
+        </sc-if>
+        <sc-if value="{{ notContacts }}" hint-placeholder-val="{{ true }}">
+          <div style="width:40px;height:30px;display:flex;align-items:center;justify-content:center">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <span style="font-size:10px;font-weight:500;color:#9CA3AF">Contactos</span>
+        </sc-if>
+      </button>
+
+      <button class="tab-btn" onClick="{{ goToPanel }}">
+        <sc-if value="{{ isPanel }}" hint-placeholder-val="{{ false }}">
+          <div style="width:40px;height:30px;border-radius:999px;background:#EAEFF3;display:flex;align-items:center;justify-content:center">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B5266" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          </div>
+          <span style="font-size:10px;font-weight:600;color:#3B5266">Panel</span>
+        </sc-if>
+        <sc-if value="{{ notPanel }}" hint-placeholder-val="{{ true }}">
+          <div style="width:40px;height:30px;display:flex;align-items:center;justify-content:center">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          </div>
+          <span style="font-size:10px;font-weight:500;color:#9CA3AF">Panel</span>
+        </sc-if>
+      </button>
+
+    </div>
+
+    <!-- FAB -->
+    <button onClick="{{ openAdd }}" style="position:absolute;bottom:88px;right:16px;width:52px;height:52px;border-radius:999px;background:#3B5266;color:#fff;border:none;cursor:pointer;font-size:26px;font-weight:300;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(59,82,102,.4);z-index:10">+</button>
+
+    <!-- Add contact sheet -->
+    <sc-if value="{{ showAdd }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeAdd }}" style="position:absolute;inset:0;background:rgba(0,0,0,.45);z-index:100"></div>
+      <div style="position:absolute;bottom:0;left:0;right:0;background:#fff;border-radius:20px 20px 0 0;padding:8px 20px 36px;z-index:101;animation:slideUp .22s ease-out">
+        <div style="width:36px;height:4px;border-radius:999px;background:#E5E7EB;margin:0 auto 20px"></div>
+        <h2 style="font-size:17px;font-weight:700;color:#1A1D24;margin-bottom:20px;letter-spacing:-.01em">Nuevo contacto</h2>
+        <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:22px">
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <label style="font-size:13px;font-weight:500;color:#374151">Nombre</label>
+            <input class="field-input" type="text" placeholder="Nombre completo" value="{{ addFormName }}" onInput="{{ onAddName }}">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <label style="font-size:13px;font-weight:500;color:#374151">Teléfono</label>
+            <input class="field-input" type="tel" placeholder="+34 600 000 000" value="{{ addFormPhone }}" onInput="{{ onAddPhone }}">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <label style="font-size:13px;font-weight:500;color:#374151">Estado inicial</label>
+            <select class="field-input" onChange="{{ onAddStage }}">
+              <option value="lead">Lead nuevo</option>
+              <option value="talking">En conversación</option>
+              <option value="proposal">Propuesta enviada</option>
+              <option value="negotiating">Negociando</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button onClick="{{ closeAdd }}" style="flex:1;height:44px;background:#fff;border:1.5px solid #E5E7EB;border-radius:8px;font:500 14px/1 'Inter',system-ui;color:#374151;cursor:pointer">Cancelar</button>
+          <button onClick="{{ saveAdd }}" style="flex:2;height:44px;background:#3B5266;color:#fff;border:none;border-radius:8px;font:600 14px/1 'Inter',system-ui;cursor:pointer;box-shadow:0 2px 8px rgba(59,82,102,.28)">Guardar contacto</button>
+        </div>
+      </div>
+    </sc-if>
+
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: {&quot;width&quot;: 423, &quot;height&quot;: 860},
+  &quot;user&quot;: {
+    &quot;editor&quot;: &quot;enum&quot;,
+    &quot;options&quot;: [&quot;carlos&quot;, &quot;marta&quot;],
+    &quot;default&quot;: &quot;carlos&quot;,
+    &quot;section&quot;: &quot;Usuario&quot;
+  }
+}">
+class Component extends DCLogic {
+  state = { screen: null, showAdd: false, query: '', doneIds: new Set(), addForm: { name: '', phone: '', stage: 'lead' } };
+
+  componentDidUpdate(prevProps) {
+    if (prevProps.user !== this.props.user) this.setState({ screen: null });
+  }
+
+  markDone(id) {
+    this.setState(s => { const n = new Set(s.doneIds); n.add(id); return { doneIds: n }; });
+  }
+
+  renderVals() {
+    const user   = this.props.user ?? 'carlos';
+    const screen = this.state.screen ?? (user === 'marta' ? 'panel' : 'pending');
+    const { showAdd, query, doneIds, addForm } = this.state;
+
+    const isPending  = screen === 'pending';
+    const isContacts = screen === 'contacts';
+    const isPanel    = screen === 'panel';
+
+    const goTo     = (s) => () => this.setState({ screen: s });
+    const openAdd  = () => this.setState({ showAdd: true });
+    const closeAdd = () => this.setState({ showAdd: false, addForm: { name: '', phone: '', stage: 'lead' } });
+    const saveAdd  = () => this.setState({ showAdd: false, addForm: { name: '', phone: '', stage: 'lead' } });
+
+    const STAGE = {
+      lead:        { label: 'Lead nuevo',        bg: '#E0F2FE', fg: '#0369A1' },
+      talking:     { label: 'En conversación',   bg: '#EAEFF3', fg: '#3B5266' },
+      proposal:    { label: 'Propuesta enviada', bg: '#F3E8FF', fg: '#7E22CE' },
+      negotiating: { label: 'Negociando',        bg: '#FFEDD5', fg: '#C2410C' },
+      won:         { label: 'Ganado',            bg: '#DCFCE7', fg: '#15803D' },
+      lost:        { label: 'Perdido',           bg: '#FEE2E2', fg: '#B91C1C' },
+      inactive:    { label: 'Inactivo',          bg: '#F3F4F6', fg: '#6B7280' },
+    };
+
+    const avatar = (initial, bg, fg) => React.createElement('div', {
+      style: { width:'40px', height:'40px', borderRadius:'999px', background:bg, color:fg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'15px', fontWeight:'700', flexShrink:0 }
+    }, initial);
+
+    const badge = (stage) => {
+      const s = STAGE[stage];
+      return React.createElement('span', {
+        style: { fontFamily:"'Inter',system-ui", fontSize:'11px', lineHeight:'1', fontWeight:'600', background:s.bg, color:s.fg, padding:'3px 8px', borderRadius:'999px', whiteSpace:'nowrap' }
+      }, s.label);
+    };
+
+    // ── PENDIENTES ──
+    const ALL_P = [
+      { id:1, overdue:true,  name:'Sofía Méndez', initial:'S', aBg:'#F3E8FF', aFg:'#7E22CE', stage:'talking',     time:'Ayer 16:00', reason:'Enviar propuesta revisada' },
+      { id:2, overdue:false, name:'Carlos Vega',  initial:'C', aBg:'#FFEDD5', aFg:'#C2410C', stage:'negotiating', time:'09:30',      reason:'Llamar para cerrar presupuesto' },
+      { id:3, overdue:false, name:'Ana Torres',   initial:'A', aBg:'#E0F2FE', aFg:'#0369A1', stage:'lead',        time:'10:00',      reason:'Primera llamada de presentación' },
+      { id:4, overdue:false, name:'Bruno Gil',    initial:'B', aBg:'#DCFCE7', aFg:'#15803D', stage:'proposal',    time:'12:00',      reason:'Revisar feedback del presupuesto' },
+      { id:5, overdue:false, name:'Elena Soto',   initial:'E', aBg:'#EAEFF3', aFg:'#3B5266', stage:'won',         time:'16:00',      reason:'Confirmar inicio del proyecto' },
+    ];
+    const active   = ALL_P.filter(i => !doneIds.has(i.id));
+    const mapItem  = i => ({ ...i, avatarEl: avatar(i.initial, i.aBg, i.aFg), badgeEl: badge(i.stage), markDone: () => this.markDone(i.id) });
+    const overdueItems  = active.filter(i => i.overdue).map(mapItem);
+    const todayItems    = active.filter(i => !i.overdue).map(mapItem);
+    const pendingEmpty  = active.length === 0;
+    const pendingSubtitle = pendingEmpty ? 'Jueves, 22 de junio · sin pendientes' : `Jueves, 22 de junio · ${active.length} pendiente${active.length !== 1 ? 's' : ''}`;
+
+    // ── CONTACTS ──
+    const ALL_C = [
+      { id:1, name:'Marta Sánchez', initial:'M', aBg:'#F3E8FF', aFg:'#7E22CE', stage:'negotiating', lastContact:'hace 1 hora',    pendingToday:true  },
+      { id:2, name:'Carlos Vega',   initial:'C', aBg:'#FFEDD5', aFg:'#C2410C', stage:'negotiating', lastContact:'hace 3 horas',   pendingToday:false },
+      { id:3, name:'Ana Torres',    initial:'A', aBg:'#E0F2FE', aFg:'#0369A1', stage:'lead',        lastContact:'ayer',           pendingToday:false },
+      { id:4, name:'Bruno Gil',     initial:'B', aBg:'#DCFCE7', aFg:'#15803D', stage:'proposal',    lastContact:'hace 2 días',    pendingToday:false },
+      { id:5, name:'Elena Soto',    initial:'E', aBg:'#EAEFF3', aFg:'#3B5266', stage:'won',         lastContact:'hace 3 días',    pendingToday:false },
+      { id:6, name:'Mario Herrera', initial:'M', aBg:'#F3E8FF', aFg:'#7E22CE', stage:'talking',     lastContact:'hace 5 días',    pendingToday:false },
+      { id:7, name:'Laura Jiménez', initial:'L', aBg:'#DCFCE7', aFg:'#15803D', stage:'inactive',    lastContact:'hace 2 semanas', pendingToday:false },
+      { id:8, name:'Paco Martínez', initial:'P', aBg:'#FEE2E2', aFg:'#B91C1C', stage:'lost',        lastContact:'hace 1 mes',     pendingToday:false },
+    ];
+    const q        = query.trim().toLowerCase();
+    const filtered = q ? ALL_C.filter(c => c.name.toLowerCase().includes(q)) : ALL_C;
+    const mapContact = c => ({ ...c, avatarEl: avatar(c.initial, c.aBg, c.aFg), badgeEl: badge(c.stage) });
+
+    // ── PANEL ──
+    const kpis = [
+      { label:'Ingresos del mes', value:'$48.2k', trend:'↑ 12% vs mayo', hasTrend:true  },
+      { label:'Negocios activos', value:'23',     trend:null,             hasTrend:false },
+      { label:'Tasa de cierre',   value:'34%',    trend:'↑ 4 pts',       hasTrend:true  },
+      { label:'Por vencer hoy',   value:'5',      trend:null,             hasTrend:false },
+    ];
+    const pipelineStages = [
+      { stage:'lead',        count:8, amount:'$24,600' },
+      { stage:'talking',     count:6, amount:'$38,200' },
+      { stage:'proposal',    count:4, amount:'$31,400' },
+      { stage:'negotiating', count:3, amount:'$42,600' },
+      { stage:'won',         count:2, amount:'$21,300' },
+    ].map(ps => ({ ...ps, badgeEl: badge(ps.stage) }));
+
+    return {
+      isPending, isContacts, isPanel,
+      notPending: !isPending, notContacts: !isContacts, notPanel: !isPanel,
+      goToPending: goTo('pending'), goToContacts: goTo('contacts'), goToPanel: goTo('panel'),
+
+      showAdd, openAdd, closeAdd, saveAdd,
+      addFormName: addForm.name, addFormPhone: addForm.phone,
+      onAddName:  (e) => this.setState(s => ({ addForm: { ...s.addForm, name:  e.target.value } })),
+      onAddPhone: (e) => this.setState(s => ({ addForm: { ...s.addForm, phone: e.target.value } })),
+      onAddStage: (e) => this.setState(s => ({ addForm: { ...s.addForm, stage: e.target.value } })),
+
+      pendingSubtitle, overdueItems, todayItems,
+      hasOverdue: overdueItems.length > 0, hasTodayItems: todayItems.length > 0, pendingEmpty,
+
+      contactsTotalLabel: `${ALL_C.length} contactos`,
+      searchVal: query, hasSearch: query.length > 0,
+      onSearch: (e) => this.setState({ query: e.target.value }),
+      clearSearch: () => this.setState({ query: '' }),
+      visibleContacts: filtered.map(mapContact),
+      emptySearch: q !== '' && filtered.length === 0,
+      showContactList: filtered.length > 0,
+
+      kpis, pipelineStages,
+    };
+  }
+}
+
+</script>
+</body>
+</html>

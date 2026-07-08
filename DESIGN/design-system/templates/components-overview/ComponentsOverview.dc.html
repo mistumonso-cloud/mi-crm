@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="Componentes base" description="Librería de componentes del CRM: botones, inputs, badges, cards, nav, sheets y estados vacíos con todas sus variantes." -->
+<helmet>
+  <script src="./ds-base.js"></script>
+  <meta name="design_doc_mode" content="canvas">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  </style>
+</helmet>
+
+<!-- ═══════════ COLUMNA IZQUIERDA ═══════════ -->
+
+<!-- 1. BOTONES -->
+<div style="position:absolute;left:0;top:0;width:580px;">
+  <span style="font:700 11px/1 'Inter',system-ui;color:#9CA3AF;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:10px;">1 · Botones</span>
+  <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:10px;">
+    <!-- State headers -->
+    <div style="display:grid;grid-template-columns:84px repeat(4,1fr);gap:8px;margin-bottom:2px;">
+      <div></div>
+      <div style="text-align:center;font:400 11px/1 'Inter',system-ui;color:#9CA3AF;">Default</div>
+      <div style="text-align:center;font:400 11px/1 'Inter',system-ui;color:#9CA3AF;">Hover</div>
+      <div style="text-align:center;font:400 11px/1 'Inter',system-ui;color:#9CA3AF;">Pressed</div>
+      <div style="text-align:center;font:400 11px/1 'Inter',system-ui;color:#9CA3AF;">Disabled</div>
+    </div>
+    <!-- Primario LG -->
+    <div style="display:grid;grid-template-columns:84px repeat(4,1fr);gap:8px;align-items:center;">
+      <span style="font:500 12px/1 'Inter',system-ui;color:#374151;">Primario LG</span>
+      <button style="height:48px;background:#3B5266;color:#fff;border:none;border-radius:8px;font:600 15px/1 'Inter',system-ui;cursor:pointer;">Guardar</button>
+      <button style="height:48px;background:#2E4252;color:#fff;border:none;border-radius:8px;font:600 15px/1 'Inter',system-ui;cursor:pointer;">Guardar</button>
+      <button style="height:48px;background:#233442;color:#fff;border:none;border-radius:8px;font:600 15px/1 'Inter',system-ui;transform:scale(.97);cursor:pointer;">Guardar</button>
+      <button style="height:48px;background:#3B5266;color:#fff;border:none;border-radius:8px;font:600 15px/1 'Inter',system-ui;opacity:.4;cursor:not-allowed;" disabled>Guardar</button>
+    </div>
+    <!-- Primario MD -->
+    <div style="display:grid;grid-template-columns:84px repeat(4,1fr);gap:8px;align-items:center;">
+      <span style="font:500 12px/1 'Inter',system-ui;color:#374151;">Primario MD</span>
+      <button style="height:40px;background:#3B5266;color:#fff;border:none;border-radius:8px;font:600 14px/1 'Inter',system-ui;cursor:pointer;">Guardar</button>
+      <button style="height:40px;background:#2E4252;color:#fff;border:none;border-radius:8px;font:600 14px/1 'Inter',system-ui;cursor:pointer;">Guardar</button>
+      <button style="height:40px;background:#233442;color:#fff;border:none;border-radius:8px;font:600 14px/1 'Inter',system-ui;transform:scale(.97);cursor:pointer;">Guardar</button>
+      <button style="height:40px;background:#3B5266;color:#fff;border:none;border-radius:8px;font:600 14px/1 'Inter',system-ui;opacity:.4;cursor:not-allowed;" disabled>Guardar</button>
+    </div>
+    <!-- Secundario -->
+    <div style="display:grid;grid-template-columns:84px repeat(4,1fr);gap:8px;align-items:center;">
+      <span style="font:500 12px/1 'Inter',system-ui;color:#374151;">Secundario</span>
+      <button style="height:40px;background:#fff;color:#374151;border:1.5px solid #E5E7EB;border-radius:8px;font:600 14px/1 'Inter',system-ui;cursor:pointer;">Editar</button>
+      <button style="height:40px;background:#F9FAFB;color:#374151;border:1.5px solid #D1D5DB;border-radius:8px;font:600 14px/1 'Inter',system-ui;cursor:pointer;">Editar</button>
+      <button style="height:40px;background:#F3F4F6;color:#374151;border:1.5px solid #D1D5DB;border-radius:8px;font:600 14px/1 'Inter',system-ui;transform:scale(.97);cursor:pointer;">Editar</button>
+      <button style="height:40px;background:#fff;color:#374151;border:1.5px solid #E5E7EB;border-radius:8px;font:600 14px/1 'Inter',system-ui;opacity:.4;cursor:not-allowed;" disabled>Editar</button>
+    </div>
+    <!-- Destructivo -->
+    <div style="display:grid;grid-template-columns:84px repeat(4,1fr);gap:8px;align-items:center;">
+      <span style="font:500 12px/1 'Inter',system-ui;color:#374151;">Destructivo</span>
+      <button style="height:40px;background:#EF4444;color:#fff;border:none;border-radius:8px;font:600 14px/1 'Inter',system-ui;cursor:pointer;">Eliminar</button>
+      <button style="height:40px;background:#DC2626;color:#fff;border:none;border-radius:8px;font:600 14px/1 'Inter',system-ui;cursor:pointer;">Eliminar</button>
+      <button style="height:40px;background:#B91C1C;color:#fff;border:none;border-radius:8px;font:600 14px/1 'Inter',system-ui;transform:scale(.97);cursor:pointer;">Eliminar</button>
+      <button style="height:40px;background:#EF4444;color:#fff;border:none;border-radius:8px;font:600 14px/1 'Inter',system-ui;opacity:.4;cursor:not-allowed;" disabled>Eliminar</button>
+    </div>
+    <!-- Ghost -->
+    <div style="display:grid;grid-template-columns:84px repeat(4,1fr);gap:8px;align-items:center;">
+      <span style="font:500 12px/1 'Inter',system-ui;color:#374151;">Ghost</span>
+      <button style="height:40px;background:transparent;color:#374151;border:none;border-radius:8px;font:600 14px/1 'Inter',system-ui;cursor:pointer;">Ver más</button>
+      <button style="height:40px;background:#F3F4F6;color:#374151;border:none;border-radius:8px;font:600 14px/1 'Inter',system-ui;cursor:pointer;">Ver más</button>
+      <button style="height:40px;background:#E5E7EB;color:#374151;border:none;border-radius:8px;font:600 14px/1 'Inter',system-ui;transform:scale(.97);cursor:pointer;">Ver más</button>
+      <button style="height:40px;background:transparent;color:#374151;border:none;border-radius:8px;font:600 14px/1 'Inter',system-ui;opacity:.4;cursor:not-allowed;" disabled>Ver más</button>
+    </div>
+  </div>
+</div>
+
+<!-- 2. BADGES DE ESTADO -->
+<div style="position:absolute;left:0;top:376px;width:580px;">
+  <span style="font:700 11px/1 'Inter',system-ui;color:#9CA3AF;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:10px;">2 · Badges de estado del pipeline</span>
+  <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:20px;display:flex;gap:8px;flex-wrap:wrap;">
+    <span style="font:600 12px/1 'Inter',system-ui;background:#E0F2FE;color:#0369A1;padding:5px 12px;border-radius:999px;">Lead nuevo</span>
+    <span style="font:600 12px/1 'Inter',system-ui;background:#EAEFF3;color:#3B5266;padding:5px 12px;border-radius:999px;">En conversación</span>
+    <span style="font:600 12px/1 'Inter',system-ui;background:#F3E8FF;color:#7E22CE;padding:5px 12px;border-radius:999px;">Propuesta enviada</span>
+    <span style="font:600 12px/1 'Inter',system-ui;background:#FFEDD5;color:#C2410C;padding:5px 12px;border-radius:999px;">Negociando</span>
+    <span style="font:600 12px/1 'Inter',system-ui;background:#DCFCE7;color:#15803D;padding:5px 12px;border-radius:999px;">Ganado</span>
+    <span style="font:600 12px/1 'Inter',system-ui;background:#FEE2E2;color:#B91C1C;padding:5px 12px;border-radius:999px;">Perdido</span>
+    <span style="font:600 12px/1 'Inter',system-ui;background:#F3F4F6;color:#6B7280;padding:5px 12px;border-radius:999px;">Inactivo</span>
+  </div>
+</div>
+
+<!-- 3. TARJETA DE CONTACTO -->
+<div style="position:absolute;left:0;top:488px;width:580px;">
+  <span style="font:700 11px/1 'Inter',system-ui;color:#9CA3AF;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:10px;">3 · Tarjeta de contacto (list item)</span>
+  <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px;">
+    <div style="display:flex;gap:10px;margin-bottom:4px;">
+      <span style="font:400 11px/1 'Inter',system-ui;color:#9CA3AF;width:50%;text-align:center;">Default</span>
+      <span style="font:400 11px/1 'Inter',system-ui;color:#9CA3AF;width:50%;text-align:center;">Pressed / Active</span>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <!-- Default -->
+      <div style="flex:1;display:flex;align-items:center;gap:12px;padding:13px 16px;background:#fff;border:1px solid #F3F4F6;border-radius:10px;cursor:pointer;">
+        <div style="width:40px;height:40px;border-radius:999px;background:#F3E8FF;color:#7E22CE;display:flex;align-items:center;justify-content:center;font:700 15px/1 'Inter',system-ui;flex-shrink:0;">M</div>
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
+          <div style="display:flex;align-items:center;gap:6px;"><span style="font:600 14px/1 'Inter',system-ui;color:#1A1D24;">Marta Sánchez</span><span style="font:600 11px/1 'Inter',system-ui;background:#FFEDD5;color:#C2410C;padding:3px 8px;border-radius:999px;">Negociando</span><span style="font:600 11px/1 'Inter',system-ui;background:#FEF3C7;color:#B45309;padding:2px 7px;border-radius:999px;">Hoy</span></div>
+          <span style="font:400 12px/1 'Inter',system-ui;color:#9CA3AF;">hace 1 hora</span>
+        </div>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <!-- Pressed -->
+      <div style="flex:1;display:flex;align-items:center;gap:12px;padding:13px 16px;background:#F3F4F6;border:1px solid #E5E7EB;border-radius:10px;cursor:pointer;">
+        <div style="width:40px;height:40px;border-radius:999px;background:#E0F2FE;color:#0369A1;display:flex;align-items:center;justify-content:center;font:700 15px/1 'Inter',system-ui;flex-shrink:0;">A</div>
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
+          <div style="display:flex;align-items:center;gap:6px;"><span style="font:600 14px/1 'Inter',system-ui;color:#1A1D24;">Ana Torres</span><span style="font:600 11px/1 'Inter',system-ui;background:#E0F2FE;color:#0369A1;padding:3px 8px;border-radius:999px;">Lead nuevo</span></div>
+          <span style="font:400 12px/1 'Inter',system-ui;color:#9CA3AF;">ayer</span>
+        </div>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 4. NAVEGACIÓN INFERIOR + FAB -->
+<div style="position:absolute;left:0;top:698px;width:580px;">
+  <span style="font:700 11px/1 'Inter',system-ui;color:#9CA3AF;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:10px;">4 · Navegación inferior + FAB</span>
+  <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:16px;">
+    <!-- Nav bar -->
+    <div style="width:375px;height:72px;background:#fff;border:1px solid #E5E7EB;border-radius:10px;display:flex;align-items:center;padding:0 8px;position:relative;">
+      <!-- Pendientes activa -->
+      <button style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0;background:none;border:none;cursor:pointer;color:#3B5266;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span style="font:600 11px/1 'Inter',system-ui;">Pendientes</span>
+      </button>
+      <!-- Contactos inactiva -->
+      <button style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0;background:none;border:none;cursor:pointer;color:#9CA3AF;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span style="font:500 11px/1 'Inter',system-ui;">Contactos</span>
+      </button>
+      <!-- Panel inactiva -->
+      <button style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0;background:none;border:none;cursor:pointer;color:#9CA3AF;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span style="font:500 11px/1 'Inter',system-ui;">Panel</span>
+      </button>
+    </div>
+    <!-- FAB -->
+    <div style="display:flex;align-items:center;gap:20px;">
+      <span style="font:400 11px/1 'Inter',system-ui;color:#9CA3AF;width:60px;">Default</span>
+      <button style="width:56px;height:56px;border-radius:999px;background:#3B5266;color:#fff;border:none;cursor:pointer;font:300 26px/1 'Inter',system-ui;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(59,82,102,.35);">+</button>
+      <span style="font:400 11px/1 'Inter',system-ui;color:#9CA3AF;width:60px;">Pressed</span>
+      <button style="width:56px;height:56px;border-radius:999px;background:#233442;color:#fff;border:none;cursor:pointer;font:300 26px/1 'Inter',system-ui;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(59,82,102,.35);transform:scale(.94);">+</button>
+    </div>
+  </div>
+</div>
+
+<!-- 5. HEADER DE PANTALLA -->
+<div style="position:absolute;left:0;top:952px;width:580px;">
+  <span style="font:700 11px/1 'Inter',system-ui;color:#9CA3AF;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:10px;">5 · Header de pantalla</span>
+  <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px;">
+    <!-- Variante 1: título + acción -->
+    <div>
+      <span style="font:400 11px/1 'Inter',system-ui;color:#9CA3AF;display:block;margin-bottom:8px;">Con título y acción derecha</span>
+      <div style="width:375px;height:52px;background:#fff;border:1px solid #E5E7EB;border-radius:8px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;">
+        <h2 style="font:700 20px/1 'Inter',system-ui;color:#1A1D24;letter-spacing:-.02em;">Contactos</h2>
+        <span style="font:600 12px/1 'Inter',system-ui;background:#E0F2FE;color:#0369A1;padding:4px 10px;border-radius:999px;">24 contactos</span>
+      </div>
+    </div>
+    <!-- Variante 2: con botón atrás -->
+    <div>
+      <span style="font:400 11px/1 'Inter',system-ui;color:#9CA3AF;display:block;margin-bottom:8px;">Con botón atrás (pantalla de detalle)</span>
+      <div style="width:375px;height:52px;background:#fff;border:1px solid #E5E7EB;border-radius:8px;display:flex;align-items:center;padding:0 4px;position:relative;">
+        <button style="display:flex;align-items:center;gap:2px;background:none;border:none;cursor:pointer;padding:10px 12px;color:#3B5266;font:500 14px/1 'Inter',system-ui;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Contactos</button>
+        <span style="position:absolute;left:0;right:0;text-align:center;font:600 17px/1 'Inter',system-ui;color:#1A1D24;pointer-events:none;">Marta Sánchez</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 6. INDICADORES DE PENDIENTES -->
+<div style="position:absolute;left:0;top:1196px;width:580px;">
+  <span style="font:700 11px/1 'Inter',system-ui;color:#9CA3AF;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:10px;">6 · Indicadores de pendientes</span>
+  <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:20px;display:flex;align-items:center;gap:16px;">
+    <div style="display:flex;align-items:center;gap:8px;"><span style="font:400 11px/1 'Inter',system-ui;color:#9CA3AF;">Normal</span><span style="font:600 12px/1 'Inter',system-ui;background:#EAEFF3;color:#3B5266;padding:4px 10px;border-radius:999px;">3 hoy</span></div>
+    <div style="display:flex;align-items:center;gap:8px;"><span style="font:400 11px/1 'Inter',system-ui;color:#9CA3AF;">Urgente</span><span style="font:600 12px/1 'Inter',system-ui;background:#FEF3C7;color:#B45309;padding:4px 10px;border-radius:999px;">⚠ 5 hoy</span></div>
+    <div style="display:flex;align-items:center;gap:8px;"><span style="font:400 11px/1 'Inter',system-ui;color:#9CA3AF;">Atrasado</span><span style="font:600 12px/1 'Inter',system-ui;background:#FEE2E2;color:#B91C1C;padding:4px 10px;border-radius:999px;">2 atrasados</span></div>
+  </div>
+</div>
+
+
+<!-- ═══════════ COLUMNA DERECHA ═══════════ -->
+
+<!-- 7. CAMPOS Y FORMULARIOS -->
+<div style="position:absolute;left:620px;top:0;width:580px;">
+  <span style="font:700 11px/1 'Inter',system-ui;color:#9CA3AF;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:10px;">7 · Campos y formularios</span>
+  <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:20px;">
+
+    <!-- Campo de texto — 4 estados -->
+    <div>
+      <span style="font:600 12px/1 'Inter',system-ui;color:#374151;display:block;margin-bottom:10px;">Campo de texto</span>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <span style="font:400 11px/1 'Inter',system-ui;color:#9CA3AF;text-align:center;">Normal</span>
+          <label style="display:flex;flex-direction:column;gap:5px;font:600 13px/1 'Inter',system-ui;color:#1A1D24;">Nombre<div style="padding:10px 12px;border:1.5px solid #D1D5DB;border-radius:8px;font:400 14px/1 'Inter',system-ui;color:#9CA3AF;background:#fff;">Nombre y apellido</div></label>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <span style="font:400 11px/1 'Inter',system-ui;color:#9CA3AF;text-align:center;">Focus</span>
+          <label style="display:flex;flex-direction:column;gap:5px;font:600 13px/1 'Inter',system-ui;color:#1A1D24;">Nombre<div style="padding:10px 12px;border:1.5px solid #3B5266;border-radius:8px;font:400 14px/1 'Inter',system-ui;color:#1A1D24;background:#fff;box-shadow:0 0 0 3px rgba(59,82,102,.18);">Ana Torres</div></label>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <span style="font:400 11px/1 'Inter',system-ui;color:#9CA3AF;text-align:center;">Error</span>
+          <label style="display:flex;flex-direction:column;gap:5px;font:600 13px/1 'Inter',system-ui;color:#1A1D24;">Nombre<div style="padding:10px 12px;border:1.5px solid #EF4444;border-radius:8px;font:400 14px/1 'Inter',system-ui;color:#1A1D24;background:#fff;box-shadow:0 0 0 3px rgba(239,68,68,.18);"></div><span style="font:400 12px/1 'Inter',system-ui;color:#B91C1C;">Campo obligatorio</span></label>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <span style="font:400 11px/1 'Inter',system-ui;color:#9CA3AF;text-align:center;">Disabled</span>
+          <label style="display:flex;flex-direction:column;gap:5px;font:600 13px/1 'Inter',system-ui;color:#9CA3AF;">Nombre<div style="padding:10px 12px;border:1.5px solid #E5E7EB;border-radius:8px;font:400 14px/1 'Inter',system-ui;color:#9CA3AF;background:#F3F4F6;">Nombre y apellido</div></label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Textarea -->
+    <div>
+      <span style="font:600 12px/1 'Inter',system-ui;color:#374151;display:block;margin-bottom:8px;">Área de texto (notas)</span>
+      <label style="display:flex;flex-direction:column;gap:5px;font:600 13px/1 'Inter',system-ui;color:#1A1D24;">Notas<div style="padding:10px 12px;border:1.5px solid #D1D5DB;border-radius:8px;font:400 14px/1.55 'Inter',system-ui;color:#9CA3AF;background:#fff;height:68px;">De dónde viene, qué preguntó...</div></label>
+    </div>
+
+    <!-- Select -->
+    <div>
+      <span style="font:600 12px/1 'Inter',system-ui;color:#374151;display:block;margin-bottom:8px;">Selector / dropdown</span>
+      <label style="display:flex;flex-direction:column;gap:5px;font:600 13px/1 'Inter',system-ui;color:#1A1D24;">Estado<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1.5px solid #D1D5DB;border-radius:8px;background:#fff;"><span style="font:400 14px/1 'Inter',system-ui;color:#1A1D24;">En conversación</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div></label>
+    </div>
+
+    <!-- Date picker -->
+    <div>
+      <span style="font:600 12px/1 'Inter',system-ui;color:#374151;display:block;margin-bottom:8px;">Selector de fecha (recordatorios)</span>
+      <label style="display:flex;flex-direction:column;gap:5px;font:600 13px/1 'Inter',system-ui;color:#1A1D24;">Fecha del seguimiento<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1.5px solid #D1D5DB;border-radius:8px;background:#fff;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span style="font:400 14px/1 'Inter',system-ui;color:#9CA3AF;">Selecciona fecha y hora</span></div></label>
+    </div>
+
+    <!-- Search bar -->
+    <div>
+      <span style="font:600 12px/1 'Inter',system-ui;color:#374151;display:block;margin-bottom:8px;">Barra de búsqueda</span>
+      <div style="display:flex;align-items:center;gap:8px;background:#F3F4F6;border-radius:10px;padding:10px 14px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span style="font:400 14px/1 'Inter',system-ui;color:#9CA3AF;">Buscar por nombre o teléfono</span></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 8. BOTTOM SHEET / MODAL -->
+<div style="position:absolute;left:620px;top:556px;width:580px;">
+  <span style="font:700 11px/1 'Inter',system-ui;color:#9CA3AF;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:10px;">8 · Bottom sheet / Modal</span>
+  <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:20px;">
+    <!-- Sheet component (standalone) -->
+    <div style="background:#fff;border:1.5px solid #E5E7EB;border-radius:20px;overflow:hidden;max-width:375px;margin:0 auto;">
+      <!-- Handle -->
+      <div style="width:36px;height:4px;background:#E5E7EB;border-radius:999px;margin:10px auto 0;"></div>
+      <!-- Header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 10px;">
+        <h3 style="font:700 17px/1 'Inter',system-ui;color:#1A1D24;letter-spacing:-.01em;">Añadir nota</h3>
+        <button style="width:32px;height:32px;border-radius:8px;background:#F3F4F6;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <!-- Content placeholder -->
+      <div style="padding:0 20px 12px;display:flex;flex-direction:column;gap:12px;">
+        <div style="height:44px;background:#F3F4F6;border-radius:8px;"></div>
+        <div style="height:44px;background:#F3F4F6;border-radius:8px;"></div>
+        <div style="height:80px;background:#F3F4F6;border-radius:8px;"></div>
+      </div>
+      <!-- Footer -->
+      <div style="padding:12px 20px 20px;display:flex;gap:10px;border-top:1px solid #F3F4F6;">
+        <button style="flex:1;height:46px;background:#fff;color:#374151;border:1.5px solid #E5E7EB;border-radius:8px;font:500 14px/1 'Inter',system-ui;cursor:pointer;">Cancelar</button>
+        <button style="flex:1;height:46px;background:#3B5266;color:#fff;border:none;border-radius:8px;font:600 14px/1 'Inter',system-ui;cursor:pointer;">Guardar nota</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 9. ESTADO VACÍO -->
+<div style="position:absolute;left:620px;top:980px;width:580px;">
+  <span style="font:700 11px/1 'Inter',system-ui;color:#9CA3AF;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:10px;">9 · Estado vacío</span>
+  <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:20px;">
+    <div style="display:flex;flex-direction:column;align-items:center;padding:32px 40px;text-align:center;gap:14px;">
+      <div style="width:72px;height:72px;border-radius:999px;background:#EAEFF3;display:flex;align-items:center;justify-content:center;">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#3B5266" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <span style="font:600 17px/1.2 'Inter',system-ui;color:#1A1D24;">Aún no hay contactos</span>
+        <span style="font:400 13px/1.55 'Inter',system-ui;color:#6B7280;">Añade tu primer contacto para empezar a gestionar tus ventas</span>
+      </div>
+      <button style="height:44px;padding:0 20px;background:#3B5266;color:#fff;border:none;border-radius:8px;font:600 14px/1 'Inter',system-ui;cursor:pointer;margin-top:4px;">Añadir primer contacto</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1240,&quot;height&quot;:1340}}">
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

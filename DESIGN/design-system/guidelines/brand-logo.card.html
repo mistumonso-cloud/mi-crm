@@ -1,0 +1,31 @@
+<!-- @dsCard group="Brand" viewport="700x180" name="Logotipo" subtitle="Monograma slate + lockup (placeholder)" -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body{margin:0;font-family:var(--font-sans);background:var(--color-surface);padding:24px;color:var(--text-primary)}
+  .row{display:flex;gap:36px;align-items:center;flex-wrap:wrap}
+  .lockup{display:flex;align-items:center;gap:12px}
+  .mono{width:44px;height:44px;border-radius:12px;background:var(--color-accent);display:flex;align-items:center;justify-content:center}
+  .wordmark{display:flex;flex-direction:column;line-height:1.2}
+  .wt{font-size:18px;font-weight:700;letter-spacing:-0.01em}
+  .ws{font-size:12px;font-weight:500;color:var(--text-tertiary)}
+  .mini{width:30px;height:30px;border-radius:8px;background:var(--color-accent);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px}
+  .inv{background:var(--color-accent);padding:14px 18px;border-radius:12px}
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="lockup">
+      <div class="mono"><img src="../assets/logo-monogram.svg" width="44" height="44" alt="Vibe Coder CRM"></div>
+      <div class="wordmark"><span class="wt">Vibe Coder</span><span class="ws">CRM</span></div>
+    </div>
+    <div class="mini">V</div>
+    <div class="inv lockup">
+      <div class="wordmark"><span class="wt" style="color:#fff">Vibe Coder</span><span class="ws" style="color:#D6E0E6">CRM</span></div>
+    </div>
+  </div>
+</body>
+</html>

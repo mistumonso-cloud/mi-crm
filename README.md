@@ -1,0 +1,58 @@
+# Vibe Coder CRM
+
+CRM minimalista para pequeños negocios de ventas digitales. Next.js (App Router) + Tailwind v4 + Convex. Ver `DESIGN/design-system/design.md` para los principios de diseño.
+
+## Stack
+
+- **Next.js 16** (App Router, TypeScript, Turbopack)
+- **Tailwind CSS v4**, tokens de marca en `src/styles/tokens/*.css`, cargados en `src/app/globals.css`
+- **Convex** como base de datos / backend (`convex/schema.ts`)
+- Componentes base del design system en `src/components/ui/**`
+
+## Primeros pasos
+
+1. Instala dependencias (ya hecho si acabas de clonar):
+   ```bash
+   npm install
+   ```
+2. Arranca Convex (te pedirá login y creará el proyecto en tu cuenta de Convex):
+   ```bash
+   npx convex dev
+   ```
+   Esto genera `convex/_generated/` y rellena `.env.local` con `NEXT_PUBLIC_CONVEX_URL` y `CONVEX_DEPLOYMENT`. Sin esto la app funciona pero sin datos (el provider avisa por consola).
+3. En otra terminal, arranca Next.js:
+   ```bash
+   npm run dev
+   ```
+4. Abre [http://localhost:3000](http://localhost:3000).
+
+## Estructura
+
+```
+convex/                          esquema y funciones de Convex
+DESIGN/design-system/            design system original (tokens, componentes de referencia, plantillas)
+CODIGO/                          código generado por tarea de Linear, revisado y pendiente de instalar en src/convex
+PLANS/                            planes de implementación por tarea de Linear
+src/app/                         rutas (App Router)
+src/components/ui/               componentes base (Button, Card, Input, Badge, StatusBadge, Tabs...)
+src/components/crm/              (vacío) componentes específicos del CRM, por construir
+src/lib/                         (vacío) utilidades compartidas
+src/styles/tokens/               tokens de color/tipografía/espaciado/radios, copiados del design system
+```
+
+Los componentes en `src/components/ui` son `.jsx` (no `.tsx`) a propósito: son una copia directa del design system de referencia y no están tipados; conviene revisarlos/tipar según se vayan usando en pantallas reales.
+
+## Despliegue (Railway)
+
+El repo incluye `railway.json` (build con Nixpacks, `npm run build` / `npm run start`). Railway detecta Node.js automáticamente a partir de `package.json`.
+
+Pasos:
+
+1. En Railway, crea un deployment de Convex de producción: `npx convex deploy` (o desde el dashboard de Convex, entorno "Production").
+2. En el servicio de Railway, define las variables de entorno (Settings → Variables):
+   - `NEXT_PUBLIC_CONVEX_URL`
+   - `NEXT_PUBLIC_CONVEX_SITE_URL`
+   - `CONVEX_DEPLOYMENT`
+
+   (los mismos valores que genera Convex, pero apuntando al deployment de producción, no al de `convex dev`).
+3. Con el repo de GitHub ya conectado a Railway, cada push a `main` dispara un build y deploy automático.

@@ -1,0 +1,45 @@
+/* Vibe Coder CRM — Color tokens */
+:root {
+  /* Marca / acento (azul pizarra) */
+  --color-accent: #3B5266;
+  --color-accent-hover: #2E4252;
+  --color-accent-press: #233442;
+  --color-accent-tint: #EAEFF3;
+  --color-accent-subtle: #D6E0E6;
+  --color-accent-contrast: #FFFFFF;
+
+  /* Semánticos */
+  --color-success: #16A34A;
+  --color-success-bg: #DCFCE7;
+  --color-success-fg: #15803D;
+  --color-warning: #F59E0B;
+  --color-warning-bg: #FEF3C7;
+  --color-warning-fg: #B45309;
+  --color-danger: #EF4444;
+  --color-danger-bg: #FEE2E2;
+  --color-danger-fg: #B91C1C;
+  --color-neutral: #6B7280;
+  --color-neutral-bg: #F3F4F6;
+  --color-neutral-fg: #374151;
+
+  /* Superficie & borde */
+  --color-bg: #FAFAFA;
+  --color-surface: #FFFFFF;
+  --color-muted: #F3F4F6;
+  --color-border: #E5E7EB;
+  --color-border-strong: #D1D5DB;
+
+  /* Texto */
+  --text-primary: #1A1D24;
+  --text-secondary: #6B7280;
+  --text-tertiary: #9CA3AF;
+
+  /* Estados del pipeline */
+  --status-lead-bg: #E0F2FE;        --status-lead-fg: #0369A1;
+  --status-talking-bg: #EAEFF3;     --status-talking-fg: #3B5266;
+  --status-proposal-bg: #F3E8FF;    --status-proposal-fg: #7E22CE;
+  --status-negotiating-bg: #FFEDD5; --status-negotiating-fg: #C2410C;
+  --status-won-bg: #DCFCE7;         --status-won-fg: #15803D;
+  --status-lost-bg: #FEE2E2;        --status-lost-fg: #B91C1C;
+  --status-inactive-bg: #F3F4F6;    --status-inactive-fg: #6B7280;
+}

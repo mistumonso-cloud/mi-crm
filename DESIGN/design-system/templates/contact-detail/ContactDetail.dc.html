@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="Ficha de contacto" description="Ficha completa: info, acciones rápidas, seguimiento, historial y sheets para nota, estado, seguimiento y cierre." -->
+<helmet>
+  <script src="./ds-base.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    input::placeholder, textarea::placeholder { color: #9CA3AF; }
+    textarea { resize: none; }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  </style>
+</helmet>
+
+<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; background:#E5E7EB;">
+  <div style="width:375px; height:812px; border-radius:40px; background:#FAFAFA; box-shadow:0 8px 24px rgba(16,24,40,.12), 0 32px 64px rgba(16,24,40,.16); overflow:hidden; position:relative; display:flex; flex-direction:column;">
+
+    <!-- Status bar -->
+    <div style="height:44px; background:#fff; display:flex; align-items:center; justify-content:space-between; padding:0 24px; flex-shrink:0;">
+      <span style="font:600 14px/1 'Inter',system-ui; color:#1A1D24;">9:41</span>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <svg width="16" height="12" viewBox="0 0 16 12" fill="#1A1D24"><rect x="0" y="4" width="3" height="8" rx="1"/><rect x="4.5" y="2.5" width="3" height="9.5" rx="1"/><rect x="9" y="0.5" width="3" height="11.5" rx="1"/><rect x="13.5" y="0" width="2.5" height="12" rx="1"/></svg>
+        <svg width="20" height="12" viewBox="0 0 20 12" fill="none"><rect x=".75" y=".75" width="17" height="10.5" rx="2.25" stroke="#1A1D24" stroke-width="1.5"/><rect x="18.25" y="3.5" width="1.25" height="5" rx=".625" fill="#1A1D24"/><rect x="2" y="2" width="12" height="8" rx="1.5" fill="#1A1D24"/></svg>
+      </div>
+    </div>
+
+    <!-- Header -->
+    <div style="height:52px; background:#fff; border-bottom:1px solid #E5E7EB; display:flex; align-items:center; padding:0 4px; flex-shrink:0; position:relative;">
+      <button style="display:flex; align-items:center; gap:2px; background:none; border:none; cursor:pointer; padding:10px 12px; color:#3B5266; z-index:1;" style-hover="opacity:0.75;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        <span style="font:500 14px/1 'Inter',system-ui;">Contactos</span>
+      </button>
+      <h1 style="position:absolute; left:0; right:0; text-align:center; font:600 17px/1 'Inter',system-ui; color:#1A1D24; letter-spacing:-0.01em; pointer-events:none;">Marta Sánchez</h1>
+    </div>
+
+    <!-- Contenido con scroll -->
+    <div style="flex:1; overflow-y:auto; padding-bottom:8px;">
+
+      <!-- Tarjeta de información principal -->
+      <div style="margin:16px 16px 0; background:#fff; border-radius:12px; box-shadow:0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.10); overflow:hidden;">
+        <div style="padding:16px; display:flex; align-items:flex-start; gap:12px;">
+          {{ heroAvatarEl }}
+          <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:6px;">
+            <h2 style="font:700 19px/1.2 'Inter',system-ui; color:#1A1D24; letter-spacing:-0.02em;">Marta Sánchez</h2>
+            {{ heroBadgeEl }}
+            <div style="display:flex; align-items:center; gap:5px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span style="font:400 12px/1 'Inter',system-ui; color:#9CA3AF;">{{ responsableLabel }}</span>
+            </div>
+          </div>
+        </div>
+        <div style="height:1px; background:#F3F4F6; margin:0 16px;"></div>
+        <div style="padding:14px 16px; display:flex; flex-direction:column; gap:10px;">
+          <a href="tel:+34612345678" style="display:flex; align-items:center; gap:10px; text-decoration:none;" style-hover="opacity:0.8;">
+            <div style="width:32px; height:32px; border-radius:999px; background:#EAEFF3; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3B5266" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            </div>
+            <span style="font:500 14px/1 'Inter',system-ui; color:#3B5266;">+34 612 345 678</span>
+          </a>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:32px; height:32px; border-radius:999px; background:#F3F4F6; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            </div>
+            <span style="font:400 14px/1 'Inter',system-ui; color:#6B7280;">marta@floristeriasol.es</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Barra de acciones rápidas -->
+      <div style="display:flex; gap:8px; padding:12px 16px 0;">
+        <button onClick="{{ openNoteSheet }}" style="flex:1; display:flex; flex-direction:column; align-items:center; gap:7px; padding:14px 6px; background:#fff; border:1px solid #E5E7EB; border-radius:10px; cursor:pointer; transition:background .12s;" style-hover="background:#F9FAFB;" style-active="background:#F3F4F6;">
+          <div style="width:36px; height:36px; border-radius:999px; background:#EAEFF3; display:flex; align-items:center; justify-content:center;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3B5266" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </div>
+          <span style="font:600 11px/1.3 'Inter',system-ui; color:#1A1D24; text-align:center;">Añadir nota</span>
+        </button>
+        <button onClick="{{ openStatusSheet }}" style="flex:1; display:flex; flex-direction:column; align-items:center; gap:7px; padding:14px 6px; background:#fff; border:1px solid #E5E7EB; border-radius:10px; cursor:pointer; transition:background .12s;" style-hover="background:#F9FAFB;" style-active="background:#F3F4F6;">
+          <div style="width:36px; height:36px; border-radius:999px; background:#EAEFF3; display:flex; align-items:center; justify-content:center;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3B5266" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+          </div>
+          <span style="font:600 11px/1.3 'Inter',system-ui; color:#1A1D24; text-align:center;">Cambiar estado</span>
+        </button>
+        <sc-if value="{{ showCloseBtn }}" hint-placeholder-val="{{ true }}">
+          <button onClick="{{ openCloseSheet }}" style="flex:1; display:flex; flex-direction:column; align-items:center; gap:7px; padding:14px 6px; background:#fff; border:1px solid #E5E7EB; border-radius:10px; cursor:pointer; transition:background .12s;" style-hover="background:#F9FAFB;" style-active="background:#F3F4F6;">
+            <div style="width:36px; height:36px; border-radius:999px; background:#EAEFF3; display:flex; align-items:center; justify-content:center;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3B5266" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </div>
+            <span style="font:600 11px/1.3 'Inter',system-ui; color:#1A1D24; text-align:center;">Cerrar venta</span>
+          </button>
+        </sc-if>
+      </div>
+
+      <!-- Bloque seguimiento -->
+      <sc-if value="{{ hasPendingFollowup }}" hint-placeholder-val="{{ true }}">
+        <div style="margin:12px 16px 0; padding:14px; background:#FFFBEB; border-radius:10px; border:1px solid #FEF3C7;">
+          <div style="display:flex; align-items:flex-start; gap:10px;">
+            <div style="width:32px; height:32px; border-radius:8px; background:#FEF3C7; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#B45309" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <div style="flex:1;">
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+                <span style="font:600 13px/1 'Inter',system-ui; color:#B45309;">Seguimiento programado</span>
+                <span style="font:500 12px/1 'Inter',system-ui; color:#B45309;">{{ pendingTime }}</span>
+              </div>
+              <span style="font:400 13px/1.4 'Inter',system-ui; color:#374151;">{{ pendingReason }}</span>
+            </div>
+          </div>
+          <button onClick="{{ openScheduleSheet }}" style="margin-top:10px; width:100%; height:36px; background:#FEF3C7; color:#B45309; border:none; border-radius:7px; font:600 13px/1 'Inter',system-ui; cursor:pointer; transition:background .15s;" style-hover="background:#FDE68A;">Reprogramar</button>
+        </div>
+      </sc-if>
+      <sc-if value="{{ noPendingFollowup }}" hint-placeholder-val="{{ false }}">
+        <div style="margin:12px 16px 0; padding:14px; background:#F9FAFB; border-radius:10px; border:1px solid #F3F4F6; display:flex; align-items:center; justify-content:space-between; gap:12px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:32px; height:32px; border-radius:8px; background:#F3F4F6; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            </div>
+            <span style="font:400 13px/1 'Inter',system-ui; color:#9CA3AF;">Sin seguimiento programado</span>
+          </div>
+          <button onClick="{{ openScheduleSheet }}" style="height:36px; padding:0 12px; background:#fff; border:1.5px solid #E5E7EB; border-radius:7px; font:600 12px/1 'Inter',system-ui; color:#374151; cursor:pointer; white-space:nowrap; transition:background .15s;" style-hover="background:#F9FAFB;">Programar</button>
+        </div>
+      </sc-if>
+
+      <!-- Historial -->
+      <div style="padding:18px 20px 8px; display:flex; align-items:center; gap:10px;">
+        <span style="font:600 13px/1 'Inter',system-ui; color:#374151; white-space:nowrap;">Historial</span>
+        <div style="flex:1; height:1px; background:#E5E7EB;"></div>
+      </div>
+
+      <sc-for list="{{ timelineEntries }}" as="entry" hint-placeholder-count="5">
+        <div style="display:flex; gap:12px; padding:0 20px 18px;">
+          <div style="display:flex; flex-direction:column; align-items:center; width:28px; flex-shrink:0;">
+            {{ entry.iconEl }}
+            <sc-if value="{{ entry.notLast }}" hint-placeholder-val="{{ true }}">
+              <div style="width:2px; flex:1; background:#E5E7EB; margin-top:4px; min-height:20px;"></div>
+            </sc-if>
+          </div>
+          <div style="flex:1; min-width:0; padding-top:3px;">
+            <div style="display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:3px;">
+              <span style="font:600 13px/1 'Inter',system-ui; color:#1A1D24;">{{ entry.label }}</span>
+              <span style="font:400 11px/1 'Inter',system-ui; color:#9CA3AF; white-space:nowrap; flex-shrink:0;">{{ entry.time }}</span>
+            </div>
+            <span style="font:400 13px/1.45 'Inter',system-ui; color:#6B7280; display:block;">{{ entry.description }}</span>
+            <sc-if value="{{ entry.hasTag }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:5px;">{{ entry.tagEl }}</div>
+            </sc-if>
+            <sc-if value="{{ entry.hasAuthor }}" hint-placeholder-val="{{ false }}">
+              <span style="font:400 11px/1 'Inter',system-ui; color:#9CA3AF; margin-top:4px; display:block;">por {{ entry.author }}</span>
+            </sc-if>
+          </div>
+        </div>
+      </sc-for>
+
+      <div style="height:80px;"></div>
+    </div>
+
+    <!-- Navegación inferior -->
+    <div style="height:72px; background:#fff; border-top:1px solid #E5E7EB; display:flex; align-items:center; padding:0 8px; flex-shrink:0;">
+      <button style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 0; background:none; border:none; cursor:pointer; color:#9CA3AF; transition:color .15s;" style-hover="color:#6B7280;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span style="font:500 11px/1 'Inter',system-ui;">Pendientes</span>
+      </button>
+      <button style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 0; background:none; border:none; cursor:pointer; color:#3B5266; transition:opacity .15s;" style-hover="opacity:0.75;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span style="font:600 11px/1 'Inter',system-ui;">Contactos</span>
+      </button>
+      <button style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 0; background:none; border:none; cursor:pointer; color:#9CA3AF; transition:color .15s;" style-hover="color:#6B7280;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span style="font:500 11px/1 'Inter',system-ui;">Panel</span>
+      </button>
+    </div>
+
+    <!-- FAB -->
+    <button onClick="{{ openNoteSheet }}" style="position:absolute; bottom:84px; right:16px; width:52px; height:52px; border-radius:999px; background:#3B5266; color:#fff; border:none; cursor:pointer; font:300 26px/1 'Inter',system-ui; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 14px rgba(59,82,102,.4); z-index:10; transition:background .15s, transform .1s;" style-hover="background:#2E4252;" style-active="transform:scale(0.94); background:#233442;">+</button>
+
+    <!-- Sheet overlay -->
+    <sc-if value="{{ hasSheet }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeSheet }}" style="position:absolute; inset:0; background:rgba(0,0,0,.45); z-index:100;"></div>
+      <div style="position:absolute; bottom:0; left:0; right:0; background:#fff; border-radius:20px 20px 0 0; z-index:101; animation:slideUp .22s ease-out; max-height:92%; overflow-y:auto;">
+        <div style="width:36px; height:4px; border-radius:999px; background:#E5E7EB; margin:10px auto 0;"></div>
+
+        <!-- Añadir nota -->
+        <sc-if value="{{ sheetIsNote }}" hint-placeholder-val="{{ true }}">
+          <div style="padding:18px 20px 32px; display:flex; flex-direction:column; gap:14px;">
+            <h2 style="font:700 17px/1 'Inter',system-ui; color:#1A1D24; letter-spacing:-0.01em;">Nueva nota</h2>
+            <div style="display:flex; flex-direction:column; gap:7px;">
+              <label style="font:500 13px/1 'Inter',system-ui; color:#374151;">Tipo de contacto</label>
+              <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                <sc-for list="{{ noteTypeChips }}" as="chip" hint-placeholder-count="4">
+                  {{ chip.el }}
+                </sc-for>
+              </div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:5px;">
+              <label style="font:500 13px/1 'Inter',system-ui; color:#374151;">Fecha y hora</label>
+              <input type="datetime-local" value="{{ noteDateTime }}" onInput="{{ onNoteDateInput }}"
+                style="width:100%; padding:11px 12px; border:1.5px solid #D1D5DB; border-radius:8px; font:400 14px/1.5 'Inter',system-ui; color:#1A1D24; outline:none; transition:border-color .18s, box-shadow .18s; background:#fff;"
+                style-focus="border-color:#3B5266; box-shadow:0 0 0 3px rgba(59,82,102,.18);">
+              </input>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:5px;">
+              <label style="font:500 13px/1 'Inter',system-ui; color:#374151;">Resumen</label>
+              <textarea placeholder="¿Qué se habló? ¿Qué pidió el cliente? ¿Cuál fue el acuerdo?" onInput="{{ onNoteInput }}"
+                style="width:100%; padding:11px 12px; border:1.5px solid #D1D5DB; border-radius:8px; font:400 14px/1.55 'Inter',system-ui; color:#1A1D24; outline:none; transition:border-color .18s, box-shadow .18s; background:#fff; height:88px;"
+                style-focus="border-color:#3B5266; box-shadow:0 0 0 3px rgba(59,82,102,.18);">
+              </textarea>
+            </div>
+            <div style="display:flex; align-items:center; gap:7px; padding:8px 12px; background:#F3F4F6; border-radius:7px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span style="font:400 12px/1 'Inter',system-ui; color:#6B7280;">Guardando como: <strong style="color:#374151;">{{ noteAuthor }}</strong></span>
+            </div>
+            <button onClick="{{ saveNote }}" style="width:100%; height:46px; background:#3B5266; color:#fff; border:none; border-radius:8px; font:600 14px/1 'Inter',system-ui; cursor:pointer; transition:background .15s;" style-hover="background:#2E4252;" style-active="background:#233442;">Guardar nota</button>
+          </div>
+        </sc-if>
+
+        <!-- Cambiar estado -->
+        <sc-if value="{{ sheetIsStatus }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:18px 20px 32px; display:flex; flex-direction:column; gap:14px;">
+            <h2 style="font:700 17px/1 'Inter',system-ui; color:#1A1D24; letter-spacing:-0.01em;">Cambiar estado</h2>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <sc-for list="{{ stageButtons }}" as="sb" hint-placeholder-count="5">
+                {{ sb.el }}
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- Programar seguimiento -->
+        <sc-if value="{{ sheetIsSchedule }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:18px 20px 32px; display:flex; flex-direction:column; gap:14px;">
+            <h2 style="font:700 17px/1 'Inter',system-ui; color:#1A1D24; letter-spacing:-0.01em;">Programar seguimiento</h2>
+            <div style="display:flex; flex-direction:column; gap:5px;">
+              <label style="font:500 13px/1 'Inter',system-ui; color:#374151;">Fecha y hora</label>
+              <input type="datetime-local" value="{{ scheduleDate }}" onInput="{{ onScheduleDate }}"
+                style="width:100%; padding:11px 12px; border:1.5px solid #D1D5DB; border-radius:8px; font:400 14px/1.5 'Inter',system-ui; color:#1A1D24; outline:none; transition:border-color .18s, box-shadow .18s; background:#fff;"
+                style-focus="border-color:#3B5266; box-shadow:0 0 0 3px rgba(59,82,102,.18);">
+              </input>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:5px;">
+              <label style="font:500 13px/1 'Inter',system-ui; color:#374151;">Motivo</label>
+              <input type="text" placeholder="¿Qué hay que hacer?" value="{{ scheduleReason }}" onInput="{{ onScheduleReason }}"
+                style="width:100%; padding:11px 12px; border:1.5px solid #D1D5DB; border-radius:8px; font:400 14px/1.5 'Inter',system-ui; color:#1A1D24; outline:none; transition:border-color .18s, box-shadow .18s; background:#fff;"
+                style-focus="border-color:#3B5266; box-shadow:0 0 0 3px rgba(59,82,102,.18);">
+              </input>
+            </div>
+            <button onClick="{{ saveSchedule }}" style="width:100%; height:46px; background:#3B5266; color:#fff; border:none; border-radius:8px; font:600 14px/1 'Inter',system-ui; cursor:pointer; transition:background .15s;" style-hover="background:#2E4252;" style-active="background:#233442;">Programar</button>
+          </div>
+        </sc-if>
+
+        <!-- Cerrar venta -->
+        <sc-if value="{{ sheetIsClose }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:18px 20px 32px; display:flex; flex-direction:column; gap:14px;">
+            <h2 style="font:700 17px/1 'Inter',system-ui; color:#1A1D24; letter-spacing:-0.01em;">Cerrar venta</h2>
+            <p style="font:400 13px/1.5 'Inter',system-ui; color:#6B7280;">¿Cómo terminó este negocio?</p>
+            <button onClick="{{ closeWon }}" style="width:100%; height:52px; background:#DCFCE7; color:#15803D; border:2px solid #86EFAC; border-radius:10px; font:600 15px/1 'Inter',system-ui; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; transition:background .15s;" style-hover="background:#BBF7D0;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              Venta ganada
+            </button>
+            <button onClick="{{ closeLost }}" style="width:100%; height:52px; background:#FEE2E2; color:#B91C1C; border:2px solid #FCA5A5; border-radius:10px; font:600 15px/1 'Inter',system-ui; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; transition:background .15s;" style-hover="background:#FECACA;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              Venta perdida
+            </button>
+            <button onClick="{{ closeSheet }}" style="width:100%; height:40px; background:none; border:none; font:500 14px/1 'Inter',system-ui; color:#9CA3AF; cursor:pointer; transition:color .15s;" style-hover="color:#6B7280;">Cancelar</button>
+          </div>
+        </sc-if>
+
+      </div>
+    </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 423, &quot;height&quot;: 860 },
+  &quot;contactStage&quot;: {
+    &quot;editor&quot;: &quot;enum&quot;,
+    &quot;options&quot;: [&quot;lead&quot;,&quot;talking&quot;,&quot;proposal&quot;,&quot;negotiating&quot;,&quot;won&quot;,&quot;lost&quot;],
+    &quot;default&quot;: &quot;negotiating&quot;,
+    &quot;section&quot;: &quot;Contacto&quot;
+  },
+  &quot;user&quot;: {
+    &quot;editor&quot;: &quot;enum&quot;,
+    &quot;options&quot;: [&quot;carlos&quot;,&quot;marta&quot;],
+    &quot;default&quot;: &quot;carlos&quot;,
+    &quot;section&quot;: &quot;Contacto&quot;
+  },
+  &quot;hasPendingFollowup&quot;: {
+    &quot;editor&quot;: &quot;boolean&quot;,
+    &quot;default&quot;: true,
+    &quot;section&quot;: &quot;Contacto&quot;
+  },
+  &quot;openSheet&quot;: {
+    &quot;editor&quot;: &quot;enum&quot;,
+    &quot;options&quot;: [&quot;none&quot;,&quot;add-note&quot;,&quot;change-status&quot;,&quot;schedule&quot;,&quot;close-deal&quot;],
+    &quot;default&quot;: &quot;none&quot;,
+    &quot;section&quot;: &quot;Demo&quot;
+  }
+}">
+const STAGE = {
+  lead:        { label:'Lead nuevo',        bg:'#E0F2FE', fg:'#0369A1' },
+  talking:     { label:'En conversación',   bg:'#EAEFF3', fg:'#3B5266' },
+  proposal:    { label:'Propuesta enviada', bg:'#F3E8FF', fg:'#7E22CE' },
+  negotiating: { label:'Negociando',        bg:'#FFEDD5', fg:'#C2410C' },
+  won:         { label:'Ganado',            bg:'#DCFCE7', fg:'#15803D' },
+  lost:        { label:'Perdido',           bg:'#FEE2E2', fg:'#B91C1C' },
+};
+
+const NOTE_TYPES = [
+  { key:'llamada',   label:'Llamada',   path:'M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z' },
+  { key:'whatsapp',  label:'WhatsApp',  path:'M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z' },
+  { key:'email',     label:'Email',     path:'M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z M22 6l-10 7L2 6' },
+  { key:'reunion',   label:'Reunión',   path:'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75' },
+  { key:'otro',      label:'Otro',      path:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7 M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' },
+];
+
+class Component extends DCLogic {
+  state = { sheet:null, stage:null, noteText:'', noteType:'llamada', noteDateTime:'', scheduleDate:'', scheduleReason:'', extraEntries:[] };
+
+  mkIcon(bg, pathD) {
+    return React.createElement('div', {
+      style: { width:'28px', height:'28px', borderRadius:'999px', background:bg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }
+    }, React.createElement('svg', { width:13, height:13, viewBox:'0 0 24 24', fill:'none', stroke:'#fff', strokeWidth:2.2, strokeLinecap:'round', strokeLinejoin:'round' },
+      React.createElement('path', { d: pathD })
+    ));
+  }
+
+  openSheet(n) { this.setState({ sheet:n }); }
+  closeSheet()  { this.setState({ sheet:null }); }
+  getStage()    { return this.state.stage ?? this.props.contactStage ?? 'negotiating'; }
+
+  saveNote() {
+    const text = this.state.noteText.trim(); if (!text) return;
+    const nt = NOTE_TYPES.find(t => t.key === this.state.noteType) || NOTE_TYPES[0];
+    const author = this.props.user === 'marta' ? 'Marta' : 'Carlos';
+    const now = new Date(); const pad = n => String(n).padStart(2,'0');
+    const entry = { label:nt.label, description:text, time:`Hoy ${pad(now.getHours())}:${pad(now.getMinutes())}`, author, hasAuthor:true, notLast:true, hasTag:false,
+      iconEl: this.mkIcon('#6B7280', 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7 M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z') };
+    this.setState(s => ({ noteText:'', noteType:'llamada', sheet:null, extraEntries:[entry,...s.extraEntries] }));
+  }
+
+  changeStage(newStage) {
+    const old = STAGE[this.getStage()]; const nw = STAGE[newStage];
+    const tagEl = React.createElement('div', { style:{ display:'flex', alignItems:'center', gap:5 } },
+      React.createElement('span', { style:{ fontFamily:"'Inter',system-ui", fontSize:'11px', fontWeight:'600', background:old.bg, color:old.fg, padding:'2px 8px', borderRadius:'999px' } }, old.label),
+      React.createElement('svg', { width:12, height:12, viewBox:'0 0 24 24', fill:'none', stroke:'#9CA3AF', strokeWidth:2, strokeLinecap:'round' }, React.createElement('polyline', { points:'9 18 15 12 9 6' })),
+      React.createElement('span', { style:{ fontFamily:"'Inter',system-ui", fontSize:'11px', fontWeight:'600', background:nw.bg, color:nw.fg, padding:'2px 8px', borderRadius:'999px' } }, nw.label)
+    );
+    const entry = { label:'Cambio de estado', description:`${old.label} → ${nw.label}`, time:'Ahora', notLast:true, hasTag:true, hasAuthor:false, tagEl,
+      iconEl: this.mkIcon('#3B5266', 'M17 1l4 4-4 4 M3 11V9a4 4 0 0 1 4-4h14 M7 23l-4-4 4-4 M21 13v2a4 4 0 0 1-4 4H3') };
+    this.setState(s => ({ stage:newStage, sheet:null, extraEntries:[entry,...s.extraEntries] }));
+  }
+
+  closeDeal(result) {
+    const isWon = result === 'won';
+    const entry = { label: isWon ? 'Venta ganada' : 'Venta perdida', description: isWon ? 'Negocio cerrado con éxito.' : 'Marcado como perdido.', time:'Ahora', notLast:true, hasTag:false, hasAuthor:false,
+      iconEl: this.mkIcon(isWon ? '#16A34A' : '#B91C1C', isWon ? 'M22 11.08V12a10 10 0 1 1-5.93-9.14 M22 4L12 14.01l-3-3' : 'M18 6 6 18 M6 6l12 12') };
+    this.setState(s => ({ stage:result, sheet:null, extraEntries:[entry,...s.extraEntries] }));
+  }
+
+  saveSchedule() {
+    const reason = this.state.scheduleReason || 'Seguimiento';
+    const entry = { label:'Seguimiento programado', description:reason, time:'Ahora', notLast:true, hasTag:false, hasAuthor:false,
+      iconEl: this.mkIcon('#B45309', 'M3 4h18v2H3 M8 2v4 M16 2v4 M3 10h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V10z') };
+    this.setState(s => ({ scheduleReason:'', scheduleDate:'', sheet:null, extraEntries:[entry,...s.extraEntries] }));
+  }
+
+  renderVals() {
+    const { extraEntries, noteType, scheduleDate, scheduleReason } = this.state;
+    const propSheet = this.props.openSheet;
+    const sheet  = this.state.sheet ?? (propSheet && propSheet !== 'none' ? propSheet : null);
+    const stage  = this.getStage();
+    const sd     = STAGE[stage] || STAGE.lead;
+    const author = this.props.user === 'marta' ? 'Marta' : 'Carlos';
+
+    const heroAvatarEl = React.createElement('div', { style:{ width:'48px', height:'48px', borderRadius:'999px', background:'#F3E8FF', color:'#7E22CE', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', fontWeight:'700', flexShrink:0 } }, 'M');
+    const heroBadgeEl  = React.createElement('span', { style:{ fontFamily:"'Inter',system-ui", fontSize:'12px', lineHeight:'1', fontWeight:'600', background:sd.bg, color:sd.fg, padding:'5px 12px', borderRadius:'999px', display:'inline-block' } }, sd.label);
+
+    const now = new Date(); const pad = n => String(n).padStart(2,'0');
+    const defaultDT = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+    const noteTypeChips = NOTE_TYPES.map(nt => {
+      const active = nt.key === (noteType || 'llamada');
+      const el = React.createElement('button', { key:nt.key, onClick:()=>this.setState({ noteType:nt.key }),
+        style:{ display:'flex', alignItems:'center', gap:5, padding:'7px 11px', borderRadius:'999px', cursor:'pointer', fontFamily:"'Inter',system-ui", fontSize:'12px', fontWeight:active?'600':'500',
+          border:`1.5px solid ${active?'#3B5266':'#E5E7EB'}`, background:active?'#EAEFF3':'#fff', color:active?'#3B5266':'#6B7280', transition:'all .12s' } },
+        React.createElement('svg', { width:12, height:12, viewBox:'0 0 24 24', fill:'none', stroke:'currentColor', strokeWidth:2, strokeLinecap:'round', strokeLinejoin:'round' },
+          React.createElement('path', { d:nt.path })
+        ),
+        nt.label
+      );
+      return { el };
+    });
+
+    const stageButtons = Object.entries(STAGE).map(([key, meta]) => {
+      const isActive = key === stage;
+      const el = React.createElement('button', { key, onClick:()=>this.changeStage(key),
+        style:{ width:'100%', padding:'12px 14px', borderRadius:'8px', cursor:'pointer', fontFamily:"'Inter',system-ui", fontSize:'14px', fontWeight:isActive?'600':'400', textAlign:'left',
+          border:`1.5px solid ${isActive?meta.fg:'#E5E7EB'}`, background:isActive?meta.bg:'#fff', color:isActive?meta.fg:'#374151',
+          display:'flex', alignItems:'center', justifyContent:'space-between', transition:'all .12s' } },
+        meta.label,
+        isActive ? React.createElement('svg', { width:15, height:15, viewBox:'0 0 24 24', fill:'none', stroke:meta.fg, strokeWidth:2.5, strokeLinecap:'round', strokeLinejoin:'round' },
+          React.createElement('polyline', { points:'20 6 9 17 4 12' })
+        ) : null
+      );
+      return { el };
+    });
+
+    const DEFAULT_TL = [
+      { label:'Llamada', description:'Interesada, pide descuento del 15%. Revisar margen con Marta antes de responder.', time:'Hoy 09:20', author:'Carlos', hasAuthor:true, hasTag:false, iconEl:this.mkIcon('#3B5266','M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z') },
+      { label:'Seguimiento programado', description:'Confirmar descuento y cerrar propuesta', time:'Ayer 16:30', hasAuthor:false, hasTag:false, iconEl:this.mkIcon('#B45309','M3 4h18v2H3 M8 2v4 M16 2v4 M3 10h18v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V10z') },
+      { label:'Cambio de estado', description:'En conversación → Negociando', time:'Hace 3 días', hasAuthor:false, hasTag:false, iconEl:this.mkIcon('#3B5266','M17 1l4 4-4 4 M3 11V9a4 4 0 0 1 4-4h14 M7 23l-4-4 4-4 M21 13v2a4 4 0 0 1-4 4H3') },
+      { label:'WhatsApp', description:'Envió los documentos que pedimos. Adjuntó NIF y últimas cuentas.', time:'Hace 4 días', author:'Carlos', hasAuthor:true, hasTag:false, iconEl:this.mkIcon('#16A34A','M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z') },
+      { label:'Primera llamada', description:'Primera reunión positiva. Necesita ver los números antes de decidir.', time:'Hace 1 semana', author:'Carlos', hasAuthor:true, hasTag:false, iconEl:this.mkIcon('#3B5266','M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z') },
+      { label:'Contacto añadido', description:'Marta Sánchez añadida como Lead nuevo.', time:'Hace 2 semanas', hasAuthor:false, hasTag:false, iconEl:this.mkIcon('#3B5266','M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0 M19 8v6 M22 11h-6') },
+    ];
+
+    const allEntries = [...extraEntries, ...DEFAULT_TL].map((e,i,arr) => ({ ...e, notLast: i < arr.length-1 }));
+
+    const showCloseBtn      = stage !== 'won' && stage !== 'lost';
+    const hasPendingFollowup = this.props.hasPendingFollowup !== false && stage !== 'won' && stage !== 'lost';
+
+    return {
+      heroAvatarEl, heroBadgeEl,
+      responsableLabel: `Responsable: ${author}`,
+      showCloseBtn,
+      hasPendingFollowup,
+      noPendingFollowup: !hasPendingFollowup,
+      pendingTime:   'Mañana 10:00',
+      pendingReason: 'Confirmar descuento y cerrar propuesta final',
+      hasSheet:        !!sheet,
+      sheetIsNote:     sheet === 'add-note',
+      sheetIsStatus:   sheet === 'change-status',
+      sheetIsSchedule: sheet === 'schedule',
+      sheetIsClose:    sheet === 'close-deal',
+      openNoteSheet:     () => this.openSheet('add-note'),
+      openStatusSheet:   () => this.openSheet('change-status'),
+      openScheduleSheet: () => this.openSheet('schedule'),
+      openCloseSheet:    () => this.openSheet('close-deal'),
+      closeSheet:        () => this.closeSheet(),
+      noteTypeChips, stageButtons,
+      noteDateTime:     this.state.noteDateTime || defaultDT,
+      noteAuthor:       author,
+      onNoteInput:      (e) => this.setState({ noteText: e.target.value }),
+      onNoteDateInput:  (e) => this.setState({ noteDateTime: e.target.value }),
+      saveNote:         () => this.saveNote(),
+      scheduleDate, scheduleReason,
+      onScheduleDate:   (e) => this.setState({ scheduleDate: e.target.value }),
+      onScheduleReason: (e) => this.setState({ scheduleReason: e.target.value }),
+      saveSchedule:     () => this.saveSchedule(),
+      closeWon:         () => this.closeDeal('won'),
+      closeLost:        () => this.closeDeal('lost'),
+      timelineEntries:  allEntries,
+    };
+  }
+}
+</script>
+</body>
+</html>

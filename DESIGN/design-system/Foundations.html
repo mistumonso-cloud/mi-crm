@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vibe Coder CRM — Foundations</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--color-bg);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;color:var(--text-primary)}
+  .mono{font-family:var(--font-mono)}
+  header.top{position:sticky;top:0;z-index:10;background:rgba(255,255,255,0.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--color-border)}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 32px}
+  h2.sec{font-size:24px;font-weight:700;letter-spacing:-0.02em}
+  h3.lbl{font-size:13px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-tertiary);margin-bottom:14px}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap" style="padding-top:16px;padding-bottom:16px;display:flex;align-items:center;justify-content:space-between">
+    <div style="display:flex;align-items:center;gap:12px">
+      <img src="assets/logo-monogram.svg" width="32" height="32" alt="Vibe Coder CRM" style="border-radius:8px">
+      <div style="display:flex;flex-direction:column;line-height:1.2">
+        <span style="font-size:15px;font-weight:700;letter-spacing:-0.01em">Vibe Coder CRM</span>
+        <span style="font-size:12px;font-weight:500;color:var(--text-tertiary)">Design System</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-size:12px;font-weight:600;color:var(--status-won-fg);background:var(--status-won-bg);padding:5px 12px;border-radius:999px">v1.0</span>
+      <span style="font-size:12px;font-weight:500;color:var(--text-secondary);background:var(--color-muted);padding:5px 12px;border-radius:999px">Light mode</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section style="padding:64px 0 48px;max-width:680px">
+    <span style="font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--color-accent)">Fundamentos</span>
+    <h1 style="font-size:40px;font-weight:700;letter-spacing:-0.03em;line-height:1.1;margin-top:12px">Un sistema limpio para vender sin fricción.</h1>
+    <p style="font-size:16px;line-height:1.6;color:var(--text-secondary);margin-top:16px">Tokens de color, tipografía, espaciado, bordes, sombras y badges de pipeline. Profesional pero accesible — pensado para usarse desde el móvil, sin distracciones.</p>
+    <div style="display:flex;gap:8px;margin-top:24px;flex-wrap:wrap">
+      <span class="pillx">Inter</span><span class="pillx">Base 4px</span><span class="pillx">Pizarra #3B5266</span><span class="pillx">7 estados de pipeline</span>
+    </div>
+  </section>
+
+  <section style="margin-top:24px">
+    <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px"><span style="font-size:13px;font-weight:700;color:var(--color-accent)">01</span><h2 class="sec">Color</h2></div>
+    <p style="font-size:14px;color:var(--text-secondary);margin-bottom:28px">Azul pizarra como acción única. Verde, ámbar, rojo y gris para estado. Fondos blanco roto, nunca azul-violeta de gradiente.</p>
+    <h3 class="lbl">Marca · Primario</h3>
+    <div id="brand" class="grid-sw" style="margin-bottom:36px"></div>
+    <h3 class="lbl">Semánticos</h3>
+    <div id="semantic" class="grid-sw" style="margin-bottom:36px"></div>
+    <h3 class="lbl">Superficie & borde</h3>
+    <div id="surface" class="rows" style="margin-bottom:36px"></div>
+    <h3 class="lbl">Escala de texto</h3>
+    <div id="textScale" class="rows"></div>
+  </section>
+
+  <section style="margin-top:72px">
+    <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px"><span style="font-size:13px;font-weight:700;color:var(--color-accent)">02</span><h2 class="sec">Tipografía</h2></div>
+    <p style="font-size:14px;color:var(--text-secondary);margin-bottom:28px"><strong style="color:var(--text-secondary)">Inter</strong> en todo. Pesos 400 · 500 · 600 · 700. Escala compacta para alta densidad sin perder claridad.</p>
+    <div id="type" class="rows"></div>
+    <div id="weights" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:20px"></div>
+  </section>
+
+  <section style="margin-top:72px">
+    <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px"><span style="font-size:13px;font-weight:700;color:var(--color-accent)">03</span><h2 class="sec">Espaciado</h2></div>
+    <p style="font-size:14px;color:var(--text-secondary);margin-bottom:28px">Base <strong style="color:var(--text-secondary)">4px</strong>. Una escala única para padding, gaps y márgenes — consistencia táctil en cada pantalla.</p>
+    <div id="spacing" class="rows"></div>
+  </section>
+
+  <section style="margin-top:72px">
+    <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px"><span style="font-size:13px;font-weight:700;color:var(--color-accent)">04</span><h2 class="sec">Bordes & sombras</h2></div>
+    <p style="font-size:14px;color:var(--text-secondary);margin-bottom:28px">Radios suaves para una sensación amable. Tres niveles de elevación, sombras teñidas y sutiles — nunca duras.</p>
+    <h3 class="lbl">Border radius</h3>
+    <div id="radius" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:36px"></div>
+    <h3 class="lbl">Sombras</h3>
+    <div id="shadows" style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;background:var(--color-muted);border:1px solid var(--color-border);border-radius:16px;padding:32px"></div>
+  </section>
+
+  <section style="margin-top:72px">
+    <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:8px"><span style="font-size:13px;font-weight:700;color:var(--color-accent)">05</span><h2 class="sec">Estados del pipeline</h2></div>
+    <p style="font-size:14px;color:var(--text-secondary);margin-bottom:28px">Pills de estado de un vistazo. Fondo suave + texto saturado del mismo tono para máxima legibilidad sobre blanco.</p>
+    <div id="badgeRow" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:12px;padding:24px;display:flex;flex-wrap:wrap;gap:10px;align-items:center"></div>
+  </section>
+
+  <footer style="margin-top:80px;padding:32px 0 96px;border-top:1px solid var(--color-border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <span style="font-size:13px;color:var(--text-tertiary)">Vibe Coder CRM · Design System v1.0</span>
+    <span style="font-size:13px;color:var(--text-tertiary)">Limpio · Operativo · Sin distracciones</span>
+  </footer>
+</main>
+
+<style>
+  .pillx{font-size:13px;font-weight:500;color:var(--color-neutral-fg);background:var(--color-surface);border:1px solid var(--color-border);padding:7px 14px;border-radius:8px}
+  .grid-sw{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+  .swcard{background:var(--color-surface);border:1px solid var(--color-border);border-radius:12px;overflow:hidden}
+  .swcard .meta{padding:12px 14px}
+  .rows{background:var(--color-surface);border:1px solid var(--color-border);border-radius:12px;overflow:hidden}
+  .rows>div{border-bottom:1px solid var(--color-muted)}
+</style>
+
+<script>
+const D = {
+  brand: [
+    { name:'Primary', token:'color.accent', hex:'#3B5266' },
+    { name:'Primary hover', token:'color.accent.hover', hex:'#2E4252' },
+    { name:'Primary press', token:'color.accent.press', hex:'#233442' },
+    { name:'Primary tint', token:'color.accent.tint', hex:'#EAEFF3' },
+    { name:'Primary subtle', token:'color.accent.subtle', hex:'#D6E0E6' },
+  ],
+  semantic: [
+    { name:'Success', role:'Venta ganada', hex:'#16A34A', chipBg:'#DCFCE7', chipText:'#15803D', token:'color.success' },
+    { name:'Warning', role:'Pendiente urgente', hex:'#F59E0B', chipBg:'#FEF3C7', chipText:'#B45309', token:'color.warning' },
+    { name:'Danger', role:'Perdido', hex:'#EF4444', chipBg:'#FEE2E2', chipText:'#B91C1C', token:'color.danger' },
+    { name:'Neutral', role:'Inactivo', hex:'#6B7280', chipBg:'#F3F4F6', chipText:'#374151', token:'color.neutral' },
+  ],
+  surface: [
+    { name:'Background', use:'Lienzo de la app', token:'color.bg', hex:'#FAFAFA' },
+    { name:'Surface', use:'Cards, paneles', token:'color.surface', hex:'#FFFFFF' },
+    { name:'Muted', use:'Filas, hover, fills', token:'color.muted', hex:'#F3F4F6' },
+    { name:'Border', use:'Líneas hairline', token:'color.border', hex:'#E5E7EB' },
+    { name:'Border strong', use:'Inputs, foco', token:'color.border.strong', hex:'#D1D5DB' },
+  ],
+  textScale: [
+    { name:'Principal', use:'Títulos y datos clave', token:'text.primary', hex:'#1A1D24', sample:'Texto principal' },
+    { name:'Secundario', use:'Descripciones, labels', token:'text.secondary', hex:'#6B7280', sample:'Texto secundario' },
+    { name:'Terciario', use:'Metadatos, hints', token:'text.tertiary', hex:'#9CA3AF', sample:'Texto terciario' },
+  ],
+  type: [
+    { name:'Display', size:'24px', weight:700, tracking:'-0.02em', sample:'Ingresos del mes' },
+    { name:'Heading L', size:'20px', weight:600, tracking:'-0.01em', sample:'Pipeline de ventas' },
+    { name:'Heading S', size:'18px', weight:600, tracking:'-0.01em', sample:'Contactos recientes' },
+    { name:'Body L', size:'16px', weight:400, tracking:'0', sample:'Cuerpo principal de lectura' },
+    { name:'Body S', size:'14px', weight:400, tracking:'0', sample:'Texto de apoyo y formularios' },
+    { name:'Caption', size:'12px', weight:500, tracking:'0.01em', sample:'Etiquetas y marcas de tiempo' },
+  ],
+  weights: [ {name:'Regular',weight:400},{name:'Medium',weight:500},{name:'SemiBold',weight:600},{name:'Bold',weight:700} ],
+  spacing: [ ['space.1','4px'],['space.2','8px'],['space.3','12px'],['space.4','16px'],['space.5','20px'],['space.6','24px'],['space.8','32px'],['space.10','40px'],['space.12','48px'],['space.16','64px'] ].map(([token,px])=>({token,px})),
+  radius: [ ['radius.sm','4px'],['radius.md','8px'],['radius.lg','12px'],['radius.xl','16px'],['radius.2xl','24px'],['radius.full','999px'] ].map(([name,css])=>({name,css,px:name==='radius.full'?'full':css})),
+  shadows: [
+    { name:'shadow.sm', use:'Cards', css:'0 1px 2px rgba(16,24,40,0.06), 0 1px 3px rgba(16,24,40,0.10)' },
+    { name:'shadow.md', use:'Modales', css:'0 4px 8px rgba(16,24,40,0.06), 0 8px 24px rgba(16,24,40,0.10)' },
+    { name:'shadow.lg', use:'Overlays', css:'0 12px 24px rgba(16,24,40,0.08), 0 24px 48px rgba(16,24,40,0.14)' },
+  ],
+  badges: [
+    { label:'Lead nuevo', bg:'#E0F2FE', text:'#0369A1', dot:'#0EA5E9' },
+    { label:'En conversación', bg:'#EAEFF3', text:'#3B5266', dot:'#5B7387' },
+    { label:'Propuesta enviada', bg:'#F3E8FF', text:'#7E22CE', dot:'#A855F7' },
+    { label:'Negociando', bg:'#FFEDD5', text:'#C2410C', dot:'#F97316' },
+    { label:'Ganado', bg:'#DCFCE7', text:'#15803D', dot:'#22C55E' },
+    { label:'Perdido', bg:'#FEE2E2', text:'#B91C1C', dot:'#EF4444' },
+    { label:'Inactivo', bg:'#F3F4F6', text:'#6B7280', dot:'#9CA3AF' },
+  ],
+};
+const $ = (id) => document.getElementById(id);
+const H = (s) => s; // identity (trusted static content)
+
+$('brand').innerHTML = D.brand.map(c => `
+  <div class="swcard"><div style="height:72px;background:${c.hex};border-bottom:1px solid rgba(0,0,0,0.04)"></div>
+  <div class="meta"><div style="font-size:13px;font-weight:600">${c.name}</div>
+  <div class="mono" style="font-size:12px;color:var(--text-tertiary);margin-top:2px">${c.token}</div>
+  <div class="mono" style="font-size:12px;color:var(--text-secondary);margin-top:6px">${c.hex}</div></div></div>`).join('');
+
+$('semantic').innerHTML = D.semantic.map(c => `
+  <div class="swcard"><div style="height:72px;background:${c.hex};display:flex;align-items:flex-end;padding:10px">
+  <span style="font-size:11px;font-weight:600;color:${c.chipText};background:${c.chipBg};padding:3px 9px;border-radius:999px">${c.role}</span></div>
+  <div class="meta"><div style="font-size:13px;font-weight:600">${c.name}</div>
+  <div class="mono" style="font-size:12px;color:var(--text-tertiary);margin-top:2px">${c.token}</div>
+  <div class="mono" style="font-size:12px;color:var(--text-secondary);margin-top:6px">${c.hex}</div></div></div>`).join('');
+
+$('surface').innerHTML = D.surface.map(c => `
+  <div style="display:flex;align-items:center;gap:16px;padding:14px 18px">
+  <div style="width:44px;height:44px;border-radius:10px;background:${c.hex};border:1px solid var(--color-border);flex-shrink:0"></div>
+  <div style="flex:1;min-width:0"><span style="font-size:14px;font-weight:600">${c.name}</span>
+  <span style="font-size:13px;color:var(--text-tertiary);margin-left:8px">${c.use}</span></div>
+  <span class="mono" style="font-size:12px;color:var(--text-secondary);background:#F9FAFB;border:1px solid #F0F1F3;padding:3px 8px;border-radius:6px">${c.token}</span>
+  <span class="mono" style="font-size:12px;color:var(--color-neutral-fg);width:84px;text-align:right">${c.hex}</span></div>`).join('');
+
+$('textScale').innerHTML = D.textScale.map(c => `
+  <div style="display:flex;align-items:center;gap:16px;padding:16px 18px">
+  <div style="flex:1"><div style="font-size:18px;font-weight:600;color:${c.hex}">${c.sample}</div>
+  <span style="font-size:12px;color:var(--text-tertiary)">${c.use}</span></div>
+  <span class="mono" style="font-size:12px;color:var(--text-secondary);background:#F9FAFB;border:1px solid #F0F1F3;padding:3px 8px;border-radius:6px">${c.token}</span>
+  <span class="mono" style="font-size:12px;color:var(--color-neutral-fg);width:84px;text-align:right">${c.hex}</span></div>`).join('');
+
+$('type').innerHTML = D.type.map(t => `
+  <div style="display:flex;align-items:baseline;gap:20px;padding:20px 22px">
+  <div style="flex:1;min-width:0"><div style="font-size:${t.size};font-weight:${t.weight};line-height:1.25;letter-spacing:${t.tracking};color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.sample}</div></div>
+  <span style="font-size:13px;font-weight:500;color:var(--color-neutral-fg);width:120px;flex-shrink:0">${t.name}</span>
+  <span class="mono" style="font-size:12px;color:var(--text-secondary);width:60px;text-align:right;flex-shrink:0">${t.size}</span>
+  <span class="mono" style="font-size:12px;color:var(--text-tertiary);width:48px;text-align:right;flex-shrink:0">${t.weight}</span></div>`).join('');
+
+$('weights').innerHTML = D.weights.map(w => `
+  <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:12px;padding:18px">
+  <div style="font-size:32px;font-weight:${w.weight};line-height:1;color:var(--text-primary)">Aa</div>
+  <div style="font-size:13px;font-weight:600;margin-top:12px">${w.name}</div>
+  <div class="mono" style="font-size:12px;color:var(--text-tertiary);margin-top:2px">${w.weight}</div></div>`).join('');
+
+$('spacing').innerHTML = D.spacing.map(s => `
+  <div style="display:flex;align-items:center;gap:18px;padding:11px 18px">
+  <span class="mono" style="font-size:12px;color:var(--text-tertiary);width:56px;flex-shrink:0">${s.token}</span>
+  <span class="mono" style="font-size:13px;color:var(--color-neutral-fg);width:48px;flex-shrink:0">${s.px}</span>
+  <div style="flex:1;display:flex;align-items:center"><div style="height:16px;border-radius:4px;background:var(--color-accent);width:${s.px}"></div></div></div>`).join('');
+
+$('radius').innerHTML = D.radius.map(r => `
+  <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:12px;padding:16px;display:flex;flex-direction:column;align-items:center;gap:14px">
+  <div style="width:72px;height:72px;background:var(--color-accent-tint);border:1.5px solid var(--color-accent);border-radius:${r.css}"></div>
+  <div style="text-align:center"><div style="font-size:13px;font-weight:600">${r.name}</div>
+  <div class="mono" style="font-size:12px;color:var(--text-tertiary);margin-top:2px">${r.px}</div></div></div>`).join('');
+
+$('shadows').innerHTML = D.shadows.map(sh => `
+  <div style="background:var(--color-surface);border-radius:12px;padding:20px;box-shadow:${sh.css};border:1px solid rgba(0,0,0,0.03)">
+  <div style="font-size:14px;font-weight:600">${sh.name}</div>
+  <div style="font-size:12px;color:var(--text-tertiary);margin-top:4px">${sh.use}</div>
+  <div class="mono" style="font-size:11px;color:var(--text-secondary);margin-top:14px;line-height:1.5;word-break:break-all">${sh.css}</div></div>`).join('');
+
+$('badgeRow').innerHTML = D.badges.map(b => `
+  <span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:${b.text};background:${b.bg};padding:6px 13px;border-radius:999px">
+  <span style="width:7px;height:7px;border-radius:999px;background:${b.dot}"></span>${b.label}</span>`).join('');
+</script>
+</body>
+</html>

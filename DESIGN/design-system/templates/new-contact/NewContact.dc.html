@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="Nuevo contacto" description="Formulario rápido (nombre + teléfono obligatorios, notas opcional). Cancelar/Guardar en header. Teclado simulado visible." -->
+<helmet>
+  <script src="./ds-base.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    input::placeholder, textarea::placeholder { color: #9CA3AF; }
+    textarea { resize: none; }
+    @keyframes nc-spin { to { transform: rotate(360deg); } }
+    @keyframes nc-fade { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes nc-check { 0%{transform:scale(0)} 70%{transform:scale(1.2)} 100%{transform:scale(1)} }
+  </style>
+</helmet>
+
+<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; background:#E5E7EB;">
+  <div style="width:375px; height:812px; border-radius:40px; background:#fff; box-shadow:0 8px 24px rgba(16,24,40,.12), 0 32px 64px rgba(16,24,40,.16); overflow:hidden; position:relative; display:flex; flex-direction:column;">
+
+    <!-- Status bar -->
+    <div style="height:44px; background:#fff; display:flex; align-items:center; justify-content:space-between; padding:0 24px; flex-shrink:0;">
+      <span style="font:600 14px/1 'Inter',system-ui; color:#1A1D24;">9:41</span>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <svg width="16" height="12" viewBox="0 0 16 12" fill="#1A1D24"><rect x="0" y="4" width="3" height="8" rx="1"/><rect x="4.5" y="2.5" width="3" height="9.5" rx="1"/><rect x="9" y="0.5" width="3" height="11.5" rx="1"/><rect x="13.5" y="0" width="2.5" height="12" rx="1"/></svg>
+        <svg width="20" height="12" viewBox="0 0 20 12" fill="none"><rect x=".75" y=".75" width="17" height="10.5" rx="2.25" stroke="#1A1D24" stroke-width="1.5"/><rect x="18.25" y="3.5" width="1.25" height="5" rx=".625" fill="#1A1D24"/><rect x="2" y="2" width="12" height="8" rx="1.5" fill="#1A1D24"/></svg>
+      </div>
+    </div>
+
+    <!-- VISTA FORMULARIO -->
+    <sc-if value="{{ showForm }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:1; display:flex; flex-direction:column; min-height:0; overflow:hidden;">
+
+        <!-- Header: Cancelar | título | Guardar -->
+        <div style="height:52px; background:#fff; border-bottom:1px solid #E5E7EB; display:flex; align-items:center; justify-content:space-between; padding:0 4px; flex-shrink:0;">
+          <button style="background:none; border:none; cursor:pointer; padding:10px 14px; font:500 14px/1 'Inter',system-ui; color:#3B5266; transition:opacity .15s;" style-hover="opacity:0.7;">Cancelar</button>
+          <span style="font:600 15px/1 'Inter',system-ui; color:#1A1D24;">Nuevo contacto</span>
+          <div style="width:84px; display:flex; justify-content:flex-end;">
+            <!-- Guardar activo -->
+            <sc-if value="{{ canSave }}" hint-placeholder-val="{{ false }}">
+              <button onClick="{{ onSave }}" style="background:none; border:none; cursor:pointer; padding:10px 14px; display:flex; align-items:center; gap:6px; transition:opacity .15s;" style-hover="opacity:0.75;">
+                <sc-if value="{{ isSaving }}" hint-placeholder-val="{{ false }}">
+                  <span style="width:16px; height:16px; border:2px solid rgba(59,82,102,.25); border-top-color:#3B5266; border-radius:50%; animation:nc-spin .7s linear infinite; display:block; flex-shrink:0;"></span>
+                </sc-if>
+                <sc-if value="{{ notSaving }}" hint-placeholder-val="{{ true }}">
+                  <span style="font:700 14px/1 'Inter',system-ui; color:#3B5266;">Guardar</span>
+                </sc-if>
+              </button>
+            </sc-if>
+            <!-- Guardar inactivo -->
+            <sc-if value="{{ notCanSave }}" hint-placeholder-val="{{ true }}">
+              <span style="padding:10px 14px; font:600 14px/1 'Inter',system-ui; color:#D1D5DB; display:block;">Guardar</span>
+            </sc-if>
+          </div>
+        </div>
+
+        <!-- Campos -->
+        <div style="flex:1; overflow-y:auto; padding:24px 20px 12px; display:flex; flex-direction:column; gap:20px; min-height:0;">
+
+          <!-- Nombre -->
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <label style="font:600 13px/1 'Inter',system-ui; color:#374151;">Nombre</label>
+            <!-- Focused (estado vacío con autofocus) -->
+            <sc-if value="{{ nameFocused }}" hint-placeholder-val="{{ false }}">
+              <input type="text" placeholder="Nombre y apellido" value="{{ nameVal }}" onInput="{{ onName }}"
+                style="width:100%; padding:13px 14px; border:1.5px solid #3B5266; border-radius:8px; font:400 15px/1 'Inter',system-ui; color:#1A1D24; outline:none; background:#fff; box-shadow:0 0 0 3px rgba(59,82,102,.18);">
+              </input>
+            </sc-if>
+            <!-- Normal -->
+            <sc-if value="{{ nameNotFocused }}" hint-placeholder-val="{{ true }}">
+              <input type="text" placeholder="Nombre y apellido" value="{{ nameVal }}" onInput="{{ onName }}"
+                style="width:100%; padding:13px 14px; border:1.5px solid #D1D5DB; border-radius:8px; font:400 15px/1 'Inter',system-ui; color:#1A1D24; outline:none; background:#fff;"
+                style-focus="border-color:#3B5266; box-shadow:0 0 0 3px rgba(59,82,102,.18);">
+              </input>
+            </sc-if>
+          </div>
+
+          <!-- Teléfono -->
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <label style="font:600 13px/1 'Inter',system-ui; color:#374151;">Teléfono</label>
+            <input type="tel" placeholder="+34 600 000 000" value="{{ phoneVal }}" onInput="{{ onPhone }}"
+              style="width:100%; padding:13px 14px; border:1.5px solid #D1D5DB; border-radius:8px; font:400 15px/1 'Inter',system-ui; color:#1A1D24; outline:none; background:#fff;"
+              style-focus="border-color:#3B5266; box-shadow:0 0 0 3px rgba(59,82,102,.18);">
+            </input>
+          </div>
+
+          <!-- Email -->
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <label style="font:600 13px/1 'Inter',system-ui; color:#374151;">Email</label>
+              <span style="font:400 12px/1 'Inter',system-ui; color:#9CA3AF;">Opcional</span>
+            </div>
+            <input type="email" placeholder="correo@ejemplo.com" value="{{ emailVal }}" onInput="{{ onEmail }}"
+              style="width:100%; padding:13px 14px; border:1.5px solid #D1D5DB; border-radius:8px; font:400 15px/1 'Inter',system-ui; color:#1A1D24; outline:none; background:#fff;"
+              style-focus="border-color:#3B5266; box-shadow:0 0 0 3px rgba(59,82,102,.18);">
+            </input>
+          </div>
+
+          <!-- Dirección -->
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <label style="font:600 13px/1 'Inter',system-ui; color:#374151;">Dirección</label>
+              <span style="font:400 12px/1 'Inter',system-ui; color:#9CA3AF;">Opcional</span>
+            </div>
+            <input type="text" placeholder="Calle, número, ciudad" value="{{ addressVal }}" onInput="{{ onAddress }}"
+              style="width:100%; padding:13px 14px; border:1.5px solid #D1D5DB; border-radius:8px; font:400 15px/1 'Inter',system-ui; color:#1A1D24; outline:none; background:#fff;"
+              style-focus="border-color:#3B5266; box-shadow:0 0 0 3px rgba(59,82,102,.18);">
+            </input>
+          </div>
+
+          <!-- Notas -->
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <label style="font:600 13px/1 'Inter',system-ui; color:#374151;">Notas</label>
+              <span style="font:400 12px/1 'Inter',system-ui; color:#9CA3AF;">Opcional</span>
+            </div>
+            <textarea placeholder="De dónde viene, qué preguntó, cualquier detalle..." value="{{ notesVal }}" onInput="{{ onNotes }}"
+              style="width:100%; padding:13px 14px; border:1.5px solid #D1D5DB; border-radius:8px; font:400 15px/1.55 'Inter',system-ui; color:#1A1D24; outline:none; background:#fff; height:88px;"
+              style-focus="border-color:#3B5266; box-shadow:0 0 0 3px rgba(59,82,102,.18);">
+            </textarea>
+          </div>
+
+        </div>
+
+        <!-- Teclado iOS simulado -->
+        <div style="flex-shrink:0; background:#CDD1D8; padding:8px 4px 22px; user-select:none;">
+          <!-- Fila 1: Q–P -->
+          <div style="display:flex; justify-content:center; gap:5px; margin-bottom:10px;">
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">Q</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">W</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">E</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">R</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">T</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">Y</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">U</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">I</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">O</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">P</div>
+          </div>
+          <!-- Fila 2: A–L -->
+          <div style="display:flex; justify-content:center; gap:5px; margin-bottom:10px;">
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">A</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">S</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">D</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">F</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">G</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">H</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">J</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">K</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">L</div>
+          </div>
+          <!-- Fila 3: ⇧ Z–M ⌫ -->
+          <div style="display:flex; justify-content:center; gap:5px; margin-bottom:10px;">
+            <div style="flex-shrink:0;width:44px;height:42px;background:#ADB5BD;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:500 14px/1 Inter,system-ui;color:#1A1D24;">⇧</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">Z</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">X</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">C</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">V</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">B</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">N</div>
+            <div style="flex-shrink:0;width:32px;height:42px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">M</div>
+            <div style="flex-shrink:0;width:44px;height:42px;background:#ADB5BD;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 16px/1 Inter,system-ui;color:#1A1D24;">⌫</div>
+          </div>
+          <!-- Fila 4: 123 · espacio · intro -->
+          <div style="display:flex; gap:5px; padding:0 2px;">
+            <div style="flex-shrink:0;width:84px;height:44px;background:#ADB5BD;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:500 14px/1 Inter,system-ui;color:#1A1D24;">123</div>
+            <div style="flex:1;height:44px;background:#fff;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:400 15px/1 Inter,system-ui;color:#9CA3AF;">espacio</div>
+            <div style="flex-shrink:0;width:84px;height:44px;background:#3B5266;border-radius:5px;box-shadow:0 1px 0 rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font:500 14px/1 Inter,system-ui;color:#fff;">intro</div>
+          </div>
+        </div>
+
+      </div>
+    </sc-if>
+
+    <!-- VISTA GUARDADO -->
+    <sc-if value="{{ showSaved }}" hint-placeholder-val="{{ false }}">
+      <div style="flex:1; display:flex; flex-direction:column; overflow:hidden; min-height:0; animation:nc-fade .25s ease-out;">
+
+        <!-- Header -->
+        <div style="height:52px; background:#fff; border-bottom:1px solid #E5E7EB; display:flex; align-items:center; justify-content:space-between; padding:0 4px; flex-shrink:0;">
+          <button style="display:flex; align-items:center; gap:2px; background:none; border:none; cursor:pointer; padding:10px 12px; color:#3B5266;" style-hover="opacity:0.75;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            <span style="font:500 14px/1 'Inter',system-ui;">Contactos</span>
+          </button>
+          <span style="font:600 17px/1 'Inter',system-ui; color:#1A1D24; letter-spacing:-0.01em;">{{ savedName }}</span>
+          <div style="width:80px;"></div>
+        </div>
+
+        <div style="flex:1; overflow-y:auto;">
+
+          <!-- Flash éxito -->
+          <div style="background:#DCFCE7; border-bottom:1px solid #BBF7D0; padding:10px 20px; display:flex; align-items:center; gap:8px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; animation:nc-check .3s ease-out;"><polyline points="20 6 9 17 4 12"/></svg>
+            <span style="font:600 13px/1 'Inter',system-ui; color:#15803D;">Guardado como Lead nuevo</span>
+          </div>
+
+          <!-- Info compacta -->
+          <div style="margin:16px 16px 0; background:#fff; border-radius:12px; box-shadow:0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.10); overflow:hidden;">
+            <div style="padding:16px; display:flex; align-items:center; gap:12px;">
+              <div style="width:48px; height:48px; border-radius:999px; background:#E0F2FE; color:#0369A1; display:flex; align-items:center; justify-content:center; font:700 20px/1 'Inter',system-ui; flex-shrink:0;">{{ savedInitial }}</div>
+              <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:6px;">
+                <h2 style="font:700 18px/1.2 'Inter',system-ui; color:#1A1D24; letter-spacing:-0.02em;">{{ savedName }}</h2>
+                <span style="font:600 12px/1 'Inter',system-ui; background:#E0F2FE; color:#0369A1; padding:4px 10px; border-radius:999px; display:inline-block; align-self:flex-start;">Lead nuevo</span>
+              </div>
+            </div>
+            <div style="height:1px; background:#F3F4F6; margin:0 16px;"></div>
+            <div style="padding:14px 16px;">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <div style="width:32px; height:32px; border-radius:999px; background:#EAEFF3; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3B5266" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                </div>
+                <span style="font:500 14px/1 'Inter',system-ui; color:#3B5266;">{{ savedPhone }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Notas si existen -->
+          <sc-if value="{{ hasSavedNotes }}" hint-placeholder-val="{{ false }}">
+            <div style="margin:12px 16px 0; padding:14px 16px; background:#fff; border-radius:12px; box-shadow:0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.10);">
+              <span style="font:600 11px/1 'Inter',system-ui; color:#9CA3AF; letter-spacing:0.05em; text-transform:uppercase; display:block; margin-bottom:8px;">Nota inicial</span>
+              <span style="font:400 14px/1.55 'Inter',system-ui; color:#374151;">{{ savedNotes }}</span>
+            </div>
+          </sc-if>
+
+          <!-- Historial semilla -->
+          <div style="padding:18px 20px 8px; display:flex; align-items:center; gap:10px;">
+            <span style="font:600 13px/1 'Inter',system-ui; color:#374151; white-space:nowrap;">Historial</span>
+            <div style="flex:1; height:1px; background:#E5E7EB;"></div>
+          </div>
+          <div style="display:flex; gap:12px; padding:0 20px 32px;">
+            <div style="width:28px; height:28px; border-radius:999px; background:#DCFCE7; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+            </div>
+            <div style="flex:1; padding-top:3px;">
+              <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:3px;">
+                <span style="font:600 13px/1 'Inter',system-ui; color:#1A1D24;">Contacto creado</span>
+                <span style="font:400 11px/1 'Inter',system-ui; color:#9CA3AF;">Ahora</span>
+              </div>
+              <span style="font:400 13px/1.4 'Inter',system-ui; color:#6B7280;">Añadido al CRM como Lead nuevo</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- FAB -->
+        <button style="position:absolute; bottom:20px; right:16px; width:52px; height:52px; border-radius:999px; background:#3B5266; color:#fff; border:none; cursor:pointer; font:300 26px/1 'Inter',system-ui; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 14px rgba(59,82,102,.4); z-index:10; transition:background .15s, transform .1s;" style-hover="background:#2E4252;" style-active="transform:scale(0.94);">+</button>
+
+      </div>
+    </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 423, &quot;height&quot;: 860 },
+  &quot;formState&quot;: {
+    &quot;editor&quot;: &quot;enum&quot;,
+    &quot;options&quot;: [&quot;empty&quot;, &quot;name-only&quot;, &quot;all-filled&quot;, &quot;saving&quot;, &quot;saved&quot;],
+    &quot;default&quot;: &quot;empty&quot;,
+    &quot;section&quot;: &quot;Estado de demo&quot;
+  }
+}">
+class Component extends DCLogic {
+  state = { name: '', phone: '', email: '', address: '', notes: '', saving: false, saved: false };
+
+  renderVals() {
+    const demo     = this.props.formState ?? 'empty';
+    const { saving, saved } = this.state;
+
+    const useDemo  = ['empty','name-only','all-filled','saving','saved'].includes(demo);
+    const demoName    = demo !== 'empty' ? 'Lucía Fernández' : '';
+    const demoPhone   = ['all-filled','saving','saved'].includes(demo) ? '+34 611 234 567' : '';
+    const demoEmail   = ['all-filled','saving','saved'].includes(demo) ? 'lucia@floristeriasol.es' : '';
+    const demoAddress = ['all-filled','saving','saved'].includes(demo) ? 'Calle Mayor 14, Madrid' : '';
+    const demoNotes   = ['all-filled','saving','saved'].includes(demo) ? 'Por recomendación de Carlos. Quiere web para su floristería.' : '';
+
+    const name    = useDemo ? demoName    : this.state.name;
+    const phone   = useDemo ? demoPhone   : this.state.phone;
+    const email   = useDemo ? demoEmail   : this.state.email;
+    const address = useDemo ? demoAddress : this.state.address;
+    const notes   = useDemo ? demoNotes   : this.state.notes;
+
+    const isSaving  = demo === 'saving' || saving;
+    const showSaved = demo === 'saved'  || saved;
+    const showForm  = !showSaved;
+    const canSave   = !!name.trim();
+
+    return {
+      showForm,
+      showSaved,
+      nameVal:       name,
+      phoneVal:      phone,
+      notesVal:      notes,
+      nameFocused:   demo === 'empty',
+      nameNotFocused: demo !== 'empty',
+      canSave,
+      notCanSave:    !canSave,
+      isSaving,
+      notSaving:     !isSaving,
+      emailVal:   email,
+      addressVal: address,
+      onName:    (e) => this.setState({ name:    e.target.value }),
+      onPhone:   (e) => this.setState({ phone:   e.target.value }),
+      onEmail:   (e) => this.setState({ email:   e.target.value }),
+      onAddress: (e) => this.setState({ address: e.target.value }),
+      onNotes:   (e) => this.setState({ notes:   e.target.value }),
+      onSave: () => {
+        if (!this.state.name.trim()) return;
+        this.setState({ saving: true });
+        setTimeout(() => this.setState({ saving: false, saved: true }), 1100);
+      },
+      savedInitial:  (name || '?').trim().charAt(0).toUpperCase(),
+      savedName:     name  || 'Lucía Fernández',
+      savedPhone:    phone || '+34 611 234 567',
+      savedNotes:    notes,
+      hasSavedNotes: !!(notes && notes.trim()),
+    };
+  }
+}
+</script>
+</body>
+</html>
