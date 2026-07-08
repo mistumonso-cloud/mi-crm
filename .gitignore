@@ -41,8 +41,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# convex
-convex/_generated
 
 # claude code (local-only settings)
 .claude/settings.local.json
