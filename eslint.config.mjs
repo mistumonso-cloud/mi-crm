@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Reference/staging material, not app source:
+    "CODIGO/**",
+    "DESIGN/**",
+    "convex/_generated/**",
   ]),
 ]);
 
