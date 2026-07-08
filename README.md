@@ -8,6 +8,7 @@ CRM minimalista para pequeños negocios de ventas digitales. Next.js (App Router
 - **Tailwind CSS v4**, tokens de marca en `src/styles/tokens/*.css`, cargados en `src/app/globals.css`
 - **Convex** como base de datos / backend (`convex/schema.ts`)
 - Componentes base del design system en `src/components/ui/**`
+- Autenticación por sesión (token opaco en cookie `HttpOnly`) con roles `rep`/`supervisor` — ver "Autenticación y roles"
 
 ## Primeros pasos
 
@@ -29,18 +30,35 @@ CRM minimalista para pequeños negocios de ventas digitales. Next.js (App Router
 ## Estructura
 
 ```
-convex/                          esquema y funciones de Convex
+convex/                          esquema y funciones de Convex (incluye auth.ts, crons.ts)
 DESIGN/design-system/            design system original (tokens, componentes de referencia, plantillas)
 CODIGO/                          código generado por tarea de Linear, revisado y pendiente de instalar en src/convex
 PLANS/                            planes de implementación por tarea de Linear
-src/app/                         rutas (App Router)
+src/app/(auth)/login/            pantalla de login
+src/app/(app)/                   rutas protegidas (layout con barra + logout, dispatcher por rol, pendientes/panel)
+src/lib/auth/                    DAL (getUser/requireRole), server actions de login/logout, cookie de sesión
+src/proxy.ts                     protección optimista de rutas (redirige a /login si no hay cookie)
 src/components/ui/               componentes base (Button, Card, Input, Badge, StatusBadge, Tabs...)
 src/components/crm/              (vacío) componentes específicos del CRM, por construir
-src/lib/                         (vacío) utilidades compartidas
+src/lib/                         utilidades compartidas
 src/styles/tokens/               tokens de color/tipografía/espaciado/radios, copiados del design system
+scripts/hash-password.mjs        genera el hash para sembrar usuarios (ver "Autenticación y roles")
 ```
 
-Los componentes en `src/components/ui` son `.jsx` (no `.tsx`) a propósito: son una copia directa del design system de referencia y no están tipados; conviene revisarlos/tipar según se vayan usando en pantallas reales.
+Los componentes en `src/components/ui` son `.jsx` (no `.tsx`) a propósito: son una copia directa del design system de referencia; los `.d.ts` junto a cada uno les añaden tipos para poder usarlos con seguridad desde TypeScript.
+
+## Autenticación y roles
+
+Sesión en base de datos (Convex), no JWT: token opaco de 32 bytes en cookie `HttpOnly`, revocación instantánea en logout. Hay dos roles fijos, `rep` (Carlos) y `supervisor` (Marta) — no hay pantalla de registro, los usuarios se siembran a mano.
+
+Para crear el primer usuario:
+
+```bash
+node scripts/hash-password.mjs        # pide la password por stdin (oculta), imprime el hash
+npx convex run auth:seedUser '{"name":"Carlos","email":"...","passwordHash":"<hash de arriba>","role":"rep"}'
+```
+
+Repite para Marta con `"role":"supervisor"`. Detalles de diseño (rate limiting, formato del hash, guards de rol, limpieza de sesiones expiradas) en `PLANS/MIS-7-autenticacion-roles.md`.
 
 ## Despliegue (Railway)
 
