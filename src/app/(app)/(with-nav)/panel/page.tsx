@@ -1,9 +1,11 @@
 import { Badge } from "@/components/ui/feedback/Badge";
-import { requireRole } from "@/lib/auth/dal";
+import { getUser } from "@/lib/auth/dal";
 
 // Placeholder — lo sustituye MIS-17 (Pantalla: Panel de oportunidades).
+// Accesible a ambos roles desde MIS-18 (ver ADR en
+// PLANS/MIS-18-navegacion-principal.md); antes exigía requireRole("supervisor").
 export default async function PanelPage() {
-  const user = await requireRole("supervisor");
+  const user = await getUser();
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 py-16 text-center">

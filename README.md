@@ -35,11 +35,11 @@ DESIGN/design-system/            design system original (tokens, componentes de 
 CODIGO/                          código generado por tarea de Linear, revisado y pendiente de instalar en src/convex
 PLANS/                            planes de implementación por tarea de Linear
 src/app/(auth)/login/            pantalla de login
-src/app/(app)/                   rutas protegidas (layout con barra + logout, dispatcher por rol, pendientes/panel)
-src/lib/auth/                    DAL (getUser/requireRole), server actions de login/logout, cookie de sesión
+src/app/(app)/                   rutas protegidas (header con logout; (with-nav)/ añade barra inferior + FAB)
+src/lib/auth/                    DAL (getUser), server actions de login/logout, cookie de sesión
 src/proxy.ts                     protección optimista de rutas (redirige a /login si no hay cookie)
 src/components/ui/               componentes base (Button, Card, Input, Badge, StatusBadge, Tabs...)
-src/components/crm/              (vacío) componentes específicos del CRM, por construir
+src/components/crm/              componentes específicos del CRM (BottomNav, AddContactFab)
 src/lib/                         utilidades compartidas
 src/styles/tokens/               tokens de color/tipografía/espaciado/radios, copiados del design system
 scripts/hash-password.mjs        genera el hash para sembrar usuarios (ver "Autenticación y roles")
@@ -58,7 +58,7 @@ node scripts/hash-password.mjs        # pide la password por stdin (oculta), imp
 npx convex run auth:seedUser '{"name":"Carlos","email":"...","passwordHash":"<hash de arriba>","role":"rep"}'
 ```
 
-Repite para Marta con `"role":"supervisor"`. Detalles de diseño (rate limiting, formato del hash, guards de rol, limpieza de sesiones expiradas) en `PLANS/MIS-7-autenticacion-roles.md`.
+Repite para Marta con `"role":"supervisor"`. Detalles de diseño (rate limiting, formato del hash, limpieza de sesiones expiradas) en `PLANS/MIS-7-autenticacion-roles.md`. El guard de rol por página que describía ese plan (bloqueo mutuo entre `/pendientes` y `/panel`) se aflojó en MIS-18: ambos roles tienen ahora acceso de lectura a las dos pantallas — ver `PLANS/MIS-18-navegacion-principal.md`, sección "Nota de seguridad (ADR)". Esto no afecta a `convex/lib/authz.ts`, que sigue protegiendo las mutations/queries de Convex por rol.
 
 ## Despliegue (Railway)
 

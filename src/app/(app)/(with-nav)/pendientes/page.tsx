@@ -1,9 +1,11 @@
 import { Badge } from "@/components/ui/feedback/Badge";
-import { requireRole } from "@/lib/auth/dal";
+import { getUser } from "@/lib/auth/dal";
 
-// Placeholder — lo sustituye MIS-13 (Pantalla: Pendientes del día).
+// Placeholder — lo sustituye MIS-13 (Pantalla: Pendientes del día). Accesible
+// a ambos roles desde MIS-18 (ver ADR en PLANS/MIS-18-navegacion-principal.md);
+// antes exigía requireRole("rep").
 export default async function PendientesPage() {
-  const user = await requireRole("rep");
+  const user = await getUser();
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 py-16 text-center">

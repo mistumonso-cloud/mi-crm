@@ -4,8 +4,11 @@ import { Button } from "@/components/ui/core/Button";
 import { logoutAction } from "@/lib/auth/actions";
 import { getUser } from "@/lib/auth/dal";
 
-// Barra mínima para cumplir "logout accesible desde la app" — MIS-18
-// sustituirá/absorberá esto con la navegación real (barra inferior + FAB).
+// Header superior (nombre + logout), común a toda la app. La navegación real
+// (barra inferior + FAB) vive en (with-nav)/layout.tsx, anidado dentro de
+// este — ver MIS-18. Este layout no la incluye directamente porque
+// contactos/nuevo (y en su momento la ficha del contacto, MIS-10) viven
+// fuera de (with-nav) a propósito, sin barra ni FAB.
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const user = await getUser();
 
