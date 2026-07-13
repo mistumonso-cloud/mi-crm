@@ -114,3 +114,33 @@ export const getContact = query({
     };
   },
 });
+
+// Lista completa de contactos para MIS-9. Sin paginación ni search index a
+// propósito (ver PLANS/MIS-9-lista-contactos.md): el volumen esperado de un
+// CRM personal en MVP es pequeño y la búsqueda se filtra en memoria en el
+// cliente. Ordenado por _creationTime desc como proxy de "último contacto"
+// hasta que MIS-11 añada tracking real de interacciones (lastContactAt,
+// backfilleado desde _creationTime en ese momento).
+export const listContacts = query({
+  args: { token: v.string() },
+  returns: v.array(
+    v.object({
+      _id: v.id("contacts"),
+      name: v.string(),
+      phone: v.optional(v.string()),
+      status: contactStatusValidator,
+      _creationTime: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await requireUser(ctx, args.token); // lectura: ambos roles, igual que getContact
+    const contacts = await ctx.db.query("contacts").order("desc").collect();
+    return contacts.map((c) => ({
+      _id: c._id,
+      name: c.name,
+      phone: c.phone,
+      status: c.status,
+      _creationTime: c._creationTime,
+    }));
+  },
+});
