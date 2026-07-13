@@ -30,11 +30,16 @@ export function proxy(request: NextRequest) {
   return NextResponse.next();
 }
 
-// Matcher explícito (allowlist) en vez de negativo: cubre exactamente las
-// rutas que existen hoy en la app. Un matcher negativo tipo
-// "todo excepto _next/static|_next/image|favicon.ico" bloquea de más —
-// assets públicos como /next.svg, /robots.txt, o futuros /api/* quedarían
-// atrapados por el proxy sin necesidad.
+// Matcher explícito (allowlist) en vez de negativo: un matcher negativo tipo
+// "todo excepto _next/static|_next/image|favicon.ico" bloquea de más — assets
+// públicos como /next.svg, /robots.txt, o futuros /api/* quedarían atrapados
+// por el proxy sin necesidad.
+//
+// MIS-18: "/contactos/:path*" es un prefijo, no una lista de rutas exactas —
+// cubre /contactos, /contactos/nuevo y el futuro /contactos/[id] (MIS-10) con
+// una sola entrada, a costa de también matchear subrutas aún inexistentes.
+// No es un problema de seguridad: este matcher es solo el check optimista de
+// cookie, getUser() en el DAL sigue siendo la fuente de verdad real.
 export const config = {
-  matcher: ["/", "/login", "/pendientes/:path*", "/panel/:path*"],
+  matcher: ["/", "/login", "/pendientes/:path*", "/panel/:path*", "/contactos/:path*"],
 };
