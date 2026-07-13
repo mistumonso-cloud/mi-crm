@@ -7,6 +7,16 @@ export default defineSchema({
     email: v.optional(v.string()),
     phone: v.optional(v.string()),
     company: v.optional(v.string()),
+    // Nota libre capturada en el alta rápida (MIS-8). MIS-11 (notas completas,
+    // con autor/fecha/histórico) migrará este valor a una tabla `notes`
+    // dedicada cuando se implemente — no se adelanta esa tabla aquí.
+    initialNote: v.optional(v.string()),
+    // Quién dio de alta el contacto — obligatorio porque createContact
+    // (MIS-8) es la única vía de escritura hoy y siempre corre autenticada
+    // vía requireRole. Confirmado seguro de aplicar como obligatorio: la
+    // tabla no tenía ninguna fila en dev ni en producción en el momento de
+    // este cambio (ver CODIGO/MIS-8-anadir-contacto/NOTES.md).
+    createdBy: v.id("users"),
     status: v.union(
       v.literal("lead"),
       v.literal("talking"),
