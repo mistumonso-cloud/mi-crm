@@ -1,36 +1,41 @@
 import Link from "next/link";
-import { Badge } from "@/components/ui/feedback/Badge";
 import { getUser } from "@/lib/auth/dal";
+import { NewContactForm } from "./NewContactForm";
 
-// Placeholder — lo sustituye MIS-8 (Pantalla: Añadir contacto). Destino del
-// FAB. Vive fuera de (with-nav) a propósito: sin barra ni FAB (el ticket
-// describe esta pantalla como "donde se usa el botón de volver"). El enlace
-// de abajo es solo para no dejar un callejón sin salida durante la
-// verificación de MIS-18 — MIS-8 define el back button real.
+// Placeholder de MIS-18 sustituido por el formulario real (MIS-8). Solo
+// "rep" (Carlos) puede crear contactos — ver requireRole en
+// convex/contacts.ts::createContact. Se comprueba el rol aquí para mostrar
+// un mensaje claro a Marta en vez de dejarle rellenar un formulario
+// condenado a fallar en el servidor; el FAB que trae hasta aquí sigue
+// visible para ambos roles (decisión aceptada en la auditoría de MIS-8).
 export default async function NuevoContactoPage() {
   const user = await getUser();
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 py-16 text-center">
+    <div className="flex flex-1 flex-col" style={{ padding: "16px 20px" }}>
       <Link
         href="/contactos"
         style={{
-          alignSelf: "flex-start",
-          marginLeft: 16,
-          marginBottom: -8,
           fontSize: 14,
           fontWeight: 600,
           color: "var(--color-accent)",
           textDecoration: "none",
+          alignSelf: "flex-start",
+          marginBottom: 16,
         }}
       >
-        ‹ Volver a Contactos
+        ‹ Cancelar
       </Link>
-      <Badge tone="accent">Nuevo contacto</Badge>
-      <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Hola, {user.name}</h1>
-      <p style={{ fontSize: 14, color: "var(--text-secondary)", maxWidth: 320 }}>
-        Aquí se construirá el formulario de añadir contacto (MIS-8).
-      </p>
+      <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)", marginBottom: 20 }}>
+        Nuevo contacto
+      </h1>
+      {user.role === "rep" ? (
+        <NewContactForm />
+      ) : (
+        <p style={{ fontSize: 14, color: "var(--text-secondary)" }}>
+          Solo el rol operativo puede añadir contactos. Tu cuenta tiene acceso de lectura.
+        </p>
+      )}
     </div>
   );
 }

@@ -9,6 +9,7 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as contacts from "../contacts.js";
 import type * as crons from "../crons.js";
 import type * as lib_authz from "../lib/authz.js";
 import type * as lib_password from "../lib/password.js";
@@ -23,6 +24,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  contacts: typeof contacts;
   crons: typeof crons;
   "lib/authz": typeof lib_authz;
   "lib/password": typeof lib_password;
