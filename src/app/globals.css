@@ -55,3 +55,12 @@ body {
   color: var(--text-primary);
   font-family: var(--font-sans);
 }
+
+/* BottomSheet (MIS-10, src/components/ui/overlays/BottomSheet.jsx) — sin
+   styled-jsx: no se usa en ningún otro sitio del repo y su soporte en esta
+   versión de Next.js no está verificado, así que el keyframe se define aquí
+   como CSS global plano, igual que el resto de tokens de este archivo. */
+@keyframes mis10-sheet-slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}

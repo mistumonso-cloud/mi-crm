@@ -1,0 +1,173 @@
+"use client";
+
+import { useState } from "react";
+import type { FunctionReturnType } from "convex/server";
+import type { api } from "../../../../../convex/_generated/api";
+import { Card } from "@/components/ui/core/Card";
+import { Button } from "@/components/ui/core/Button";
+import { Avatar } from "@/components/ui/core/Avatar";
+import { StatusBadge } from "@/components/ui/feedback/StatusBadge";
+import { BottomSheet } from "@/components/ui/overlays/BottomSheet";
+import { formatRelativeTime } from "@/lib/contacts/format";
+
+type Contact = NonNullable<FunctionReturnType<typeof api.contacts.getContact>>;
+type SheetKind = "note" | "status" | "schedule" | "close" | null;
+
+const SHEET_TITLES: Record<Exclude<SheetKind, null>, string> = {
+  note: "Nueva nota",
+  status: "Cambiar estado",
+  schedule: "Programar seguimiento",
+  close: "Cerrar venta",
+};
+
+function PhoneIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+    </svg>
+  );
+}
+
+function MailIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="m22 7-10 6L2 7" />
+    </svg>
+  );
+}
+
+export function ContactDetailView({ contact, now }: { contact: Contact; now: number }) {
+  const [sheet, setSheet] = useState<SheetKind>(null);
+  const isClosed = contact.status === "won" || contact.status === "lost";
+
+  return (
+    <div className="flex flex-1 flex-col" style={{ padding: "16px 20px 24px", gap: 16 }}>
+      <Card padding="md" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <Avatar name={contact.name} size="lg" />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{contact.name}</h1>
+            <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
+              Responsable: {contact.responsibleName}
+            </span>
+          </div>
+          <StatusBadge state={contact.status} />
+        </div>
+
+        {contact.phone && (
+          <a
+            href={`tel:${contact.phone}`}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 14,
+              color: "var(--text-secondary)",
+              textDecoration: "none",
+            }}
+          >
+            <PhoneIcon />
+            {contact.phone}
+          </a>
+        )}
+        {contact.email && (
+          <a
+            href={`mailto:${contact.email}`}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 14,
+              color: "var(--text-secondary)",
+              textDecoration: "none",
+            }}
+          >
+            <MailIcon />
+            {contact.email}
+          </a>
+        )}
+      </Card>
+
+      {/* Solo la variante "sin seguimiento" es alcanzable hoy: no existe
+          ningún campo de recordatorio en el schema todavía (eso es MIS-12).
+          MIS-12 añadirá aquí la variante "programado" (fecha/motivo,
+          fondo var(--color-warning-bg), botón "Reprogramar") cuando exista
+          el dato real — no se scaffoldea una rama hoy inalcanzable. */}
+      {!isClosed && (
+        <Card
+          padding="md"
+          style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12 }}
+        >
+          <p style={{ fontSize: 13, color: "var(--text-secondary)", flex: "1 1 160px" }}>
+            Sin seguimiento programado
+          </p>
+          <Button variant="secondary" size="sm" onClick={() => setSheet("schedule")}>
+            Programar seguimiento
+          </Button>
+        </Card>
+      )}
+
+      {/* flexWrap + flex-basis (no solo flex:1): en viewports estrechos
+          (320-390px) 3 botones de ancho igual con texto sin salto de línea
+          (Button fuerza whiteSpace: nowrap) desbordaban o se comprimían
+          ilegibles — hallazgo mayor de la auditoría de código v1. Con
+          flex-basis de 130px, 2 caben por fila y el tercero baja a una
+          segunda fila y se estira a todo el ancho, sin overflow horizontal
+          en ningún tamaño. */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <Button variant="secondary" size="sm" style={{ flex: "1 1 130px" }} onClick={() => setSheet("note")}>
+          Añadir nota
+        </Button>
+        <Button variant="secondary" size="sm" style={{ flex: "1 1 130px" }} onClick={() => setSheet("status")}>
+          Cambiar estado
+        </Button>
+        {!isClosed && (
+          <Button variant="primary" size="sm" style={{ flex: "1 1 130px" }} onClick={() => setSheet("close")}>
+            Cerrar venta
+          </Button>
+        )}
+      </div>
+
+      <div>
+        <h2 style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", marginBottom: 8 }}>
+          Historial
+        </h2>
+        <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+          {contact.initialNote && (
+            <li>
+              <Card padding="sm">
+                <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 4 }}>
+                  {formatRelativeTime(contact._creationTime, now)}
+                </p>
+                <p style={{ fontSize: 14, color: "var(--text-primary)" }}>{contact.initialNote}</p>
+              </Card>
+            </li>
+          )}
+          <li>
+            <Card padding="sm">
+              <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 4 }}>
+                {formatRelativeTime(contact._creationTime, now)}
+              </p>
+              <p style={{ fontSize: 14, color: "var(--text-primary)" }}>Contacto añadido</p>
+            </Card>
+          </li>
+        </ul>
+        {!contact.initialNote && (
+          <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 8 }}>
+            Aún no hay más actividad registrada.
+          </p>
+        )}
+      </div>
+
+      <BottomSheet open={sheet !== null} onClose={() => setSheet(null)} title={sheet ? SHEET_TITLES[sheet] : undefined}>
+        <p style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 16 }}>
+          Disponible próximamente.
+        </p>
+        <Button variant="secondary" full onClick={() => setSheet(null)}>
+          Cancelar
+        </Button>
+      </BottomSheet>
+    </div>
+  );
+}

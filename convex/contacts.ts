@@ -95,8 +95,11 @@ export const getContact = query({
       _id: v.id("contacts"),
       name: v.string(),
       phone: v.optional(v.string()),
+      email: v.optional(v.string()),
       status: contactStatusValidator,
       initialNote: v.optional(v.string()),
+      _creationTime: v.number(),
+      responsibleName: v.string(),
     }),
   ),
   handler: async (ctx, args) => {
@@ -105,12 +108,25 @@ export const getContact = query({
     if (!contactId) return null; // formato inválido o ID de otra tabla
     const contact = await ctx.db.get(contactId);
     if (!contact) return null; // formato válido, fila borrada/inexistente
+
+    // "Responsable" = quien dio de alta el contacto (createdBy, obligatorio
+    // en el schema). No hay campo de asignación separado — createContact
+    // solo permite rol "rep", así que en la práctica es siempre Carlos.
+    // No se añade `company` al contrato: existe en el schema pero ninguna
+    // mutation lo rellena hoy y la ficha (MIS-10) no lo muestra — devolverlo
+    // sin consumidor ensancharía el contrato para nada (hallazgo de la
+    // auditoría de plan v1→v2 de MIS-10).
+    const creator = await ctx.db.get(contact.createdBy);
+
     return {
       _id: contact._id,
       name: contact.name,
       phone: contact.phone,
+      email: contact.email,
       status: contact.status,
       initialNote: contact.initialNote,
+      _creationTime: contact._creationTime,
+      responsibleName: creator?.name ?? "—", // defensivo: usuario borrado, caso no esperado hoy
     };
   },
 });
