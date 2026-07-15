@@ -7,9 +7,11 @@ export default defineSchema({
     email: v.optional(v.string()),
     phone: v.optional(v.string()),
     company: v.optional(v.string()),
-    // Nota libre capturada en el alta rápida (MIS-8). MIS-11 (notas completas,
-    // con autor/fecha/histórico) migrará este valor a una tabla `notes`
-    // dedicada cuando se implemente — no se adelanta esa tabla aquí.
+    // Nota libre capturada en el alta rápida (MIS-8). MIS-11 añadió una tabla
+    // `notes` dedicada (autor/fecha/tipo/histórico) para notas nuevas a
+    // partir de esa fecha — decisión explícita: este valor NO se migra, se
+    // mantiene tal cual y se sigue renderizando como entrada sintética del
+    // historial junto a las notas reales de `notes`.
     initialNote: v.optional(v.string()),
     // Quién dio de alta el contacto — obligatorio porque createContact
     // (MIS-8) es la única vía de escritura hoy y siempre corre autenticada
@@ -27,6 +29,22 @@ export default defineSchema({
       v.literal("inactive"),
     ),
   }).index("by_status", ["status"]),
+
+  notes: defineTable({
+    contactId: v.id("contacts"),
+    authorId: v.id("users"),
+    type: v.union(
+      v.literal("whatsapp"),
+      v.literal("call"),
+      v.literal("email"),
+      v.literal("dm"),
+      v.literal("meeting"),
+    ),
+    // epoch ms — momento del contacto en sí (editable, default "ahora" en el
+    // cliente), no el instante de guardado (_creationTime ya cubre eso).
+    occurredAt: v.number(),
+    text: v.string(),
+  }).index("by_contact", ["contactId", "occurredAt"]),
 
   users: defineTable({
     name: v.string(),
