@@ -9,3 +9,4 @@ Código generado a partir de los planes de `PLANS/`, uno por tarea de Linear, li
 | [MIS-8](https://linear.app/mistu-monso/issue/MIS-8) | — (instalado en `src/`/`convex/`, ver PR) | [PLANS/MIS-8-anadir-contacto.md](../PLANS/MIS-8-anadir-contacto.md) | **Instalado** |
 | [MIS-9](https://linear.app/mistu-monso/issue/MIS-9) | — (instalado en `src/`/`convex/`, ver PR) | [PLANS/MIS-9-lista-contactos.md](../PLANS/MIS-9-lista-contactos.md) | **Instalado** |
 | [MIS-10](https://linear.app/mistu-monso/issue/MIS-10) | — (instalado en `src/`/`convex/`, ver PR) | [PLANS/MIS-10-ficha-contacto.md](../PLANS/MIS-10-ficha-contacto.md) | **Instalado** |
+| [MIS-11](https://linear.app/mistu-monso/issue/MIS-11) | — (instalado en `src/`/`convex/`, ver PR) | [PLANS/MIS-11-notas-conversacion.md](../PLANS/MIS-11-notas-conversacion.md) | **Instalado** |

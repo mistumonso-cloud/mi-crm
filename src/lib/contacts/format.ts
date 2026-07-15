@@ -32,3 +32,22 @@ export function formatRelativeTime(ms: number, now: number = Date.now()): string
   const mo = Math.floor(diffMs / month);
   return `hace ${mo} mes${mo === 1 ? "" : "es"}`;
 }
+
+// Fecha/hora absoluta para notas reales de MIS-11 (formatRelativeTime sigue
+// usándose sin cambios para "Contacto añadido"/initialNote). timeZone fijo a
+// "Europe/Madrid" a propósito: ContactDetailView se renderiza tanto en el
+// servidor (HTML inicial) como en el cliente (hidratación); sin timeZone
+// explícito, Intl.DateTimeFormat usaría la zona ambiente de cada entorno y
+// produciría un mismatch de hidratación. Con una zona fija, ambos entornos
+// producen siempre el mismo string. Asunción documentada: CRM de un solo
+// país (Carlos/Marta operan desde España).
+export function formatDateTime(ms: number): string {
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Madrid",
+  }).format(new Date(ms));
+}

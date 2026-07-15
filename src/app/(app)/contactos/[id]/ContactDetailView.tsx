@@ -8,9 +8,13 @@ import { Button } from "@/components/ui/core/Button";
 import { Avatar } from "@/components/ui/core/Avatar";
 import { StatusBadge } from "@/components/ui/feedback/StatusBadge";
 import { BottomSheet } from "@/components/ui/overlays/BottomSheet";
-import { formatRelativeTime } from "@/lib/contacts/format";
+import { formatRelativeTime, formatDateTime } from "@/lib/contacts/format";
+import { buildHistory } from "@/lib/notes/history";
+import { NOTE_TYPES } from "@/lib/notes/types";
+import { AddNoteForm } from "./AddNoteForm";
 
 type Contact = NonNullable<FunctionReturnType<typeof api.contacts.getContact>>;
+type Notes = FunctionReturnType<typeof api.notes.listNotes>;
 type SheetKind = "note" | "status" | "schedule" | "close" | null;
 
 const SHEET_TITLES: Record<Exclude<SheetKind, null>, string> = {
@@ -37,9 +41,10 @@ function MailIcon() {
   );
 }
 
-export function ContactDetailView({ contact, now }: { contact: Contact; now: number }) {
+export function ContactDetailView({ contact, now, notes }: { contact: Contact; now: number; notes: Notes }) {
   const [sheet, setSheet] = useState<SheetKind>(null);
   const isClosed = contact.status === "won" || contact.status === "lost";
+  const history = buildHistory(contact, notes);
 
   return (
     <div className="flex flex-1 flex-col" style={{ padding: "16px 20px 24px", gap: 16 }}>
@@ -111,8 +116,8 @@ export function ContactDetailView({ contact, now }: { contact: Contact; now: num
       {/* flexWrap + flex-basis (no solo flex:1): en viewports estrechos
           (320-390px) 3 botones de ancho igual con texto sin salto de línea
           (Button fuerza whiteSpace: nowrap) desbordaban o se comprimían
-          ilegibles — hallazgo mayor de la auditoría de código v1. Con
-          flex-basis de 130px, 2 caben por fila y el tercero baja a una
+          ilegibles — hallazgo mayor de la auditoría de código v1 (MIS-10).
+          Con flex-basis de 130px, 2 caben por fila y el tercero baja a una
           segunda fila y se estira a todo el ancho, sin overflow horizontal
           en ningún tamaño. */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -134,26 +139,22 @@ export function ContactDetailView({ contact, now }: { contact: Contact; now: num
           Historial
         </h2>
         <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
-          {contact.initialNote && (
-            <li>
+          {history.map((entry) => (
+            <li key={entry.key}>
               <Card padding="sm">
                 <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 4 }}>
-                  {formatRelativeTime(contact._creationTime, now)}
+                  {entry.kind === "note"
+                    ? `${NOTE_TYPES[entry.type].label} · ${formatDateTime(entry.timestamp)} · ${entry.authorName}`
+                    : formatRelativeTime(entry.timestamp, now)}
                 </p>
-                <p style={{ fontSize: 14, color: "var(--text-primary)" }}>{contact.initialNote}</p>
+                <p style={{ fontSize: 14, color: "var(--text-primary)" }}>
+                  {entry.kind === "created" ? "Contacto añadido" : entry.text}
+                </p>
               </Card>
             </li>
-          )}
-          <li>
-            <Card padding="sm">
-              <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginBottom: 4 }}>
-                {formatRelativeTime(contact._creationTime, now)}
-              </p>
-              <p style={{ fontSize: 14, color: "var(--text-primary)" }}>Contacto añadido</p>
-            </Card>
-          </li>
+          ))}
         </ul>
-        {!contact.initialNote && (
+        {!contact.initialNote && notes.length === 0 && (
           <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 8 }}>
             Aún no hay más actividad registrada.
           </p>
@@ -161,12 +162,18 @@ export function ContactDetailView({ contact, now }: { contact: Contact; now: num
       </div>
 
       <BottomSheet open={sheet !== null} onClose={() => setSheet(null)} title={sheet ? SHEET_TITLES[sheet] : undefined}>
-        <p style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 16 }}>
-          Disponible próximamente.
-        </p>
-        <Button variant="secondary" full onClick={() => setSheet(null)}>
-          Cancelar
-        </Button>
+        {sheet === "note" ? (
+          <AddNoteForm contactId={contact._id} onDone={() => setSheet(null)} />
+        ) : (
+          <>
+            <p style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 16 }}>
+              Disponible próximamente.
+            </p>
+            <Button variant="secondary" full onClick={() => setSheet(null)}>
+              Cancelar
+            </Button>
+          </>
+        )}
       </BottomSheet>
     </div>
   );
