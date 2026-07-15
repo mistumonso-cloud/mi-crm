@@ -8,5 +8,6 @@ Planes de implementación por tarea de Linear (proyecto CRM - MVP), en orden de 
 | [MIS-18](https://linear.app/mistu-monso/issue/MIS-18) | Navegación principal: barra inferior y botón flotante | [MIS-18-navegacion-principal.md](./MIS-18-navegacion-principal.md) | **Instalado** — ver PR de la rama `feature/mis-18-navegacion-principal` |
 | [MIS-8](https://linear.app/mistu-monso/issue/MIS-8) | Pantalla: Añadir contacto (formulario rápido) | [MIS-8-anadir-contacto.md](./MIS-8-anadir-contacto.md) | **Instalado** — ver PR de la rama `feature/mis-8-anadir-contacto` |
 | [MIS-9](https://linear.app/mistu-monso/issue/MIS-9) | Pantalla: Lista de contactos con búsqueda en tiempo real | [MIS-9-lista-contactos.md](./MIS-9-lista-contactos.md) | **Instalado** — ver PR de la rama `feature/mis-9-lista-contactos` |
+| [MIS-10](https://linear.app/mistu-monso/issue/MIS-10) | Pantalla: Ficha del contacto | [MIS-10-ficha-contacto.md](./MIS-10-ficha-contacto.md) | **Instalado** — ver PR de la rama `feature/mis-10-ficha-contacto` |
 | MIS-13 | Pantalla: Pendientes del día (home Carlos) | — | Pendiente |
 | MIS-17 | Pantalla: Panel de oportunidades (home Marta) | — | Pendiente |
