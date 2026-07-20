@@ -4,6 +4,22 @@ import { requireUser } from "./lib/authz";
 
 const REASON_MAX = 200; // "texto corto" (AC del ticket) — más corto que TEXT_MAX (2000) de notes.ts
 
+// Duplicado de contacts.ts (contactStatusValidator) a propósito — mismo
+// criterio que isValidEpochMs más abajo: cada archivo de convex/ es
+// autocontenido, no se crea un módulo compartido de validadores solo para
+// esto. Usado en listDueToday para exponer el estado de pipeline del
+// contacto en cada fila de Pendientes (AC de MIS-13: "estado actual del
+// contacto").
+const contactStatusValidator = v.union(
+  v.literal("lead"),
+  v.literal("talking"),
+  v.literal("proposal"),
+  v.literal("negotiating"),
+  v.literal("won"),
+  v.literal("lost"),
+  v.literal("inactive"),
+);
+
 const MADRID_TZ = "Europe/Madrid";
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -218,6 +234,7 @@ export const listDueToday = query({
       _id: v.id("reminders"),
       contactId: v.id("contacts"),
       contactName: v.string(),
+      contactStatus: v.optional(contactStatusValidator),
       dueAt: v.number(),
       reason: v.string(),
       overdue: v.boolean(),
@@ -243,6 +260,7 @@ export const listDueToday = query({
           _id: r._id,
           contactId: r.contactId,
           contactName: contact?.name ?? "—", // defensivo: contacto borrado, caso no esperado hoy (no hay deleteContact)
+          contactStatus: contact?.status, // undefined si el contacto no existe — mismo caso de borde que contactName
           dueAt: r.dueAt,
           reason: r.reason,
           overdue: r.dueAt < todayStart,
