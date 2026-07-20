@@ -46,6 +46,44 @@ export default defineSchema({
     text: v.string(),
   }).index("by_contact", ["contactId", "occurredAt"]),
 
+  // MIS-12: recordatorio de próximo contacto ("Programar seguimiento" en la
+  // ficha). Tabla dedicada, no campos sueltos en `contacts`, porque el AC
+  // exige conservar el histórico de seguimientos completados (igual
+  // justificación que `notes` frente a `initialNote`). Política de negocio:
+  // como mucho un recordatorio `status:"pending"` por contacto a la vez —
+  // ver `scheduleReminder` en convex/reminders.ts, que hace upsert sobre
+  // esa fila en vez de insertar un duplicado cuando ya existe una pendiente.
+  reminders: defineTable({
+    contactId: v.id("contacts"),
+    // Quién programó/reprogramó el recordatorio la última vez — se
+    // sobreescribe en cada "Reprogramar" (a diferencia de authorId en
+    // notes, que es fijo por fila).
+    createdBy: v.id("users"),
+    // epoch ms — medianoche del día elegido, en la zona horaria LOCAL del
+    // navegador (asumida Europe/Madrid, mismo supuesto que formatDateTime
+    // en src/lib/contacts/format.ts). Selector de fecha sin hora: la hora
+    // siempre es 00:00:00.000 del día civil elegido.
+    dueAt: v.number(),
+    // "Motivo o qué hay que hacer" (AC del ticket) — texto corto, máx.
+    // REASON_MAX (ver convex/reminders.ts).
+    reason: v.string(),
+    // "pending" hasta que se marca hecho; nunca se borra tras eso.
+    status: v.union(v.literal("pending"), v.literal("done")),
+    // Presentes solo cuando status === "done": instante REAL en que se
+    // marcó hecho (Date.now() del servidor, no editable por el cliente —
+    // a diferencia de dueAt, que sí es una fecha elegida por el usuario) y
+    // quién lo hizo. Alimentan el historial de la ficha (AC: "el
+    // seguimiento hecho queda en el historial").
+    completedAt: v.optional(v.number()),
+    completedBy: v.optional(v.id("users")),
+  })
+    // Ficha del contacto: recuperar el pendiente actual + los completados
+    // para el historial, todos los de un contacto en una sola query.
+    .index("by_contact", ["contactId", "dueAt"])
+    // Pantalla de Pendientes + badge del BottomNav: todos los "pending" con
+    // dueAt <= hoy, en cualquier contacto, sin escanear la tabla entera.
+    .index("by_status_dueAt", ["status", "dueAt"]),
+
   users: defineTable({
     name: v.string(),
     email: v.string(),

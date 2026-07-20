@@ -51,3 +51,17 @@ export function formatDateTime(ms: number): string {
     timeZone: "Europe/Madrid",
   }).format(new Date(ms));
 }
+
+// Fecha (sin hora) para recordatorios de seguimiento de MIS-12 — dueAt
+// siempre representa medianoche de un día civil (selector de fecha sin
+// hora), así que mostrar hora/minuto no aporta nada y podría sugerir
+// falsamente una precisión horaria que no existe. Misma timeZone fija que
+// formatDateTime, mismo motivo (evitar mismatch de hidratación).
+export function formatDate(ms: number): string {
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "Europe/Madrid",
+  }).format(new Date(ms));
+}

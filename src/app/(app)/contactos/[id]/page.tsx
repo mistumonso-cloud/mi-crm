@@ -11,9 +11,10 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   const { id } = await params;
   const token = await readSessionToken(); // getUser() ya garantiza sesión válida aquí
 
-  const [contact, notes] = await Promise.all([
+  const [contact, notes, reminders] = await Promise.all([
     fetchQuery(api.contacts.getContact, { token: token!, id }),
     fetchQuery(api.notes.listNotes, { token: token!, contactId: id }),
+    fetchQuery(api.reminders.listRemindersForContact, { token: token!, contactId: id }),
   ]);
 
   if (!contact) {
@@ -39,7 +40,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           ‹ Contactos
         </Link>
       </div>
-      <ContactDetailView contact={contact} now={now} notes={notes} />
+      <ContactDetailView contact={contact} now={now} notes={notes} reminders={reminders} />
     </div>
   );
 }

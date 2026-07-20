@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Badge } from "@/components/ui/feedback/Badge";
 
 const TABS = [
   { href: "/pendientes", label: "Pendientes", Icon: ClockIcon },
@@ -9,7 +10,14 @@ const TABS = [
   { href: "/panel", label: "Panel", Icon: PanelIcon },
 ];
 
-export function BottomNav() {
+// dueTodayCount (MIS-12): recordatorios de seguimiento vencidos o de hoy,
+// vía convex/reminders.ts::countDueToday, resuelto por
+// (with-nav)/layout.tsx — la "notificación in-app de pendientes de hoy"
+// que exige el AC del ticket. No existe ningún otro mecanismo de
+// toast/push en el repo (ver PLANS/MIS-12-recordatorio-proximo-contacto.md,
+// Contexto, decisión 3): un badge persistente y visible en cada
+// navegación cumple el requisito del MVP sin infraestructura de push.
+export function BottomNav({ dueTodayCount = 0 }: { dueTodayCount?: number }) {
   const pathname = usePathname();
 
   return (
@@ -38,6 +46,7 @@ export function BottomNav() {
     >
       {TABS.map(({ href, label, Icon }) => {
         const active = pathname === href;
+        const showBadge = href === "/pendientes" && dueTodayCount > 0;
         return (
           <Link
             key={href}
@@ -55,6 +64,7 @@ export function BottomNav() {
           >
             <span
               style={{
+                position: "relative",
                 width: 40,
                 height: 30,
                 borderRadius: "var(--radius-full)",
@@ -66,6 +76,24 @@ export function BottomNav() {
               }}
             >
               <Icon stroke={active ? "var(--color-accent)" : "var(--text-tertiary)"} />
+              {showBadge && (
+                <Badge
+                  tone="danger"
+                  aria-label={`${dueTodayCount} seguimiento${dueTodayCount === 1 ? "" : "s"} pendiente${dueTodayCount === 1 ? "" : "s"} para hoy`}
+                  style={{
+                    position: "absolute",
+                    top: -2,
+                    right: -2,
+                    minWidth: 16,
+                    height: 16,
+                    padding: "0 4px",
+                    fontSize: 10,
+                    justifyContent: "center",
+                  }}
+                >
+                  {dueTodayCount > 9 ? "9+" : dueTodayCount}
+                </Badge>
+              )}
             </span>
             <span
               style={{

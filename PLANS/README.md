@@ -10,5 +10,6 @@ Planes de implementación por tarea de Linear (proyecto CRM - MVP), en orden de 
 | [MIS-9](https://linear.app/mistu-monso/issue/MIS-9) | Pantalla: Lista de contactos con búsqueda en tiempo real | [MIS-9-lista-contactos.md](./MIS-9-lista-contactos.md) | **Instalado** — ver PR de la rama `feature/mis-9-lista-contactos` |
 | [MIS-10](https://linear.app/mistu-monso/issue/MIS-10) | Pantalla: Ficha del contacto | [MIS-10-ficha-contacto.md](./MIS-10-ficha-contacto.md) | **Instalado** — ver PR de la rama `feature/mis-10-ficha-contacto` |
 | [MIS-11](https://linear.app/mistu-monso/issue/MIS-11) | Notas de conversación en la ficha del contacto | [MIS-11-notas-conversacion.md](./MIS-11-notas-conversacion.md) | **Instalado** — ver PR de la rama `feature/mis-11-notas-conversacion` |
+| [MIS-12](https://linear.app/mistu-monso/issue/MIS-12) | Recordatorio de próximo contacto | [MIS-12-recordatorio-proximo-contacto.md](./MIS-12-recordatorio-proximo-contacto.md) | **Instalado** — ver PR de la rama `feature/mis-12-recordatorio-proximo-contacto` |
 | MIS-13 | Pantalla: Pendientes del día (home Carlos) | — | Pendiente |
 | MIS-17 | Pantalla: Panel de oportunidades (home Marta) | — | Pendiente |
