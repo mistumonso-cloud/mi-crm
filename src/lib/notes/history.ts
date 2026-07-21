@@ -1,15 +1,31 @@
 import type { NoteType } from "./types";
+import type { ContactStatus } from "@/lib/contacts/status";
 
 export type HistoryEntry =
   | { key: string; kind: "created"; timestamp: number }
   | { key: string; kind: "initialNote"; timestamp: number; text: string }
   | { key: string; kind: "note"; timestamp: number; type: NoteType; text: string; authorName: string }
-  | { key: string; kind: "reminderDone"; timestamp: number; reason: string; completedByName: string };
+  | { key: string; kind: "reminderDone"; timestamp: number; reason: string; completedByName: string }
+  | {
+      key: string;
+      kind: "statusChanged";
+      timestamp: number;
+      fromStatus: ContactStatus;
+      toStatus: ContactStatus;
+      changedByName: string;
+    };
 
 export function buildHistory(
   contact: { initialNote?: string; _creationTime: number },
   notes: Array<{ _id: string; type: NoteType; occurredAt: number; text: string; authorName: string }>,
   completedReminders: Array<{ _id: string; completedAt: number; reason: string; completedByName: string }> = [],
+  statusChanges: Array<{
+    _id: string;
+    fromStatus: ContactStatus;
+    toStatus: ContactStatus;
+    changedByName: string;
+    changedAt: number;
+  }> = [],
 ): HistoryEntry[] {
   const entries: HistoryEntry[] = [];
 
@@ -35,6 +51,20 @@ export function buildHistory(
   // registro ni el de la fecha originalmente programada.
   for (const r of completedReminders) {
     entries.push({ key: r._id, kind: "reminderDone", timestamp: r.completedAt, reason: r.reason, completedByName: r.completedByName });
+  }
+
+  // MIS-14: cada cambio de estado también forma parte del historial (AC
+  // explícito). timestamp = changedAt (instante real del cambio,
+  // server-authoritative) — mismo criterio que completedAt en reminders.
+  for (const s of statusChanges) {
+    entries.push({
+      key: s._id,
+      kind: "statusChanged",
+      timestamp: s.changedAt,
+      fromStatus: s.fromStatus,
+      toStatus: s.toStatus,
+      changedByName: s.changedByName,
+    });
   }
 
   return entries.sort((a, b) => b.timestamp - a.timestamp);

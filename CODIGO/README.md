@@ -12,3 +12,4 @@ Código generado a partir de los planes de `PLANS/`, uno por tarea de Linear, li
 | [MIS-11](https://linear.app/mistu-monso/issue/MIS-11) | — (instalado en `src/`/`convex/`, ver PR) | [PLANS/MIS-11-notas-conversacion.md](../PLANS/MIS-11-notas-conversacion.md) | **Instalado** |
 | [MIS-12](https://linear.app/mistu-monso/issue/MIS-12) | — (instalado en `src/`/`convex/`, ver PR) | [PLANS/MIS-12-recordatorio-proximo-contacto.md](../PLANS/MIS-12-recordatorio-proximo-contacto.md) | **Instalado** |
 | [MIS-13](https://linear.app/mistu-monso/issue/MIS-13) | — (instalado en `src/`/`convex/`, ver PR) | [PLANS/MIS-13-pantalla-pendientes-del-dia.md](../PLANS/MIS-13-pantalla-pendientes-del-dia.md) | **Instalado** |
+| [MIS-14](https://linear.app/mistu-monso/issue/MIS-14) | — (instalado en `src/`/`convex/`, ver PR) | [PLANS/MIS-14-gestion-estados-contacto.md](../PLANS/MIS-14-gestion-estados-contacto.md) | **Instalado** |

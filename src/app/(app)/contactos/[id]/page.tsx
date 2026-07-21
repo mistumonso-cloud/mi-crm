@@ -7,14 +7,15 @@ import { getRequestTime } from "@/lib/request-time";
 import { ContactDetailView } from "./ContactDetailView";
 
 export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await getUser();
+  const user = await getUser(); // MIS-14: se captura el valor (antes no hacía falta) para user.role -> canChangeStatus
   const { id } = await params;
   const token = await readSessionToken(); // getUser() ya garantiza sesión válida aquí
 
-  const [contact, notes, reminders] = await Promise.all([
+  const [contact, notes, reminders, statusChanges] = await Promise.all([
     fetchQuery(api.contacts.getContact, { token: token!, id }),
     fetchQuery(api.notes.listNotes, { token: token!, contactId: id }),
     fetchQuery(api.reminders.listRemindersForContact, { token: token!, contactId: id }),
+    fetchQuery(api.contacts.listStatusChanges, { token: token!, contactId: id }),
   ]);
 
   if (!contact) {
@@ -40,7 +41,14 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
           ‹ Contactos
         </Link>
       </div>
-      <ContactDetailView contact={contact} now={now} notes={notes} reminders={reminders} />
+      <ContactDetailView
+        contact={contact}
+        now={now}
+        notes={notes}
+        reminders={reminders}
+        statusChanges={statusChanges}
+        canChangeStatus={user.role === "rep"}
+      />
     </div>
   );
 }

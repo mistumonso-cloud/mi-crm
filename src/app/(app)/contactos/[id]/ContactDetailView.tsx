@@ -6,7 +6,7 @@ import type { api } from "../../../../../convex/_generated/api";
 import { Card } from "@/components/ui/core/Card";
 import { Button } from "@/components/ui/core/Button";
 import { Avatar } from "@/components/ui/core/Avatar";
-import { StatusBadge } from "@/components/ui/feedback/StatusBadge";
+import { StatusBadge, PIPELINE_STATES } from "@/components/ui/feedback/StatusBadge";
 import { BottomSheet } from "@/components/ui/overlays/BottomSheet";
 import { formatRelativeTime, formatDateTime, formatDate } from "@/lib/contacts/format";
 import { buildHistory } from "@/lib/notes/history";
@@ -14,10 +14,12 @@ import { NOTE_TYPES } from "@/lib/notes/types";
 import { AddNoteForm } from "./AddNoteForm";
 import { ScheduleReminderForm } from "./ScheduleReminderForm";
 import { CompleteReminderButton } from "@/components/crm/CompleteReminderButton";
+import { ChangeStatusForm } from "./ChangeStatusForm";
 
 type Contact = NonNullable<FunctionReturnType<typeof api.contacts.getContact>>;
 type Notes = FunctionReturnType<typeof api.notes.listNotes>;
 type Reminders = FunctionReturnType<typeof api.reminders.listRemindersForContact>;
+type StatusChanges = FunctionReturnType<typeof api.contacts.listStatusChanges>;
 type SheetKind = "note" | "status" | "schedule" | "close" | null;
 
 const SHEET_TITLES: Record<"note" | "status" | "close", string> = {
@@ -56,15 +58,19 @@ export function ContactDetailView({
   now,
   notes,
   reminders,
+  statusChanges,
+  canChangeStatus,
 }: {
   contact: Contact;
   now: number;
   notes: Notes;
   reminders: Reminders;
+  statusChanges: StatusChanges;
+  canChangeStatus: boolean;
 }) {
   const [sheet, setSheet] = useState<SheetKind>(null);
   const isClosed = contact.status === "won" || contact.status === "lost";
-  const history = buildHistory(contact, notes, reminders.completed);
+  const history = buildHistory(contact, notes, reminders.completed, statusChanges);
 
   return (
     <div className="flex flex-1 flex-col" style={{ padding: "16px 20px 24px", gap: 16 }}>
@@ -169,9 +175,17 @@ export function ContactDetailView({
         <Button variant="secondary" size="sm" style={{ flex: "1 1 130px" }} onClick={() => setSheet("note")}>
           Añadir nota
         </Button>
-        <Button variant="secondary" size="sm" style={{ flex: "1 1 130px" }} onClick={() => setSheet("status")}>
-          Cambiar estado
-        </Button>
+        {/* MIS-14: solo Carlos ("rep") puede cambiar el estado — condición
+            ya cerrada por el ADR de MIS-18 (requireRole en la mutation).
+            Se oculta el botón en vez de mostrarlo deshabilitado con
+            mensaje, mismo criterio que canCreate en ContactList.tsx: evita
+            que Marta llegue a una hoja que solo puede fallar en el
+            servidor. */}
+        {canChangeStatus && (
+          <Button variant="secondary" size="sm" style={{ flex: "1 1 130px" }} onClick={() => setSheet("status")}>
+            Cambiar estado
+          </Button>
+        )}
         {!isClosed && (
           <Button variant="primary" size="sm" style={{ flex: "1 1 130px" }} onClick={() => setSheet("close")}>
             Cerrar venta
@@ -192,6 +206,8 @@ export function ContactDetailView({
                     ? `${NOTE_TYPES[entry.type].label} · ${formatDateTime(entry.timestamp)} · ${entry.authorName}`
                     : entry.kind === "reminderDone"
                     ? `Seguimiento · ${formatDateTime(entry.timestamp)} · ${entry.completedByName}`
+                    : entry.kind === "statusChanged"
+                    ? `Cambio de estado · ${formatDateTime(entry.timestamp)} · ${entry.changedByName}`
                     : formatRelativeTime(entry.timestamp, now)}
                 </p>
                 <p style={{ fontSize: 14, color: "var(--text-primary)" }}>
@@ -199,13 +215,15 @@ export function ContactDetailView({
                     ? "Contacto añadido"
                     : entry.kind === "reminderDone"
                     ? `Seguimiento completado: ${entry.reason}`
+                    : entry.kind === "statusChanged"
+                    ? `Estado cambiado: ${PIPELINE_STATES[entry.fromStatus].label} → ${PIPELINE_STATES[entry.toStatus].label}`
                     : entry.text}
                 </p>
               </Card>
             </li>
           ))}
         </ul>
-        {!contact.initialNote && notes.length === 0 && reminders.completed.length === 0 && (
+        {!contact.initialNote && notes.length === 0 && reminders.completed.length === 0 && statusChanges.length === 0 && (
           <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 8 }}>
             Aún no hay más actividad registrada.
           </p>
@@ -226,6 +244,8 @@ export function ContactDetailView({
             initialReason={reminders.current?.reason}
             onDone={() => setSheet(null)}
           />
+        ) : sheet === "status" ? (
+          <ChangeStatusForm contactId={contact._id} currentStatus={contact.status} onDone={() => setSheet(null)} />
         ) : (
           <>
             <p style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 16 }}>
