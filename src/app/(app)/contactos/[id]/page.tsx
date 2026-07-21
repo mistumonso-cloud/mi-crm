@@ -11,11 +11,12 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
   const { id } = await params;
   const token = await readSessionToken(); // getUser() ya garantiza sesión válida aquí
 
-  const [contact, notes, reminders, statusChanges] = await Promise.all([
+  const [contact, notes, reminders, statusChanges, saleClosures] = await Promise.all([
     fetchQuery(api.contacts.getContact, { token: token!, id }),
     fetchQuery(api.notes.listNotes, { token: token!, contactId: id }),
     fetchQuery(api.reminders.listRemindersForContact, { token: token!, contactId: id }),
     fetchQuery(api.contacts.listStatusChanges, { token: token!, contactId: id }),
+    fetchQuery(api.sales.listSaleClosures, { token: token!, contactId: id }), // MIS-15
   ]);
 
   if (!contact) {
@@ -47,6 +48,7 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
         notes={notes}
         reminders={reminders}
         statusChanges={statusChanges}
+        saleClosures={saleClosures}
         canChangeStatus={user.role === "rep"}
       />
     </div>

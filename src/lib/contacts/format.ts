@@ -65,3 +65,14 @@ export function formatDate(ms: number): string {
     timeZone: "Europe/Madrid",
   }).format(new Date(ms));
 }
+
+// Importe en euros a partir de céntimos (ver amountCents en
+// convex/schema.ts, tabla saleClosures — MIS-15). Nunca se formatea un
+// float de euros directamente: los céntimos son la fuente de verdad exacta,
+// se dividen entre 100 solo en el momento de mostrar. Mismo locale "es-ES"
+// que el resto de formatters de este archivo, por consistencia visual;
+// currency "EUR" fijo — asunción de un solo país, igual que timeZone
+// "Europe/Madrid" en formatDateTime/formatDate.
+export function formatCurrencyCents(amountCents: number): string {
+  return new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" }).format(amountCents / 100);
+}

@@ -17,6 +17,7 @@ import type * as lib_rateLimit from "../lib/rateLimit.js";
 import type * as lib_token from "../lib/token.js";
 import type * as notes from "../notes.js";
 import type * as reminders from "../reminders.js";
+import type * as sales from "../sales.js";
 
 import type {
   ApiFromModules,
@@ -34,6 +35,7 @@ declare const fullApi: ApiFromModules<{
   "lib/token": typeof lib_token;
   notes: typeof notes;
   reminders: typeof reminders;
+  sales: typeof sales;
 }>;
 
 /**
