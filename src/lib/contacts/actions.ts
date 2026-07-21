@@ -99,3 +99,127 @@ export async function changeStatusAction(
   refresh(); // Next 16: re-renderiza /contactos/[id] en la MISMA respuesta — mismo patrón que scheduleReminderAction/completeReminderAction
   return { success: true };
 }
+
+export type CloseSaleState =
+  | { success: true }
+  | {
+      success: false;
+      error: string;
+      field?: "contactId" | "outcome" | "product" | "amountCents" | "purchaseDate" | "lossReason";
+    }
+  | undefined;
+
+// outcome llega como texto libre desde el <input type="hidden"> de
+// CloseSaleForm.tsx — se valida contra esta lista ANTES de construir el
+// objeto de argumentos de fetchMutation. Nota importante (lección de la
+// auditoría de plan v1→v2 de MIS-14): comparar un `string` con !==/===
+// contra literales NO estrecha su tipo a una unión finita en TypeScript —
+// mismo error de fondo (TS2345/TS2322) que causó el NO-GO de esa auditoría.
+// Se usa el patrón ya corregido y validado en ese plan: array.includes(v as
+// Literal) + cast explícito tras la comprobación, no una comparación de
+// igualdad directa.
+const SALE_OUTCOMES = ["won", "lost"] as const;
+
+// Duplicadas de convex/sales.ts a propósito — mismo motivo que
+// isValidEpochMs duplicada entre convex/reminders.ts y
+// src/lib/reminders/actions.ts: esta Server Action es la primera línea de
+// defensa contra un POST manipulado, pero la mutation es el endpoint
+// público real y revalida todo de forma independiente.
+function isValidEpochMs(value: number): boolean {
+  return (
+    Number.isFinite(value) &&
+    Number.isSafeInteger(value) &&
+    value > 0 &&
+    !Number.isNaN(new Date(value).getTime())
+  );
+}
+
+function isValidAmountCents(value: number): boolean {
+  return Number.isFinite(value) && Number.isSafeInteger(value) && value > 0;
+}
+
+// MIS-15: cierra una oportunidad de venta (ganada o perdida) desde la
+// ficha, en un solo paso (CloseSaleForm.tsx). A diferencia de
+// changeStatusAction (un único <form> con varios <button type="submit">
+// homogéneos), aquí "ganada" y "perdida" tienen campos completamente
+// distintos — la distinción llega como un único campo oculto "outcome" que
+// el propio formulario ya fijó mediante estado local de React antes de
+// montar el <form> (ver decisión 10 del plan), no mediante múltiples
+// submit-buttons.
+export async function closeSaleAction(
+  _prevState: CloseSaleState,
+  formData: FormData,
+): Promise<CloseSaleState> {
+  const token = await readSessionToken();
+  if (!token) redirect("/login");
+
+  const contactId = String(formData.get("contactId") ?? "");
+
+  const outcomeRaw = String(formData.get("outcome") ?? "");
+  if (!SALE_OUTCOMES.includes(outcomeRaw as (typeof SALE_OUTCOMES)[number])) {
+    return { success: false, error: "Resultado de venta inválido", field: "outcome" };
+  }
+  const outcome = outcomeRaw as (typeof SALE_OUTCOMES)[number];
+
+  let product: string | undefined;
+  let amountCents: number | undefined;
+  let purchaseDate: number | undefined;
+  let lossReason: string | undefined;
+
+  if (outcome === "won") {
+    product = String(formData.get("product") ?? "");
+
+    // amountCents llega ya calculado en el navegador (euros -> céntimos,
+    // ver CloseSaleForm.tsx) — mismo criterio que dueDateMs en
+    // ScheduleReminderForm.tsx: esta Server Action nunca reparsea el string
+    // de euros original.
+    const amountRaw = formData.get("amountCents");
+    amountCents = typeof amountRaw === "string" ? Number(amountRaw) : NaN;
+    if (!isValidAmountCents(amountCents)) {
+      return { success: false, error: "El importe debe ser un número positivo", field: "amountCents" };
+    }
+
+    // purchaseDateMs llega ya calculado en el navegador — mismo criterio
+    // exacto que dueDateMs: new Date("YYYY-MM-DD") se interpretaría como
+    // medianoche UTC en el servidor, no la medianoche local del usuario.
+    const purchaseDateRaw = formData.get("purchaseDateMs");
+    purchaseDate = typeof purchaseDateRaw === "string" ? Number(purchaseDateRaw) : NaN;
+    if (!isValidEpochMs(purchaseDate)) {
+      return { success: false, error: "Fecha de compra inválida", field: "purchaseDate" };
+    }
+  } else {
+    lossReason = String(formData.get("lossReason") ?? "");
+  }
+
+  let result;
+  try {
+    result = await fetchMutation(api.sales.closeSale, {
+      token,
+      contactId,
+      outcome,
+      product,
+      amountCents,
+      purchaseDate,
+      lossReason,
+    });
+  } catch (err) {
+    // requireRole(ctx, token, "rep") — ConvexError("No autenticado") si la
+    // sesión se revocó/expiró entre cargar la ficha y confirmar, o
+    // ConvexError("No autorizado") si Marta fuerza la request saltándose el
+    // gating de UI (ver ContactDetailView.tsx, canChangeStatus reutilizada
+    // también para "Cerrar venta" — decisión 4 del plan). Mismo patrón que
+    // changeStatusAction: hay un contactId concreto, se redirige de vuelta
+    // a esa misma ficha en vez de a "/contactos".
+    if (err instanceof ConvexError) {
+      redirect(err.data === "No autorizado" ? `/contactos/${contactId}` : "/login");
+    }
+    throw err;
+  }
+
+  if (!result.success) {
+    return { success: false, error: result.error, field: result.field };
+  }
+
+  refresh(); // Next 16: re-renderiza /contactos/[id] en la MISMA respuesta — mismo patrón que changeStatusAction
+  return { success: true };
+}

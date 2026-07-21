@@ -13,6 +13,29 @@ export type HistoryEntry =
       fromStatus: ContactStatus;
       toStatus: ContactStatus;
       changedByName: string;
+    }
+  // MIS-15: unión discriminada anidada (kind + outcome) — evita que este
+  // tipo permita estados imposibles (una entrada "saleClosed" con
+  // product/amountCents pero sin ellos siendo realmente aplicables, o con
+  // lossReason y product a la vez). Mismo razonamiento que el documento de
+  // saleClosures en convex/schema.ts, trasladado a este tipo puro de src/.
+  | {
+      key: string;
+      kind: "saleClosed";
+      timestamp: number;
+      outcome: "won";
+      product: string;
+      amountCents: number;
+      purchaseDate: number;
+      closedByName: string;
+    }
+  | {
+      key: string;
+      kind: "saleClosed";
+      timestamp: number;
+      outcome: "lost";
+      lossReason: string;
+      closedByName: string;
     };
 
 export function buildHistory(
@@ -26,6 +49,18 @@ export function buildHistory(
     changedByName: string;
     changedAt: number;
   }> = [],
+  saleClosures: Array<
+    | {
+        _id: string;
+        outcome: "won";
+        product: string;
+        amountCents: number;
+        purchaseDate: number;
+        closedByName: string;
+        closedAt: number;
+      }
+    | { _id: string; outcome: "lost"; lossReason: string; closedByName: string; closedAt: number }
+  > = [],
 ): HistoryEntry[] {
   const entries: HistoryEntry[] = [];
 
@@ -65,6 +100,41 @@ export function buildHistory(
       toStatus: s.toStatus,
       changedByName: s.changedByName,
     });
+  }
+
+  // MIS-15: cada cierre de venta también forma parte del historial (AC
+  // explícito: "el cierre queda en el historial de actividad del
+  // contacto"). timestamp = closedAt (instante REAL en que se registró el
+  // cierre, server-authoritative) — NO purchaseDate, que puede ser una
+  // fecha pasada elegida por el usuario. Mismo criterio que completedAt en
+  // reminders/changedAt en statusChanges: el momento del evento real, no
+  // una fecha de negocio elegida. closeSale (convex/sales.ts) inserta
+  // también una fila en statusChanges con el MISMO changedAt/closedAt, así
+  // que un cierre de venta produce dos entradas con idéntico timestamp —
+  // el sort estable (ver comentario de arriba) las mantiene juntas y en
+  // orden de inserción relativo entre sí.
+  for (const s of saleClosures) {
+    if (s.outcome === "won") {
+      entries.push({
+        key: s._id,
+        kind: "saleClosed",
+        timestamp: s.closedAt,
+        outcome: "won",
+        product: s.product,
+        amountCents: s.amountCents,
+        purchaseDate: s.purchaseDate,
+        closedByName: s.closedByName,
+      });
+    } else {
+      entries.push({
+        key: s._id,
+        kind: "saleClosed",
+        timestamp: s.closedAt,
+        outcome: "lost",
+        lossReason: s.lossReason,
+        closedByName: s.closedByName,
+      });
+    }
   }
 
   return entries.sort((a, b) => b.timestamp - a.timestamp);

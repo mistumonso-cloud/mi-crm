@@ -8,18 +8,20 @@ import { Button } from "@/components/ui/core/Button";
 import { Avatar } from "@/components/ui/core/Avatar";
 import { StatusBadge, PIPELINE_STATES } from "@/components/ui/feedback/StatusBadge";
 import { BottomSheet } from "@/components/ui/overlays/BottomSheet";
-import { formatRelativeTime, formatDateTime, formatDate } from "@/lib/contacts/format";
+import { formatRelativeTime, formatDateTime, formatDate, formatCurrencyCents } from "@/lib/contacts/format";
 import { buildHistory } from "@/lib/notes/history";
 import { NOTE_TYPES } from "@/lib/notes/types";
 import { AddNoteForm } from "./AddNoteForm";
 import { ScheduleReminderForm } from "./ScheduleReminderForm";
 import { CompleteReminderButton } from "@/components/crm/CompleteReminderButton";
 import { ChangeStatusForm } from "./ChangeStatusForm";
+import { CloseSaleForm } from "./CloseSaleForm";
 
 type Contact = NonNullable<FunctionReturnType<typeof api.contacts.getContact>>;
 type Notes = FunctionReturnType<typeof api.notes.listNotes>;
 type Reminders = FunctionReturnType<typeof api.reminders.listRemindersForContact>;
 type StatusChanges = FunctionReturnType<typeof api.contacts.listStatusChanges>;
+type SaleClosures = FunctionReturnType<typeof api.sales.listSaleClosures>;
 type SheetKind = "note" | "status" | "schedule" | "close" | null;
 
 const SHEET_TITLES: Record<"note" | "status" | "close", string> = {
@@ -59,6 +61,7 @@ export function ContactDetailView({
   notes,
   reminders,
   statusChanges,
+  saleClosures,
   canChangeStatus,
 }: {
   contact: Contact;
@@ -66,11 +69,12 @@ export function ContactDetailView({
   notes: Notes;
   reminders: Reminders;
   statusChanges: StatusChanges;
+  saleClosures: SaleClosures;
   canChangeStatus: boolean;
 }) {
   const [sheet, setSheet] = useState<SheetKind>(null);
   const isClosed = contact.status === "won" || contact.status === "lost";
-  const history = buildHistory(contact, notes, reminders.completed, statusChanges);
+  const history = buildHistory(contact, notes, reminders.completed, statusChanges, saleClosures);
 
   return (
     <div className="flex flex-1 flex-col" style={{ padding: "16px 20px 24px", gap: 16 }}>
@@ -180,13 +184,24 @@ export function ContactDetailView({
             Se oculta el botón en vez de mostrarlo deshabilitado con
             mensaje, mismo criterio que canCreate en ContactList.tsx: evita
             que Marta llegue a una hoja que solo puede fallar en el
-            servidor. */}
+            servidor. No lleva !isClosed: Carlos puede reabrir un contacto
+            cerrado desde aquí en cualquier momento (AC de MIS-14, "cualquier
+            estado a cualquier otro, sin bloqueos"). */}
         {canChangeStatus && (
           <Button variant="secondary" size="sm" style={{ flex: "1 1 130px" }} onClick={() => setSheet("status")}>
             Cambiar estado
           </Button>
         )}
-        {!isClosed && (
+        {/* MIS-15: "Cerrar venta" ejecuta closeSale, que exige
+            requireRole("rep") igual que changeContactStatus — se reutiliza
+            canChangeStatus (ya significa "puede ejecutar acciones de
+            pipeline reservadas a rep") para no dejar a Marta abrir un
+            formulario que solo puede fallar al confirmar (mismo criterio
+            que ya se aplica arriba a "Cambiar estado"). A diferencia de
+            "Cambiar estado", SÍ lleva !isClosed: no tiene sentido volver a
+            cerrar una venta ya cerrada por esta vía (closeSale lo rechaza
+            también en el servidor como defensa en profundidad). */}
+        {canChangeStatus && !isClosed && (
           <Button variant="primary" size="sm" style={{ flex: "1 1 130px" }} onClick={() => setSheet("close")}>
             Cerrar venta
           </Button>
@@ -208,6 +223,8 @@ export function ContactDetailView({
                     ? `Seguimiento · ${formatDateTime(entry.timestamp)} · ${entry.completedByName}`
                     : entry.kind === "statusChanged"
                     ? `Cambio de estado · ${formatDateTime(entry.timestamp)} · ${entry.changedByName}`
+                    : entry.kind === "saleClosed"
+                    ? `Cierre de venta · ${formatDateTime(entry.timestamp)} · ${entry.closedByName}`
                     : formatRelativeTime(entry.timestamp, now)}
                 </p>
                 <p style={{ fontSize: 14, color: "var(--text-primary)" }}>
@@ -217,17 +234,25 @@ export function ContactDetailView({
                     ? `Seguimiento completado: ${entry.reason}`
                     : entry.kind === "statusChanged"
                     ? `Estado cambiado: ${PIPELINE_STATES[entry.fromStatus].label} → ${PIPELINE_STATES[entry.toStatus].label}`
+                    : entry.kind === "saleClosed"
+                    ? entry.outcome === "won"
+                      ? `Venta ganada: ${entry.product} · ${formatCurrencyCents(entry.amountCents)} · ${formatDate(entry.purchaseDate)}`
+                      : `Venta perdida: ${entry.lossReason}`
                     : entry.text}
                 </p>
               </Card>
             </li>
           ))}
         </ul>
-        {!contact.initialNote && notes.length === 0 && reminders.completed.length === 0 && statusChanges.length === 0 && (
-          <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 8 }}>
-            Aún no hay más actividad registrada.
-          </p>
-        )}
+        {!contact.initialNote &&
+          notes.length === 0 &&
+          reminders.completed.length === 0 &&
+          statusChanges.length === 0 &&
+          saleClosures.length === 0 && (
+            <p style={{ fontSize: 12, color: "var(--text-tertiary)", marginTop: 8 }}>
+              Aún no hay más actividad registrada.
+            </p>
+          )}
       </div>
 
       <BottomSheet
@@ -246,6 +271,8 @@ export function ContactDetailView({
           />
         ) : sheet === "status" ? (
           <ChangeStatusForm contactId={contact._id} currentStatus={contact.status} onDone={() => setSheet(null)} />
+        ) : sheet === "close" ? (
+          <CloseSaleForm contactId={contact._id} onDone={() => setSheet(null)} />
         ) : (
           <>
             <p style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 16 }}>
