@@ -12,4 +12,7 @@ Planes de implementación por tarea de Linear (proyecto CRM - MVP), en orden de 
 | [MIS-11](https://linear.app/mistu-monso/issue/MIS-11) | Notas de conversación en la ficha del contacto | [MIS-11-notas-conversacion.md](./MIS-11-notas-conversacion.md) | **Instalado** — ver PR de la rama `feature/mis-11-notas-conversacion` |
 | [MIS-12](https://linear.app/mistu-monso/issue/MIS-12) | Recordatorio de próximo contacto | [MIS-12-recordatorio-proximo-contacto.md](./MIS-12-recordatorio-proximo-contacto.md) | **Instalado** — ver PR de la rama `feature/mis-12-recordatorio-proximo-contacto` |
 | [MIS-13](https://linear.app/mistu-monso/issue/MIS-13) | Pantalla: Pendientes del día (home Carlos) | [MIS-13-pantalla-pendientes-del-dia.md](./MIS-13-pantalla-pendientes-del-dia.md) | **Instalado** — ver PR de la rama `feature/mis-13-pantalla-pendientes-del-dia` |
+| [MIS-14](https://linear.app/mistu-monso/issue/MIS-14) | Gestión de estados del contacto | [MIS-14-gestion-estados-contacto.md](./MIS-14-gestion-estados-contacto.md) | **Instalado** — ver PR de la rama `feature/mis-14-gestion-estados-contacto` |
+| MIS-15 | Registro de cierre de venta (ganada o perdida) | — | Pendiente |
+| MIS-16 | Historial de actividad por cliente | — | Pendiente |
 | MIS-17 | Pantalla: Panel de oportunidades (home Marta) | — | Pendiente |

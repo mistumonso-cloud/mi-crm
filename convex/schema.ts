@@ -84,6 +84,41 @@ export default defineSchema({
     // dueAt <= hoy, en cualquier contacto, sin escanear la tabla entera.
     .index("by_status_dueAt", ["status", "dueAt"]),
 
+  // MIS-14: registro inmutable de cada cambio de estado de pipeline de un
+  // contacto (AC: "el cambio queda registrado en el historial — estado
+  // anterior → estado nuevo, fecha y hora, quién lo cambió"). Tabla
+  // append-only: nunca se actualiza una fila tras insertarla — mismo patrón
+  // que `notes` (no el de `reminders`, que sí actualiza campos opcionales al
+  // completarse). fromStatus/toStatus usan la misma unión de 7 literales que
+  // contacts.status (no solo los 6 seleccionables de MIS-14): esta tabla
+  // registra el valor real que tuviera el contacto, sea cual sea el dominio
+  // completo del campo.
+  statusChanges: defineTable({
+    contactId: v.id("contacts"),
+    fromStatus: v.union(
+      v.literal("lead"),
+      v.literal("talking"),
+      v.literal("proposal"),
+      v.literal("negotiating"),
+      v.literal("won"),
+      v.literal("lost"),
+      v.literal("inactive"),
+    ),
+    toStatus: v.union(
+      v.literal("lead"),
+      v.literal("talking"),
+      v.literal("proposal"),
+      v.literal("negotiating"),
+      v.literal("won"),
+      v.literal("lost"),
+      v.literal("inactive"),
+    ),
+    changedBy: v.id("users"),
+    changedAt: v.number(), // epoch ms, Date.now() del servidor — nunca editable por el cliente, mismo criterio que reminders.completedAt
+  })
+    // Ficha del contacto: recuperar todos los cambios de UN contacto, ordenados.
+    .index("by_contact", ["contactId", "changedAt"]),
+
   users: defineTable({
     name: v.string(),
     email: v.string(),

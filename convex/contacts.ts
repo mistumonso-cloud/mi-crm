@@ -12,6 +12,16 @@ const contactStatusValidator = v.union(
   v.literal("inactive"),
 );
 
+// Subconjunto de contactStatusValidator seleccionable desde "Cambiar
+// estado" (MIS-14) — exactamente los 6 estados del AC del ticket en
+// Linear. "inactive" existe en el schema desde MIS-9 pero ningún ticket
+// define cómo se llega a él; se mantiene fuera de alcance aquí a
+// propósito. Duplicado respecto a SELECTABLE_STATUSES en
+// src/lib/contacts/status.ts a propósito: convex/ y src/ son módulos
+// independientes, sin validador compartido (mismo criterio que
+// contactStatusValidator duplicado en convex/reminders.ts).
+const CHANGEABLE_STATUSES = ["lead", "talking", "proposal", "negotiating", "won", "lost"] as const;
+
 const NAME_MAX = 120;
 const PHONE_MAX = 40;
 const NOTE_MAX = 2000;
@@ -158,5 +168,107 @@ export const listContacts = query({
       status: c.status,
       _creationTime: c._creationTime,
     }));
+  },
+});
+
+// MIS-14: cambia el estado de pipeline de un contacto en un solo paso,
+// registrando el cambio en statusChanges para el historial de la ficha.
+export const changeContactStatus = mutation({
+  args: {
+    token: v.string(),
+    contactId: v.string(), // v.string(), no v.id("contacts"): mismo motivo que getContact.args.id
+    status: contactStatusValidator,
+  },
+  returns: v.union(
+    v.object({ success: v.literal(true) }),
+    v.object({
+      success: v.literal(false),
+      error: v.string(),
+      field: v.optional(v.union(v.literal("contactId"), v.literal("status"))),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    // Solo "rep" (Carlos) puede cambiar el estado — condición YA CERRADA
+    // por el ADR de MIS-18 (PLANS/MIS-18-navegacion-principal.md, "Qué NO
+    // cambia"): "cambio de estado en MIS-14... sigue debiendo llamar
+    // [requireRole] como primera línea, sin excepción."
+    const user = await requireRole(ctx, args.token, "rep");
+
+    const contactId = ctx.db.normalizeId("contacts", args.contactId);
+    if (!contactId) {
+      return { success: false as const, error: "Contacto no encontrado", field: "contactId" as const };
+    }
+    const contact = await ctx.db.get(contactId);
+    if (!contact) {
+      return { success: false as const, error: "Contacto no encontrado", field: "contactId" as const };
+    }
+
+    // Defensa en profundidad: la mutation es un endpoint público invocable
+    // directamente con un token válido, sin pasar por changeStatusAction.
+    // Un valor fuera de CHANGEABLE_STATUSES (p.ej. "inactive") no debe
+    // persistirse aunque pase el v.union de 7 literales del validador de
+    // argumentos.
+    if (!CHANGEABLE_STATUSES.includes(args.status as (typeof CHANGEABLE_STATUSES)[number])) {
+      return { success: false as const, error: "Estado no disponible", field: "status" as const };
+    }
+
+    // No-op explícito: pedir el mismo estado que ya tiene no es un cambio
+    // real. Se rechaza como error controlado — mismo criterio que
+    // completeReminder ante un recordatorio ya "done" — en vez de éxito
+    // silencioso, para no ensuciar statusChanges con una fila
+    // fromStatus === toStatus sin información real. No alcanzable desde
+    // la UI normal (el picker excluye el estado actual).
+    if (contact.status === args.status) {
+      return { success: false as const, error: "El contacto ya está en ese estado", field: "status" as const };
+    }
+
+    await ctx.db.insert("statusChanges", {
+      contactId,
+      fromStatus: contact.status,
+      toStatus: args.status,
+      changedBy: user.id,
+      changedAt: Date.now(),
+    });
+    await ctx.db.patch(contactId, { status: args.status });
+
+    return { success: true as const };
+  },
+});
+
+// Historial de cambios de estado de un contacto, para la ficha (MIS-14).
+export const listStatusChanges = query({
+  args: { token: v.string(), contactId: v.string() },
+  returns: v.array(
+    v.object({
+      _id: v.id("statusChanges"),
+      fromStatus: contactStatusValidator,
+      toStatus: contactStatusValidator,
+      changedByName: v.string(),
+      changedAt: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await requireUser(ctx, args.token); // lectura: ambos roles, igual que listNotes/listRemindersForContact
+    const contactId = ctx.db.normalizeId("contacts", args.contactId);
+    if (!contactId) return []; // ID inválido: page.tsx ya maneja "no encontrado" vía getContact
+
+    const changes = await ctx.db
+      .query("statusChanges")
+      .withIndex("by_contact", (q) => q.eq("contactId", contactId))
+      .order("desc")
+      .collect();
+
+    return Promise.all(
+      changes.map(async (c) => {
+        const changer = await ctx.db.get(c.changedBy);
+        return {
+          _id: c._id,
+          fromStatus: c.fromStatus,
+          toStatus: c.toStatus,
+          changedByName: changer?.name ?? "—", // defensivo: usuario borrado, caso no esperado hoy — mismo fallback que notes.ts/reminders.ts
+          changedAt: c.changedAt,
+        };
+      }),
+    );
   },
 });
