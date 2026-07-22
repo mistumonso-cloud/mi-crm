@@ -3,7 +3,6 @@ import { fetchQuery } from "convex/nextjs";
 import { api } from "../../../../../convex/_generated/api";
 import { getUser } from "@/lib/auth/dal";
 import { readSessionToken } from "@/lib/auth/cookie";
-import { getRequestTime } from "@/lib/request-time";
 import { ContactDetailView } from "./ContactDetailView";
 
 export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -30,8 +29,6 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
     );
   }
 
-  const now = await getRequestTime();
-
   return (
     <div className="flex flex-1 flex-col">
       <div style={{ padding: "16px 20px 0" }}>
@@ -44,7 +41,6 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
       </div>
       <ContactDetailView
         contact={contact}
-        now={now}
         notes={notes}
         reminders={reminders}
         statusChanges={statusChanges}
