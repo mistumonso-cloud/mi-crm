@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/core/Button";
 import { Avatar } from "@/components/ui/core/Avatar";
 import { StatusBadge, PIPELINE_STATES } from "@/components/ui/feedback/StatusBadge";
 import { BottomSheet } from "@/components/ui/overlays/BottomSheet";
-import { formatRelativeTime, formatDateTime, formatDate, formatCurrencyCents } from "@/lib/contacts/format";
+import { formatDateTime, formatDate, formatCurrencyCents } from "@/lib/contacts/format";
 import { buildHistory } from "@/lib/notes/history";
 import { NOTE_TYPES } from "@/lib/notes/types";
 import { AddNoteForm } from "./AddNoteForm";
@@ -57,7 +57,6 @@ function MailIcon() {
 
 export function ContactDetailView({
   contact,
-  now,
   notes,
   reminders,
   statusChanges,
@@ -65,7 +64,6 @@ export function ContactDetailView({
   canChangeStatus,
 }: {
   contact: Contact;
-  now: number;
   notes: Notes;
   reminders: Reminders;
   statusChanges: StatusChanges;
@@ -225,7 +223,9 @@ export function ContactDetailView({
                     ? `Cambio de estado · ${formatDateTime(entry.timestamp)} · ${entry.changedByName}`
                     : entry.kind === "saleClosed"
                     ? `Cierre de venta · ${formatDateTime(entry.timestamp)} · ${entry.closedByName}`
-                    : formatRelativeTime(entry.timestamp, now)}
+                    : entry.kind === "initialNote"
+                    ? `Nota inicial · ${formatDateTime(entry.timestamp)} · ${entry.createdByName}`
+                    : `Alta de contacto · ${formatDateTime(entry.timestamp)} · ${entry.createdByName}`}
                 </p>
                 <p style={{ fontSize: 14, color: "var(--text-primary)" }}>
                   {entry.kind === "created"

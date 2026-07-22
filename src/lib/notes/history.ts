@@ -2,8 +2,8 @@ import type { NoteType } from "./types";
 import type { ContactStatus } from "@/lib/contacts/status";
 
 export type HistoryEntry =
-  | { key: string; kind: "created"; timestamp: number }
-  | { key: string; kind: "initialNote"; timestamp: number; text: string }
+  | { key: string; kind: "created"; timestamp: number; createdByName: string }
+  | { key: string; kind: "initialNote"; timestamp: number; text: string; createdByName: string }
   | { key: string; kind: "note"; timestamp: number; type: NoteType; text: string; authorName: string }
   | { key: string; kind: "reminderDone"; timestamp: number; reason: string; completedByName: string }
   | {
@@ -39,7 +39,12 @@ export type HistoryEntry =
     };
 
 export function buildHistory(
-  contact: { initialNote?: string; _creationTime: number },
+  // MIS-16: responsibleName ya lo devuelve getContact (convex/contacts.ts) —
+  // obligatorio en el schema (contacts.createdBy no es opcional), así que
+  // tampoco lo es aquí. Se usa para poblar createdByName en las entradas
+  // "created"/"initialNote" (AC: "Creación del contacto... y quién lo
+  // registró", antes ausente).
+  contact: { initialNote?: string; _creationTime: number; responsibleName: string },
   notes: Array<{ _id: string; type: NoteType; occurredAt: number; text: string; authorName: string }>,
   completedReminders: Array<{ _id: string; completedAt: number; reason: string; completedByName: string }> = [],
   statusChanges: Array<{
@@ -70,9 +75,20 @@ export function buildHistory(
   // exacto conserva este orden relativo tras ordenar desc, igual que el
   // orden visual que ya existe hoy en el JSX.
   if (contact.initialNote) {
-    entries.push({ key: "initial-note", kind: "initialNote", timestamp: contact._creationTime, text: contact.initialNote });
+    entries.push({
+      key: "initial-note",
+      kind: "initialNote",
+      timestamp: contact._creationTime,
+      text: contact.initialNote,
+      createdByName: contact.responsibleName, // MIS-16
+    });
   }
-  entries.push({ key: "created", kind: "created", timestamp: contact._creationTime });
+  entries.push({
+    key: "created",
+    kind: "created",
+    timestamp: contact._creationTime,
+    createdByName: contact.responsibleName, // MIS-16
+  });
 
   for (const n of notes) {
     entries.push({ key: n._id, kind: "note", timestamp: n.occurredAt, type: n.type, text: n.text, authorName: n.authorName });
