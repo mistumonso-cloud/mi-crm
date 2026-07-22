@@ -15,3 +15,4 @@ Código generado a partir de los planes de `PLANS/`, uno por tarea de Linear, li
 | [MIS-14](https://linear.app/mistu-monso/issue/MIS-14) | — (instalado en `src/`/`convex/`, ver PR) | [PLANS/MIS-14-gestion-estados-contacto.md](../PLANS/MIS-14-gestion-estados-contacto.md) | **Instalado** |
 | [MIS-15](https://linear.app/mistu-monso/issue/MIS-15) | — (instalado en `src/`/`convex/`, ver PR) | [PLANS/MIS-15-registro-cierre-venta.md](../PLANS/MIS-15-registro-cierre-venta.md) | **Instalado** |
 | [MIS-16](https://linear.app/mistu-monso/issue/MIS-16) | — (instalado en `src/`, ver PR) | [PLANS/MIS-16-historial-actividad.md](../PLANS/MIS-16-historial-actividad.md) | **Instalado** |
+| [MIS-17](https://linear.app/mistu-monso/issue/MIS-17) | — (instalado en `src/`/`convex/`, ver PR) | [PLANS/MIS-17-panel-oportunidades.md](../PLANS/MIS-17-panel-oportunidades.md) | **Instalado** |
