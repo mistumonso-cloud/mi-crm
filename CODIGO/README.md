@@ -14,4 +14,4 @@ Código generado a partir de los planes de `PLANS/`, uno por tarea de Linear, li
 | [MIS-13](https://linear.app/mistu-monso/issue/MIS-13) | — (instalado en `src/`/`convex/`, ver PR) | [PLANS/MIS-13-pantalla-pendientes-del-dia.md](../PLANS/MIS-13-pantalla-pendientes-del-dia.md) | **Instalado** |
 | [MIS-14](https://linear.app/mistu-monso/issue/MIS-14) | — (instalado en `src/`/`convex/`, ver PR) | [PLANS/MIS-14-gestion-estados-contacto.md](../PLANS/MIS-14-gestion-estados-contacto.md) | **Instalado** |
 | [MIS-15](https://linear.app/mistu-monso/issue/MIS-15) | — (instalado en `src/`/`convex/`, ver PR) | [PLANS/MIS-15-registro-cierre-venta.md](../PLANS/MIS-15-registro-cierre-venta.md) | **Instalado** |
-| [MIS-16](https://linear.app/mistu-monso/issue/MIS-16) | [MIS-16-historial-actividad/CODIGO-COMPLETO.md](./MIS-16-historial-actividad/CODIGO-COMPLETO.md) (se retira al fusionar el PR) | [PLANS/MIS-16-historial-actividad.md](../PLANS/MIS-16-historial-actividad.md) | **Instalado** |
+| [MIS-16](https://linear.app/mistu-monso/issue/MIS-16) | — (instalado en `src/`, ver PR) | [PLANS/MIS-16-historial-actividad.md](../PLANS/MIS-16-historial-actividad.md) | **Instalado** |
