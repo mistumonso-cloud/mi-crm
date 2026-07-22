@@ -2,12 +2,14 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { FunctionReturnType } from "convex/server";
 import type { api } from "../../../../../convex/_generated/api";
 import { Input } from "@/components/ui/forms/Input";
 import { Avatar } from "@/components/ui/core/Avatar";
-import { StatusBadge } from "@/components/ui/feedback/StatusBadge";
+import { StatusBadge, PIPELINE_STATES } from "@/components/ui/feedback/StatusBadge";
 import { formatRelativeTime } from "@/lib/contacts/format";
+import type { ContactStatus } from "@/lib/contacts/status";
 
 type Contact = FunctionReturnType<typeof api.contacts.listContacts>[number];
 
@@ -53,21 +55,38 @@ export function ContactList({
   contacts,
   now,
   canCreate,
+  initialStatusFilter,
 }: {
   contacts: Contact[];
   now: number;
   canCreate: boolean;
+  initialStatusFilter: ContactStatus | null;
 }) {
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<ContactStatus | null>(initialStatusFilter);
+  const router = useRouter();
 
   const filtered = useMemo(() => {
     const q = query.trim();
-    if (!q) return contacts;
-    return contacts.filter((c) => matches(c, q));
-  }, [contacts, query]);
+    return contacts.filter((c) => {
+      if (statusFilter && c.status !== statusFilter) return false;
+      if (q && !matches(c, q)) return false;
+      return true;
+    });
+  }, [contacts, query, statusFilter]);
 
   const noContactsAtAll = contacts.length === 0;
-  const emptySearch = !noContactsAtAll && query.trim() !== "" && filtered.length === 0;
+  const hasActiveFilters = query.trim() !== "" || statusFilter !== null;
+  const noResults = !noContactsAtAll && hasActiveFilters && filtered.length === 0;
+
+  // Limpia el filtro localmente Y en la URL: si solo se limpiara el estado
+  // local, un F5 posterior volvería a leer ?status=... de la URL y
+  // "resucitaría" el filtro que Marta acababa de quitar — useState solo lee
+  // initialStatusFilter en el montaje inicial, no en renders posteriores.
+  function clearStatusFilter() {
+    setStatusFilter(null);
+    router.replace("/contactos");
+  }
 
   return (
     <div className="flex flex-1 flex-col" style={{ minHeight: 0 }}>
@@ -119,6 +138,31 @@ export function ContactList({
             </button>
           )}
         </div>
+        {statusFilter && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+            <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>Filtrado por:</span>
+            <StatusBadge state={statusFilter} />
+            <button
+              type="button"
+              onClick={clearStatusFilter}
+              aria-label="Quitar filtro de estado"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: 2,
+                color: "var(--text-tertiary)",
+                fontSize: 12,
+              }}
+            >
+              <ClearIcon />
+              Quitar
+            </button>
+          </div>
+        )}
       </div>
 
       <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
@@ -153,19 +197,25 @@ export function ContactList({
           </div>
         )}
 
-        {emptySearch && (
+        {noResults && (
           <div
             className="flex flex-col items-center justify-center text-center"
             style={{ height: "100%", padding: "40px 32px", gap: 8 }}
           >
             <p style={{ fontSize: 17, fontWeight: 600, color: "var(--text-primary)" }}>
-              Sin resultados para &quot;{query}&quot;
+              {query.trim()
+                ? `Sin resultados para "${query}"`
+                : statusFilter
+                ? `Sin contactos en "${PIPELINE_STATES[statusFilter].label}"`
+                : "Sin resultados"}
             </p>
-            <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>Prueba con otro nombre o número</p>
+            <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+              {query.trim() ? "Prueba con otro nombre o número" : "Prueba quitando el filtro de estado"}
+            </p>
           </div>
         )}
 
-        {!noContactsAtAll && !emptySearch && (
+        {!noContactsAtAll && !noResults && (
           <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
             {filtered.map((c) => (
               <li key={c._id} style={{ borderBottom: "1px solid var(--color-border)" }}>
