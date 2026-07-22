@@ -250,3 +250,39 @@ export const listSaleClosures = query({
     );
   },
 });
+
+// MIS-17: total de ventas ganadas para la tarjeta del panel de Marta (AC:
+// "Número de ventas cerradas como ganadas. Importe total acumulado").
+// Cuenta FILAS de saleClosures con outcome:"won", no contactos distintos —
+// un contacto puede tener más de un cierre ganado a lo largo del tiempo
+// (decisión 6 de PLANS/MIS-15-registro-cierre-venta.md), así que este
+// número y "contactos en estado Ganado" (getPipelineSummary.won) pueden
+// diferir — son dos preguntas distintas, y así lo presenta el propio AC
+// (dos secciones separadas del panel).
+//
+// Full table scan sin índice — mismo criterio que getPipelineSummary /
+// listContacts: saleClosures es un subconjunto de contacts (como mucho
+// unas pocas filas por contacto cerrado), volumen igual o menor. El propio
+// plan de MIS-15 anticipaba un índice por outcome "cuando exista un
+// consumidor real" — este lo es, pero al volumen actual un .collect()
+// íntegro sigue dentro de la guía oficial de Convex citada arriba; se
+// añadirá el índice si el volumen crece lo suficiente para notarse, no
+// antes.
+export const getWonSalesSummary = query({
+  args: { token: v.string() },
+  returns: v.object({ count: v.number(), totalAmountCents: v.number() }),
+  handler: async (ctx, args) => {
+    await requireUser(ctx, args.token); // lectura: ambos roles, igual que listSaleClosures
+    const closures = await ctx.db.query("saleClosures").collect();
+
+    let count = 0;
+    let totalAmountCents = 0;
+    for (const c of closures) {
+      if (c.outcome === "won") {
+        count += 1;
+        totalAmountCents += c.amountCents;
+      }
+    }
+    return { count, totalAmountCents };
+  },
+});

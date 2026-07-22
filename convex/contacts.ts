@@ -272,3 +272,43 @@ export const listStatusChanges = query({
     );
   },
 });
+
+// MIS-17: resumen del pipeline por estado, para las 6 tarjetas del panel
+// de Marta (AC: "Muestra cuántos contactos hay en cada estado activo").
+// Mismos 6 estados que CHANGEABLE_STATUSES arriba — "inactive" queda fuera
+// a propósito, mismo criterio ya aplicado ahí. Objeto con las 6 claves ya
+// contadas (no un array {status,count}[]): panel/page.tsx conoce de
+// antemano esas 6 categorías fijas, indexar por clave evita un .find() por
+// tarjeta en el cliente.
+//
+// Full table scan sin índice, deliberado — mismo criterio que listContacts
+// arriba: la guía oficial de Convex (node_modules/convex/dist/esm-types/
+// server/database.d.ts) acepta un full table scan en tablas "que se
+// mantendrán muy pequeñas (unos pocos cientos a unos pocos miles de
+// documentos)" — contacts tiene hoy ~15-20 filas. 6 queries indexadas
+// (by_status) supondrían 6 escaneos en vez de 1, sin ventaja medible a
+// este volumen; el índice queda disponible sin usar, igual que antes de
+// MIS-17.
+export const getPipelineSummary = query({
+  args: { token: v.string() },
+  returns: v.object({
+    lead: v.number(),
+    talking: v.number(),
+    proposal: v.number(),
+    negotiating: v.number(),
+    won: v.number(),
+    lost: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    await requireUser(ctx, args.token); // lectura: ambos roles, igual que listContacts
+    const contacts = await ctx.db.query("contacts").collect();
+
+    const summary = { lead: 0, talking: 0, proposal: 0, negotiating: 0, won: 0, lost: 0 };
+    for (const c of contacts) {
+      if (c.status !== "inactive") {
+        summary[c.status] += 1;
+      }
+    }
+    return summary;
+  },
+});
