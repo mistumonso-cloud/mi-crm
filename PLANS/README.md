@@ -14,5 +14,5 @@ Planes de implementación por tarea de Linear (proyecto CRM - MVP), en orden de 
 | [MIS-13](https://linear.app/mistu-monso/issue/MIS-13) | Pantalla: Pendientes del día (home Carlos) | [MIS-13-pantalla-pendientes-del-dia.md](./MIS-13-pantalla-pendientes-del-dia.md) | **Instalado** — ver PR de la rama `feature/mis-13-pantalla-pendientes-del-dia` |
 | [MIS-14](https://linear.app/mistu-monso/issue/MIS-14) | Gestión de estados del contacto | [MIS-14-gestion-estados-contacto.md](./MIS-14-gestion-estados-contacto.md) | **Instalado** — ver PR de la rama `feature/mis-14-gestion-estados-contacto` |
 | [MIS-15](https://linear.app/mistu-monso/issue/MIS-15) | Registro de cierre de venta (ganada o perdida) | [MIS-15-registro-cierre-venta.md](./MIS-15-registro-cierre-venta.md) | **Instalado** — ver PR de la rama `feature/mis-15-registro-cierre-venta` |
-| MIS-16 | Historial de actividad por cliente | — | Pendiente |
+| [MIS-16](https://linear.app/mistu-monso/issue/MIS-16) | Historial de actividad por cliente | [MIS-16-historial-actividad.md](./MIS-16-historial-actividad.md) | **Instalado** — ver PR de la rama `feature/mis-16-historial-actividad` |
 | MIS-17 | Pantalla: Panel de oportunidades (home Marta) | — | Pendiente |
