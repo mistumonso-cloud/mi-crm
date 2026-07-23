@@ -130,6 +130,104 @@ export const createContact = mutation({
   },
 });
 
+// MIS-252: edita nombre/teléfono/email/canal de un contacto existente
+// desde su ficha. Solo "rep" (Carlos) — Marta no tiene esta acción (AC).
+export const updateContact = mutation({
+  args: {
+    token: v.string(),
+    contactId: v.string(), // v.string(), no v.id("contacts"): mismo motivo que getContact.args.id
+    name: v.string(),
+    phone: v.string(),
+    email: v.optional(v.string()),
+    channel: v.optional(contactChannelValidator),
+  },
+  returns: v.union(
+    v.object({ success: v.literal(true) }),
+    v.object({
+      success: v.literal(false),
+      error: v.string(),
+      field: v.optional(
+        v.union(
+          v.literal("contactId"),
+          v.literal("name"),
+          v.literal("phone"),
+          v.literal("email"),
+          v.literal("channel"),
+        ),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    // Solo "rep" (Carlos) puede editar datos del contacto (AC: "no es
+    // visible para Marta") — mismo gating que changeContactStatus/
+    // closeSale, mismo ADR de MIS-18. No se usa el usuario devuelto:
+    // a diferencia de createContact, esta mutation no registra "quién
+    // editó" (el AC no lo pide, y no hay tabla de historial para ello).
+    await requireRole(ctx, args.token, "rep");
+
+    const contactId = ctx.db.normalizeId("contacts", args.contactId);
+    if (!contactId) {
+      return { success: false as const, error: "Contacto no encontrado", field: "contactId" as const };
+    }
+    const contact = await ctx.db.get(contactId);
+    if (!contact) {
+      return { success: false as const, error: "Contacto no encontrado", field: "contactId" as const };
+    }
+
+    const name = args.name.trim();
+    if (!name) {
+      return { success: false as const, error: "El nombre es obligatorio", field: "name" as const };
+    }
+    if (name.length > NAME_MAX) {
+      return {
+        success: false as const,
+        error: `El nombre no puede superar ${NAME_MAX} caracteres`,
+        field: "name" as const,
+      };
+    }
+
+    const phone = args.phone.trim();
+    if (!phone) {
+      return { success: false as const, error: "El teléfono es obligatorio", field: "phone" as const };
+    }
+    if (phone.length > PHONE_MAX) {
+      return {
+        success: false as const,
+        error: `El teléfono no puede superar ${PHONE_MAX} caracteres`,
+        field: "phone" as const,
+      };
+    }
+
+    const emailTrimmed = args.email?.trim();
+    if (emailTrimmed && emailTrimmed.length > EMAIL_MAX) {
+      return {
+        success: false as const,
+        error: `El email no puede superar ${EMAIL_MAX} caracteres`,
+        field: "email" as const,
+      };
+    }
+
+    // A diferencia de createContact (insert: omitir la clave del objeto =
+    // "no guardar este campo"), ctx.db.patch hace un merge superficial:
+    // omitir una clave dice "no toques el valor existente", NO "vacíalo".
+    // Confirmado en node_modules/convex/dist/cjs-types/server/database.d.ts:
+    // "Fields with value undefined are removed. Fields not specified in
+    // the patch are left [unchanged]." Por eso aquí SIEMPRE se incluyen
+    // las claves email/channel (con undefined explícito si el formulario
+    // las dejó vacías) — así vaciar el campo en la edición sí lo borra,
+    // a diferencia del patrón `...(x ? {email: x} : {})` de createContact,
+    // que solo es correcto para un insert nuevo.
+    await ctx.db.patch(contactId, {
+      name,
+      phone,
+      email: emailTrimmed || undefined,
+      channel: args.channel,
+    });
+
+    return { success: true as const };
+  },
+});
+
 // args.id es v.string() (no v.id("contacts")) a propósito: con v.id() el
 // validator de argumentos rechaza un ID de formato inválido ANTES de que el
 // handler pueda capturarlo, propagando un error no controlado hasta la

@@ -46,6 +46,7 @@ test.describe("Marta: gating de rol", () => {
     // Bloqueadas para Marta (requireRole "rep" en el servidor).
     await expect(page.getByRole("button", { name: "Cambiar estado" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Cerrar venta" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Editar datos" })).toHaveCount(0); // MIS-252
 
     // Acciones HABILITADAS para Marta (requireUser, ambos roles) — se
     // nombran así explícitamente, no "edición", para no dar a entender un
@@ -127,5 +128,21 @@ test.describe("Marta: gating de rol", () => {
       expect((err as ConvexError<string>).data).toBe("No autorizado");
     }
     expect(threw, "closeSale debía rechazar a Marta").toBe(true);
+
+    // MIS-252
+    threw = false;
+    try {
+      await client.mutation(api.contacts.updateContact, {
+        token: martaToken,
+        contactId: created.id,
+        name: "No debería editarse",
+        phone: uniquePhone(),
+      });
+    } catch (err) {
+      threw = true;
+      expect(err).toBeInstanceOf(ConvexError);
+      expect((err as ConvexError<string>).data).toBe("No autorizado");
+    }
+    expect(threw, "updateContact debía rechazar a Marta").toBe(true);
   });
 });

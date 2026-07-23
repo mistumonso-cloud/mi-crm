@@ -70,6 +70,65 @@ export async function createContactAction(
   redirect(`/contactos/${result.id}`); // fuera de try/catch
 }
 
+export type UpdateContactState =
+  | { success: true }
+  | { success: false; error: string; field?: "contactId" | "name" | "phone" | "email" | "channel" }
+  | undefined;
+
+// MIS-252: edita nombre/teléfono/email/canal de un contacto existente
+// desde su ficha, en un solo paso (EditContactForm.tsx). A diferencia de
+// createContactAction (redirige a la ficha del contacto NUEVO), esta se
+// queda en la misma ficha — mismo patrón que changeStatusAction/
+// closeSaleAction: ya hay un contactId concreto, así que un "No
+// autorizado" (Marta forzando el POST) redirige de vuelta a esa misma
+// ficha, no a "/contactos".
+export async function updateContactAction(
+  _prevState: UpdateContactState,
+  formData: FormData,
+): Promise<UpdateContactState> {
+  const token = await readSessionToken();
+  if (!token) redirect("/login");
+
+  const contactId = String(formData.get("contactId") ?? "");
+  const name = String(formData.get("name") ?? "");
+  const phone = String(formData.get("phone") ?? "");
+  const emailRaw = String(formData.get("email") ?? "").trim();
+
+  // Mismo patrón que createContactAction: hasOwnProperty, no `in`.
+  const channelRaw = String(formData.get("channel") ?? "");
+  let channel: ContactChannel | undefined;
+  if (channelRaw) {
+    if (!Object.prototype.hasOwnProperty.call(CONTACT_CHANNELS, channelRaw)) {
+      return { success: false, error: "Canal inválido", field: "channel" };
+    }
+    channel = channelRaw as ContactChannel;
+  }
+
+  let result;
+  try {
+    result = await fetchMutation(api.contacts.updateContact, {
+      token,
+      contactId,
+      name,
+      phone,
+      email: emailRaw || undefined,
+      channel,
+    });
+  } catch (err) {
+    if (err instanceof ConvexError) {
+      redirect(err.data === "No autorizado" ? `/contactos/${contactId}` : "/login");
+    }
+    throw err;
+  }
+
+  if (!result.success) {
+    return { success: false, error: result.error, field: result.field };
+  }
+
+  refresh(); // Next 16: re-renderiza /contactos/[id] en la misma respuesta — mismo patrón que changeStatusAction/closeSaleAction
+  return { success: true };
+}
+
 export type ChangeStatusState =
   | { success: true }
   | { success: false; error: string; field?: "contactId" | "status" }

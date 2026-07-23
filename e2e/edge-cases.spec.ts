@@ -116,3 +116,49 @@ test("no se puede guardar un contacto sin nombre", async ({ page }) => {
   await expect(page.getByText("El nombre es obligatorio")).toBeVisible();
   await expect(page).toHaveURL(/\/contactos\/nuevo$/); // no navegó, no se creó nada
 });
+
+// MIS-252: Carlos edita nombre/teléfono/email/canal de un contacto ya
+// creado, y confirma que dejar email/canal en blanco los borra de verdad
+// (no solo los deja con el valor viejo) — el caso concreto que ejercita
+// la semántica de ctx.db.patch + undefined explícito documentada en
+// convex/contacts.ts::updateContact.
+test("Carlos edita datos de un contacto existente", async ({ page, context }) => {
+  const client = convexClient();
+  const token = await sessionTokenFrom(context);
+  const originalName = uniqueContactName("EditarOriginal");
+  const created = await client.mutation(api.contacts.createContact, {
+    token,
+    name: originalName,
+    phone: uniquePhone(),
+    email: "original@example.com",
+    channel: "web",
+  });
+  if (!created.success) throw new Error("setup failed");
+
+  await page.goto(`/contactos/${created.id}`);
+  await page.getByRole("button", { name: "Editar datos" }).click();
+  const dialog = page.getByRole("dialog", { name: "Editar datos" });
+
+  const newName = uniqueContactName("EditarNuevo");
+  const newPhone = uniquePhone();
+  await dialog.getByLabel("Nombre completo").fill(newName);
+  await dialog.getByLabel("Teléfono / WhatsApp").fill(newPhone);
+  // Vaciar email y volver el canal a "Sin canal" — ambos tenían valor al
+  // crear el contacto, así que esto ejercita el borrado explícito, no
+  // solo dejar campos vacíos que nunca tuvieron valor.
+  await dialog.getByLabel("Email (opcional)").fill("");
+  await dialog.getByLabel("Canal de captación (opcional)").selectOption("");
+  await dialog.getByRole("button", { name: "Guardar" }).click();
+  await expect(dialog).toBeHidden();
+
+  await expect(page.getByRole("heading", { name: newName })).toBeVisible();
+  await expect(page.getByText(newPhone)).toBeVisible();
+  await expect(page.getByText("original@example.com")).toHaveCount(0);
+  await expect(page.getByText(/Canal:/)).toHaveCount(0);
+
+  // Confirma en la lista también (AC: "se reflejan... en la lista de
+  // contactos"), sin ningún cambio en listContacts/ContactList.
+  await page.goto("/contactos");
+  await expect(page.getByText(newName)).toBeVisible();
+  await expect(page.getByText(originalName)).toHaveCount(0);
+});
