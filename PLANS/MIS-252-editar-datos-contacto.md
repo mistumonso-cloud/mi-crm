@@ -1,6 +1,6 @@
 # MIS-252 — Editar datos del contacto (nombre, teléfono, email, canal)
 
-> **Estado**: Plan y código con GO condicionado de auditoría (2026-07-23). Instalado en la rama `feature/mis-252-editar-datos-contacto` (build/lint/tsc/e2e en verde, ver `CODIGO/MIS-252-editar-datos-contacto/NOTES.md`). Pendiente: PR a `main` y, tras fusionar, `npx convex deploy` a producción.
+> **Estado**: **Instalado en producción**. PR #21 fusionado a `main` (2026-07-23), `npx convex deploy` a `greedy-tapir-20` completado el mismo día. Ver PR de la rama `feature/mis-252-editar-datos-contacto`.
 
 ## Contexto
 
