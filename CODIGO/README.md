@@ -6,7 +6,7 @@ Código generado a partir de los planes de `PLANS/`, uno por tarea de Linear, li
 |---|---|---|---|
 | [MIS-7](https://linear.app/mistu-monso/issue/MIS-7) | — (instalado en `src/`/`convex/`, ver PR) | [PLANS/MIS-7-autenticacion-roles.md](../PLANS/MIS-7-autenticacion-roles.md) | **Instalado** |
 | [MIS-18](https://linear.app/mistu-monso/issue/MIS-18) | — (instalado en `src/`, ver PR) | [PLANS/MIS-18-navegacion-principal.md](../PLANS/MIS-18-navegacion-principal.md) | **Instalado** |
-| [MIS-8](https://linear.app/mistu-monso/issue/MIS-8) | — (instalado en `src/`/`convex/`, ver PR) | [PLANS/MIS-8-anadir-contacto.md](../PLANS/MIS-8-anadir-contacto.md) | **Instalado** |
+| [MIS-8](https://linear.app/mistu-monso/issue/MIS-8) | [MIS-8-anadir-contacto/CODIGO-COMPLETO.md](./MIS-8-anadir-contacto/CODIGO-COMPLETO.md) | [PLANS/MIS-8-anadir-contacto.md](../PLANS/MIS-8-anadir-contacto.md) | **Instalado en la rama `feature/mis-8-anadir-contacto` (v3, reapertura) — GO condicionado de auditoría de código, pendiente de PR/fusión** |
 | [MIS-9](https://linear.app/mistu-monso/issue/MIS-9) | — (instalado en `src/`/`convex/`, ver PR) | [PLANS/MIS-9-lista-contactos.md](../PLANS/MIS-9-lista-contactos.md) | **Instalado** |
 | [MIS-10](https://linear.app/mistu-monso/issue/MIS-10) | — (instalado en `src/`/`convex/`, ver PR) | [PLANS/MIS-10-ficha-contacto.md](../PLANS/MIS-10-ficha-contacto.md) | **Instalado** |
 | [MIS-11](https://linear.app/mistu-monso/issue/MIS-11) | — (instalado en `src/`/`convex/`, ver PR) | [PLANS/MIS-11-notas-conversacion.md](../PLANS/MIS-11-notas-conversacion.md) | **Instalado** |

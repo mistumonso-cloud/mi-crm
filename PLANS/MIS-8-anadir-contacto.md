@@ -1,8 +1,135 @@
 # MIS-8 — Pantalla: Añadir contacto (formulario rápido)
 
-> **Estado**: Plan v2, respuesta a auditoría (NO-GO en v1). Aún no hay código en `CODIGO/MIS-8-anadir-contacto/`.
+> **Estado**: v2 instalado en producción. **Reabierto en Linear el 2026-07-23** — plan v3 (sección "Reapertura" más abajo) con GO condicionado de auditoría (2026-07-23) y código v3 con GO condicionado de auditoría de código (2026-07-23), instalado en la rama `feature/mis-8-anadir-contacto` (build/lint/tsc/e2e en verde, ver `CODIGO/MIS-8-anadir-contacto/NOTES.md`). Pendiente: PR a `main` y, tras fusionar, `npx convex deploy` a producción.
 
-## Contexto
+## Reapertura (jul 2026) — v3: añadir Email y Canal de captación
+
+El alcance del MVP se amplía: Linear reabrió el ticket para pedir un campo opcional **Email** y un selector opcional **Canal de captación** (Instagram · web · llamada · WhatsApp · referido) en el formulario de alta, sin romper el alta en <30s, persistiendo ambos en el contacto.
+
+### Discrepancia ticket vs. estado real del código (verificado leyendo el repo)
+
+El ticket dice "el modelo ya contempla email y canal". Comprobado en `convex/schema.ts` y `convex/contacts.ts` (estado actual, tras v2 + MIS-9/10/14/15/17):
+
+| Campo | Estado real |
+|---|---|
+| `email` | Ya existe en `contacts` (`v.optional(v.string())`) desde v2, y `getContact` ya lo devuelve. **Pero ninguna mutation lo escribe nunca** — `createContact` no lo acepta como argumento, así que hoy siempre es `undefined`. `ContactDetailView.tsx` ya lo renderiza condicionalmente (icono + `mailto:`) desde MIS-10, sin cambios necesarios ahí. |
+| `channel` (canal de captación) | **No existe** en el schema, en ningún validator, ni en ninguna pantalla. Hay que crearlo desde cero. |
+
+Para email "falta un punto de captura" (tal como dice el propio ticket); para canal falta también el modelo. Se resuelve todo en este plan v3.
+
+### 1. `convex/schema.ts` — nuevo campo `channel`
+
+```ts
+channel: v.optional(
+  v.union(
+    v.literal("instagram"),
+    v.literal("web"),
+    v.literal("llamada"),
+    v.literal("whatsapp"),
+    v.literal("referido"),
+  ),
+),
+```
+Añadido a la tabla `contacts`, junto a `email`. `email` no cambia (ya es correcto).
+
+### 2. `src/lib/contacts/channel.ts` (archivo nuevo)
+
+Mismo patrón que `src/lib/notes/types.ts` (`NOTE_TYPES` / `NOTE_TYPE_OPTIONS`): claves estables en inglés/código, etiqueta en español, sin acoplarse al schema de Convex (duplicado deliberado, mismo criterio ya aceptado en el repo).
+
+```ts
+export const CONTACT_CHANNELS = {
+  instagram: { label: "Instagram" },
+  web: { label: "Web" },
+  llamada: { label: "Llamada" },
+  whatsapp: { label: "WhatsApp" },
+  referido: { label: "Referido" },
+} as const;
+
+export type ContactChannel = keyof typeof CONTACT_CHANNELS;
+
+export const CONTACT_CHANNEL_OPTIONS: Array<{ value: ContactChannel; label: string }> = (
+  Object.keys(CONTACT_CHANNELS) as ContactChannel[]
+).map((value) => ({ value, label: CONTACT_CHANNELS[value].label }));
+```
+
+Se usa para las `options` del `<Select>` del formulario, para validar en la Server Action (`Object.prototype.hasOwnProperty.call`, mismo patrón ya usado y auditado en `addNoteAction`/`NOTE_TYPES` — no `in`, por la lección ya documentada sobre la cadena de prototipos), y más adelante para mostrar la etiqueta en la ficha.
+
+### 3. `convex/contacts.ts`
+
+**`createContact`**: añade `email` y `channel` a los args y al insert.
+
+- `contactChannelValidator` (nuevo, duplicado del schema a propósito — mismo criterio que `contactStatusValidator`): `v.union(v.literal("instagram"), v.literal("web"), v.literal("llamada"), v.literal("whatsapp"), v.literal("referido"))`. Se usa directamente como tipo del argumento `channel` (igual que `status: contactStatusValidator` en `changeContactStatus`) — Convex rechaza cualquier valor fuera de los 5 literales en la capa de validación de argumentos, sin necesitar un workaround tipo `v.string()` + normalización (ese workaround era específico de IDs de formato libre en la URL, no aplica aquí: el canal siempre llega de un `<select>` cerrado).
+- `email`: `v.optional(v.string())`. Validación: `trim()` + tope `EMAIL_MAX = 254` (límite convencional de longitud total de una dirección de email). Sin regex de formato server-side — mismo nivel de validación que el resto de campos opcionales de texto (`initialNote`); el formato lo cubre gratis `type="email"` en el cliente (ver más abajo).
+- Inserta condicionalmente igual que `initialNote` hoy: `...(emailTrimmed ? { email: emailTrimmed } : {})`, `...(args.channel ? { channel: args.channel } : {})`.
+- `returns.field` (unión de error): añade `v.literal("email")`.
+
+**`getContact`**: añade `channel: v.optional(contactChannelValidator)` al `returns` y al objeto devuelto (`channel: contact.channel`). `email` ya estaba.
+
+### 4. `src/lib/contacts/actions.ts` — `createContactAction`
+
+- Lee `email` (trim) y `channel` de `formData`.
+- `channel`: si viene no-vacío, valida con `Object.prototype.hasOwnProperty.call(CONTACT_CHANNELS, channelRaw)`; si no es válido, `{ error: "Canal inválido", field: "channel" }` (mismo patrón que la validación de `type` en `addNoteAction`). Cadena vacía → `undefined` (nada seleccionado, campo opcional).
+- `email`: cadena vacía tras `trim()` → `undefined`, igual que `initialNote`.
+- `CreateContactState.field` amplía la unión a `"name" | "phone" | "initialNote" | "email" | "channel"`.
+- Pasa `email` y `channel` a `fetchMutation(api.contacts.createContact, {...})`.
+
+### 5. `NewContactForm.tsx`
+
+Añade, entre Teléfono y Notas (mismo orden que describe el ticket):
+
+- `Input` Email: `type="email"`, `name="email"`, opcional (sin `required`), `maxLength={254}`, `autoComplete="email"`, label `Email (opcional)` (mismo estilo de-enfatizado que ya usa el label de Notas), `error` ligado a `state?.field === "email"`. `type="email"` da validación de formato nativa del navegador gratis, sin añadir regex al cliente ni al servidor.
+- `Select` Canal de captación (`@/components/ui/forms/Select`, ya usado igual en `AddNoteForm.tsx` dentro de un `<form action={formAction}>` sin estado de React — uncontrolled, `name="channel"`): `options={CONTACT_CHANNEL_OPTIONS}` con una opción placeholder adicional al principio (`{ value: "", label: "Selecciona un canal (opcional)" }`), `defaultValue=""`, label `Canal de captación (opcional)`.
+
+No se toca `autoFocus` (sigue en Nombre) ni la validación `required` de Nombre/Teléfono — los campos nuevos son puramente aditivos y opcionales, así que el flujo de <30s no cambia.
+
+### 6. `ContactDetailView.tsx` — mostrar el canal (evita campo "huérfano")
+
+El propio repo tiene precedente explícito de NO añadir un campo al contrato de `getContact` si no tiene consumidor (ver comentario sobre `company` en `contacts.ts`, decisión de la auditoría de MIS-10). Para no repetir el problema en sentido inverso (capturar `channel` y no mostrarlo nunca), se añade la línea mínima:
+
+```tsx
+<span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
+  Responsable: {contact.responsibleName}
+  {contact.channel && ` · Canal: ${CONTACT_CHANNELS[contact.channel].label}`}
+</span>
+```
+
+(mismo `<span>` que ya muestra "Responsable", solo se le añade el canal cuando existe — sin icono nuevo, sin nueva Card). `email` no necesita cambios aquí: ya se renderiza condicionalmente desde MIS-10.
+
+### Fuera de alcance (explícito)
+
+- **MIS-255** (aviso de duplicado al crear) y **MIS-252** (editar datos del contacto) — tickets relacionados pero no planificados, no se tocan.
+- `listContacts` / `ContactList.tsx` (MIS-9, ya auditado e instalado) — no se añade email/canal a la lista ni a la búsqueda; el ticket no lo pide.
+- Sin nuevo test e2e automatizado dedicado: los tests existentes (`full-flow.spec.ts`, etc.) solo rellenan Nombre/Teléfono vía `getByLabel` y no aseguran número total de campos, así que campos nuevos opcionales no deberían romperlos. Se verifica manualmente + se corre la suite existente para confirmar que no hay regresión.
+
+### Verificación end-to-end (v3)
+
+1. Alta solo con Nombre+Teléfono → sigue guardando en <30s, sin fricción por los campos nuevos.
+2. Alta con Email inválido (sin `@`) → el navegador bloquea el submit (validación nativa `type="email"`).
+3. Alta con Email y Canal rellenos → `npx convex data contacts` confirma ambos campos guardados.
+4. Ficha del contacto recién creado → email visible como enlace `mailto:` (ya existente), canal visible en la línea "Responsable: ... · Canal: ...".
+5. Alta sin Email ni Canal → ficha no muestra ni el enlace de email ni "· Canal: ...".
+6. POST manipulado con `channel` fuera del enum → Server Action lo rechaza (`"Canal inválido"`) antes de llegar a Convex.
+7. `npx playwright test` (suite completa) sigue en verde.
+8. `npm run build` y `npm run lint` limpios.
+
+### Archivos afectados (v3, al codificar, tras GO)
+
+```
+convex/schema.ts                          EDITAR — + channel
+convex/contacts.ts                        EDITAR — createContact (+ email, channel), getContact (+ channel)
+
+src/lib/contacts/channel.ts               NUEVO — CONTACT_CHANNELS, CONTACT_CHANNEL_OPTIONS
+src/lib/contacts/actions.ts               EDITAR — createContactAction (+ email, channel)
+
+src/app/(app)/contactos/nuevo/NewContactForm.tsx     EDITAR — + Input Email, + Select Canal
+src/app/(app)/contactos/[id]/ContactDetailView.tsx   EDITAR — muestra canal en línea "Responsable"
+```
+
+No se toca: `convex/lib/authz.ts`, `src/proxy.ts`, guard de rol de `nuevo/page.tsx` (sigue igual, `rep` únicamente), `ContactList.tsx`/`listContacts` (MIS-9), nada de MIS-252/MIS-255.
+
+---
+
+## Contexto (v2, instalado — histórico)
 
 Siguiente tarea tras **MIS-7** (auth, instalado) y **MIS-18** (navegación, instalado) — ver `PLANS/MIS-7-autenticacion-roles.md` y `PLANS/MIS-18-navegacion-principal.md`. MIS-18 ya dejó el terreno preparado: `AddContactFab` enlaza a `/contactos/nuevo` (placeholder de MIS-18, fuera de `(with-nav)`, sin barra/FAB — este plan lo reemplaza); `proxy.ts` ya cubre `/contactos/:path*`.
 
