@@ -17,18 +17,20 @@ import { ScheduleReminderForm } from "./ScheduleReminderForm";
 import { CompleteReminderButton } from "@/components/crm/CompleteReminderButton";
 import { ChangeStatusForm } from "./ChangeStatusForm";
 import { CloseSaleForm } from "./CloseSaleForm";
+import { EditContactForm } from "./EditContactForm";
 
 type Contact = NonNullable<FunctionReturnType<typeof api.contacts.getContact>>;
 type Notes = FunctionReturnType<typeof api.notes.listNotes>;
 type Reminders = FunctionReturnType<typeof api.reminders.listRemindersForContact>;
 type StatusChanges = FunctionReturnType<typeof api.contacts.listStatusChanges>;
 type SaleClosures = FunctionReturnType<typeof api.sales.listSaleClosures>;
-type SheetKind = "note" | "status" | "schedule" | "close" | null;
+type SheetKind = "note" | "status" | "schedule" | "close" | "edit" | null;
 
-const SHEET_TITLES: Record<"note" | "status" | "close", string> = {
+const SHEET_TITLES: Record<"note" | "status" | "close" | "edit", string> = {
   note: "Nueva nota",
   status: "Cambiar estado",
   close: "Cerrar venta",
+  edit: "Editar datos",
 };
 
 // "schedule" tiene título dinámico (Programar vs. Reprogramar) según si ya
@@ -174,7 +176,11 @@ export function ContactDetailView({
           ilegibles — hallazgo mayor de la auditoría de código v1 (MIS-10).
           Con flex-basis de 130px, 2 caben por fila y el tercero baja a una
           segunda fila y se estira a todo el ancho, sin overflow horizontal
-          en ningún tamaño. */}
+          en ningún tamaño. Re-verificado en MIS-252 al añadir un 4º botón
+          ("Editar datos"): a 320px de ancho (menos 2×20px de padding = 280px
+          disponibles), 2 botones de 130px + 8px de gap = 268px caben por
+          fila — con 4 botones se envuelven en 2 filas de 2, sin ninguno
+          huérfano ni overflow; no hizo falta tocar flex-basis ni flexWrap. */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
         <Button variant="secondary" size="sm" style={{ flex: "1 1 130px" }} onClick={() => setSheet("note")}>
           Añadir nota
@@ -204,6 +210,16 @@ export function ContactDetailView({
         {canChangeStatus && !isClosed && (
           <Button variant="primary" size="sm" style={{ flex: "1 1 130px" }} onClick={() => setSheet("close")}>
             Cerrar venta
+          </Button>
+        )}
+        {/* MIS-252: mismo gating que "Cambiar estado" (canChangeStatus,
+            sin !isClosed) — Carlos puede corregir nombre/teléfono/email/
+            canal de un contacto ya cerrado (won/lost) en cualquier
+            momento; el AC no condiciona esta acción al estado del
+            pipeline, a diferencia de "Cerrar venta". */}
+        {canChangeStatus && (
+          <Button variant="secondary" size="sm" style={{ flex: "1 1 130px" }} onClick={() => setSheet("edit")}>
+            Editar datos
           </Button>
         )}
       </div>
@@ -275,6 +291,15 @@ export function ContactDetailView({
           <ChangeStatusForm contactId={contact._id} currentStatus={contact.status} onDone={() => setSheet(null)} />
         ) : sheet === "close" ? (
           <CloseSaleForm contactId={contact._id} onDone={() => setSheet(null)} />
+        ) : sheet === "edit" ? (
+          <EditContactForm
+            contactId={contact._id}
+            initialName={contact.name}
+            initialPhone={contact.phone}
+            initialEmail={contact.email}
+            initialChannel={contact.channel}
+            onDone={() => setSheet(null)}
+          />
         ) : (
           <>
             <p style={{ fontSize: 14, color: "var(--text-secondary)", marginBottom: 16 }}>
