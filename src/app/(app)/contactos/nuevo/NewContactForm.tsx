@@ -3,6 +3,8 @@
 import { useActionState } from "react";
 import { Button } from "@/components/ui/core/Button";
 import { Input } from "@/components/ui/forms/Input";
+import { Select } from "@/components/ui/forms/Select";
+import { CONTACT_CHANNEL_OPTIONS } from "@/lib/contacts/channel";
 import { createContactAction, type CreateContactState } from "@/lib/contacts/actions";
 
 const initialState: CreateContactState = undefined;
@@ -40,6 +42,36 @@ export function NewContactForm() {
         disabled={isPending}
         error={state?.field === "phone" ? state.error : null}
       />
+      <Input
+        label={
+          <>
+            Email <span style={{ color: "var(--text-tertiary)", fontWeight: 400 }}>(opcional)</span>
+          </>
+        }
+        name="email"
+        type="email"
+        placeholder="correo@ejemplo.com"
+        autoComplete="email"
+        maxLength={254}
+        disabled={isPending}
+        error={state?.field === "email" ? state.error : null}
+      />
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <Select
+          label={
+            <>
+              Canal de captación <span style={{ color: "var(--text-tertiary)", fontWeight: 400 }}>(opcional)</span>
+            </>
+          }
+          name="channel"
+          options={[{ value: "", label: "Selecciona un canal (opcional)" }, ...CONTACT_CHANNEL_OPTIONS]}
+          defaultValue=""
+          disabled={isPending}
+        />
+        {state?.field === "channel" && (
+          <span style={{ fontSize: 12, color: "var(--color-danger-fg)" }}>{state.error}</span>
+        )}
+      </div>
       <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>
           Notas iniciales <span style={{ color: "var(--text-tertiary)", fontWeight: 400 }}>(opcional)</span>

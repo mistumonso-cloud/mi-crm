@@ -7,8 +7,11 @@ import { fetchMutation } from "convex/nextjs";
 import { api } from "../../../convex/_generated/api";
 import { readSessionToken } from "@/lib/auth/cookie";
 import { SELECTABLE_STATUSES } from "@/lib/contacts/status";
+import { CONTACT_CHANNELS, type ContactChannel } from "@/lib/contacts/channel";
 
-export type CreateContactState = { error: string; field?: "name" | "phone" | "initialNote" } | undefined;
+export type CreateContactState =
+  | { error: string; field?: "name" | "phone" | "email" | "channel" | "initialNote" }
+  | undefined;
 
 export async function createContactAction(
   _prevState: CreateContactState,
@@ -19,6 +22,23 @@ export async function createContactAction(
 
   const name = String(formData.get("name") ?? "");
   const phone = String(formData.get("phone") ?? "");
+  const emailRaw = String(formData.get("email") ?? "").trim();
+
+  // Validado contra el enum antes de llamar a Convex (mismo motivo y mismo
+  // patrón que la validación de "type" en addNoteAction): un POST manipulado
+  // con un channel fuera del enum no debe llegar a la mutation y disparar un
+  // error de validación de argumentos de Convex sin manejar.
+  // Object.prototype.hasOwnProperty.call, no el operador `in` — `in` acepta
+  // también claves heredadas de la cadena de prototipos (p.ej. "toString").
+  const channelRaw = String(formData.get("channel") ?? "");
+  let channel: ContactChannel | undefined;
+  if (channelRaw) {
+    if (!Object.prototype.hasOwnProperty.call(CONTACT_CHANNELS, channelRaw)) {
+      return { error: "Canal inválido", field: "channel" };
+    }
+    channel = channelRaw as ContactChannel;
+  }
+
   const initialNoteRaw = String(formData.get("initialNote") ?? "").trim();
 
   let result;
@@ -27,6 +47,8 @@ export async function createContactAction(
       token,
       name,
       phone,
+      email: emailRaw || undefined,
+      channel,
       initialNote: initialNoteRaw || undefined,
     });
   } catch (err) {

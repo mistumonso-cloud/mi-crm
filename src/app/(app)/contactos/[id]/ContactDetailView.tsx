@@ -9,6 +9,7 @@ import { Avatar } from "@/components/ui/core/Avatar";
 import { StatusBadge, PIPELINE_STATES } from "@/components/ui/feedback/StatusBadge";
 import { BottomSheet } from "@/components/ui/overlays/BottomSheet";
 import { formatDateTime, formatDate, formatCurrencyCents } from "@/lib/contacts/format";
+import { CONTACT_CHANNELS } from "@/lib/contacts/channel";
 import { buildHistory } from "@/lib/notes/history";
 import { NOTE_TYPES } from "@/lib/notes/types";
 import { AddNoteForm } from "./AddNoteForm";
@@ -83,6 +84,7 @@ export function ContactDetailView({
             <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>{contact.name}</h1>
             <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
               Responsable: {contact.responsibleName}
+              {contact.channel && ` · Canal: ${CONTACT_CHANNELS[contact.channel].label}`}
             </span>
           </div>
           <StatusBadge state={contact.status} />

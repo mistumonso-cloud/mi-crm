@@ -12,6 +12,24 @@ const contactStatusValidator = v.union(
   v.literal("inactive"),
 );
 
+// MIS-8 (reapertura jul 2026) — duplicado de v.union en convex/schema.ts a
+// propósito, mismo criterio que contactStatusValidator arriba: sin
+// validador compartido entre convex/ y src/. Se usa directamente como tipo
+// del argumento `channel` (igual que status: contactStatusValidator en
+// changeContactStatus) — Convex rechaza en la capa de validación de
+// argumentos cualquier valor fuera de los 5 literales, sin necesitar un
+// workaround tipo v.string() + normalizeId (ese workaround es específico de
+// IDs de formato libre que llegan por la URL; channel siempre llega de un
+// <select> cerrado, ya validado también en createContactAction antes de
+// invocar esta mutation).
+const contactChannelValidator = v.union(
+  v.literal("instagram"),
+  v.literal("web"),
+  v.literal("llamada"),
+  v.literal("whatsapp"),
+  v.literal("referido"),
+);
+
 // Subconjunto de contactStatusValidator seleccionable desde "Cambiar
 // estado" (MIS-14) — exactamente los 6 estados del AC del ticket en
 // Linear. "inactive" existe en el schema desde MIS-9 pero ningún ticket
@@ -25,12 +43,19 @@ const CHANGEABLE_STATUSES = ["lead", "talking", "proposal", "negotiating", "won"
 const NAME_MAX = 120;
 const PHONE_MAX = 40;
 const NOTE_MAX = 2000;
+// Límite convencional de longitud total de una dirección de email (RFC
+// 5321). Sin regex de formato server-side — mismo nivel de validación que
+// el resto de campos opcionales de texto (initialNote); el formato lo
+// cubre gratis type="email" en el cliente (NewContactForm.tsx).
+const EMAIL_MAX = 254;
 
 export const createContact = mutation({
   args: {
     token: v.string(),
     name: v.string(),
     phone: v.string(),
+    email: v.optional(v.string()),
+    channel: v.optional(contactChannelValidator),
     initialNote: v.optional(v.string()),
   },
   returns: v.union(
@@ -38,7 +63,9 @@ export const createContact = mutation({
     v.object({
       success: v.literal(false),
       error: v.string(),
-      field: v.optional(v.union(v.literal("name"), v.literal("phone"), v.literal("initialNote"))),
+      field: v.optional(
+        v.union(v.literal("name"), v.literal("phone"), v.literal("email"), v.literal("initialNote")),
+      ),
     }),
   ),
   handler: async (ctx, args) => {
@@ -72,6 +99,15 @@ export const createContact = mutation({
       };
     }
 
+    const emailTrimmed = args.email?.trim();
+    if (emailTrimmed && emailTrimmed.length > EMAIL_MAX) {
+      return {
+        success: false as const,
+        error: `El email no puede superar ${EMAIL_MAX} caracteres`,
+        field: "email" as const,
+      };
+    }
+
     const initialNoteTrimmed = args.initialNote?.trim();
     if (initialNoteTrimmed && initialNoteTrimmed.length > NOTE_MAX) {
       return {
@@ -86,6 +122,8 @@ export const createContact = mutation({
       phone,
       status: "lead", // estado inicial fijo por AC, no un default arbitrario
       createdBy: user.id,
+      ...(emailTrimmed ? { email: emailTrimmed } : {}),
+      ...(args.channel ? { channel: args.channel } : {}),
       ...(initialNoteTrimmed ? { initialNote: initialNoteTrimmed } : {}),
     });
     return { success: true as const, id };
@@ -106,6 +144,7 @@ export const getContact = query({
       name: v.string(),
       phone: v.optional(v.string()),
       email: v.optional(v.string()),
+      channel: v.optional(contactChannelValidator),
       status: contactStatusValidator,
       initialNote: v.optional(v.string()),
       _creationTime: v.number(),
@@ -133,6 +172,7 @@ export const getContact = query({
       name: contact.name,
       phone: contact.phone,
       email: contact.email,
+      channel: contact.channel,
       status: contact.status,
       initialNote: contact.initialNote,
       _creationTime: contact._creationTime,

@@ -7,6 +7,18 @@ export default defineSchema({
     email: v.optional(v.string()),
     phone: v.optional(v.string()),
     company: v.optional(v.string()),
+    // Canal de captación (MIS-8, reapertura jul 2026) — de dónde vino el
+    // lead. Enum cerrado de 5 valores fijos por el AC del ticket, no texto
+    // libre: siempre llega de un <select>, nunca de un input de usuario.
+    channel: v.optional(
+      v.union(
+        v.literal("instagram"),
+        v.literal("web"),
+        v.literal("llamada"),
+        v.literal("whatsapp"),
+        v.literal("referido"),
+      ),
+    ),
     // Nota libre capturada en el alta rápida (MIS-8). MIS-11 añadió una tabla
     // `notes` dedicada (autor/fecha/tipo/histórico) para notas nuevas a
     // partir de esa fecha — decisión explícita: este valor NO se migra, se
