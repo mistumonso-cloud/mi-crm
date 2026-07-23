@@ -1,6 +1,6 @@
 # MIS-8 — Pantalla: Añadir contacto (formulario rápido)
 
-> **Estado**: v2 instalado en producción. **Reabierto en Linear el 2026-07-23** — plan v3 (sección "Reapertura" más abajo) con GO condicionado de auditoría (2026-07-23) y código v3 con GO condicionado de auditoría de código (2026-07-23), instalado en la rama `feature/mis-8-anadir-contacto` (build/lint/tsc/e2e en verde, ver `CODIGO/MIS-8-anadir-contacto/NOTES.md`). Pendiente: PR a `main` y, tras fusionar, `npx convex deploy` a producción.
+> **Estado**: **Instalado en producción** (v3, reapertura jul 2026 — Email + Canal de captación). PR #19 fusionado a `main` (2026-07-23), `npx convex deploy` a `greedy-tapir-20` completado el mismo día. Ver PR de la rama `feature/mis-8-anadir-contacto`.
 
 ## Reapertura (jul 2026) — v3: añadir Email y Canal de captación
 
