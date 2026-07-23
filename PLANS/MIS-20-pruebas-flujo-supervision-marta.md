@@ -10,6 +10,19 @@
 | Media | El plan podía dar la impresión de "solo lectura absoluta" para Marta, cuando `addNote`/`scheduleReminder`/`completeReminder` usan `requireUser` (ambos roles), no `requireRole`. | El spec de gating afirma expresamente que "Añadir nota"/"Programar seguimiento"/"Marcar hecho" siguen visibles y funcionales para Marta — ver decisión 9 más abajo. |
 | Baja | `carlosTokenFromDisk()` debía validar explícitamente que el JSON leído contiene una cookie `session` y fallar con error claro si no. | Ya estaba así de diseñado; queda explícito como decisión 3 más abajo, no solo implícito en el código. |
 
+## Respuesta a la auditoría de código
+
+**Veredicto ronda 1: NO-GO** (2 Majors, 2 sugerencias no bloqueantes). El Major del FAB de la auditoría de plan quedó confirmado como resuelto; los 2 Majors de esta ronda eran huecos de cobertura nuevos en la propia suite (no en el producto).
+
+| # | Auditoría | Resolución |
+|---|---|---|
+| Major 1 | `panel-flow.spec.ts` solo verificaba el delta de `talking` en el pipeline — nunca "Ventas ganadas" (`count` + importe acumulado), pese a ser un AC explícito del ticket (paso 2 y el caso "¿importe acumulado correcto tras varios cierres?"). Una regresión en `getWonSalesSummary`/`formatCurrencyCents`/su render pasaría la suite sin detectarse. | **Corregido**: se siembra una venta ganada de importe conocido (123,45 €) como Carlos, se toma baseline de `getWonSalesSummary` antes de sembrar, y se afirma tanto el texto visible (comparado contra `formatCurrencyCents` real, mismo criterio de auditoría de MIS-19) como el valor exacto de `totalAmountCents`/`count` vía Convex tras sembrar. |
+| Major 2 | El filtro por estado solo se verificaba por inclusión (el contacto `talking` aparece) — nunca por exclusión. Una regresión que dejara de filtrar (mostrando todos los contactos) habría pasado igual. | **Corregido**: se siembra un contacto de control en estado `lead` (sin cambiar su estado) y se afirma que NO aparece en `/contactos?status=talking` — prueba que el filtro excluye genuinamente, no solo que incluye. |
+| Media | `role-gating.spec.ts` solo comprobaba que "Añadir nota"/"Programar seguimiento" eran visibles para Marta, no que fueran realmente funcionales. | Se ejercita de verdad: Marta añade una nota real (rellena y envía el formulario) y se afirma que aparece en el historial de la ficha. |
+| Baja | `realtime-panel.spec.ts` usaba una espera fija de 24s; `expect.poll` sería más robusto ante lentitud del runner. | Sustituido por `expect.poll` (reintentos cada 2s, hasta 30s de margen) — se resuelve en cuanto el refresco real ocurre, sin alargar el caso normal. |
+
+Efecto colateral de los 2 Majors: `panel-flow.spec.ts` pasó de ~12s a ~31-39s (2 contactos y una venta más sembrados, más el bucle de verificación móvil ya existente) — se añadió `test.slow()` a ese test tras superar el timeout por defecto de 30s en una corrida.
+
 ## Texto literal del ticket (Linear, `MIS-20`)
 
 > Verificar que el flujo de Marta funciona correctamente: que puede entrar al CRM, ver el estado real del pipeline y acceder al detalle de cualquier contacto sin necesitar formación ni ayuda de Carlos.
@@ -98,13 +111,15 @@ Verificación de estabilidad: suite completa (`npm run test:e2e`, 14 tests: 2 se
 
 Adicionalmente: `npx tsc --noEmit`, `npm run lint` (0 errores, 1 warning preexistente no relacionado en `Avatar.jsx`, ya presente en `main` antes de este ticket) y `npm run build` — los tres sin errores nuevos.
 
+**Ronda 2 (correcciones de la auditoría de código)**: aplicados los 2 Majors + 2 sugerencias (ver "Respuesta a la auditoría de código" arriba). Sin bugs de aplicación nuevos — ambos Majors eran huecos de cobertura en la suite, no defectos de `src`/`convex`. `panel-flow.spec.ts` superó el timeout por defecto de 30s tras añadir el sembrado de venta + contacto de control (duración real ~31-39s) — corregido con `test.slow()`. Suite completa corrida dos veces seguidas tras el fix, ambas en verde (14/14). `npx tsc --noEmit`, `npm run lint`, `npm run build` re-verificados sin errores nuevos.
+
 ## Verificación
 
 1. **`npx playwright test --list`**: 14 tests listados (2 setups + 5 de `edge-cases.spec.ts` + 1 de `full-flow.spec.ts`, todos bajo `chromium-carlos`; 1 de `panel-flow.spec.ts` + 1 de `realtime-panel.spec.ts` + 4 de `role-gating.spec.ts`, todos bajo `chromium-marta`) — scoping de `testMatch`/`dependencies` confirmado sin cruce entre usuarios.
-2. **Suite E2E completa, en verde, dos veces seguidas** (tras descartar el fallo transitorio de `full-flow.spec.ts` — ver "Hallazgos y correcciones"): 14/14 tests (`npm run test:e2e`).
-3. **`realtime-panel.spec.ts`** corrido dentro de la suite completa (no hizo falta aislarlo aparte: 26-28s por corrida, dentro de lo esperado para `test.slow()` con espera real de 24s).
+2. **Suite E2E completa, en verde, dos veces seguidas tras la ronda 2 de correcciones**: 14/14 tests (`npm run test:e2e`).
+3. **`realtime-panel.spec.ts`** corrido dentro de la suite completa (26-28s por corrida, `expect.poll` en vez de espera fija tras la ronda 2).
 4. **Tipos, lint y build**: `npx tsc --noEmit`, `npm run lint`, `npm run build` — sin errores.
-5. **Los 7 pasos del ticket + verificación móvil**: cubiertos en `panel-flow.spec.ts` (aterriza en Panel, números por delta, filtro, ficha con historial completo, vuelta preservando filtro, sin overflow a 320px).
-6. **Rol y gating**: cubiertos en `role-gating.spec.ts` (FAB ausente, guard de servidor por URL directa, "Añadir nota"/"Programar seguimiento" SÍ disponibles, rechazo real del servidor en los 3 mutations gateados).
-7. **Tiempo real**: cubierto en `realtime-panel.spec.ts` (espera real ~24s, sin `page.reload()`).
+5. **Los 7 pasos del ticket + verificación móvil**: cubiertos en `panel-flow.spec.ts` (aterriza en Panel, números por delta de pipeline Y de ventas ganadas/importe, filtro con inclusión Y exclusión verificadas, ficha con historial completo, vuelta preservando filtro, sin overflow a 320px).
+6. **Rol y gating**: cubiertos en `role-gating.spec.ts` (FAB ausente, guard de servidor por URL directa, "Añadir nota" ejercitada de verdad como Marta —no solo visible—, "Programar seguimiento" visible, rechazo real del servidor en los 3 mutations gateados).
+7. **Tiempo real**: cubierto en `realtime-panel.spec.ts` (espera real con `expect.poll`, sin `page.reload()`).
 8. **CI**: `E2E_MARTA_EMAIL`/`E2E_MARTA_PASSWORD` añadidos al job `e2e` de `.github/workflows/ci.yml`, junto a los 3 secrets de MIS-19 (los 5 siguen sin configurar en GitHub — deuda ya conocida, no nueva de este ticket).

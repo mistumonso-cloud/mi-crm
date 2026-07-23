@@ -52,6 +52,17 @@ test.describe("Marta: gating de rol", () => {
     // bloqueo total que no corresponde al AC ni al comportamiento real.
     await expect(page.getByRole("button", { name: "Añadir nota" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Programar seguimiento" })).toBeVisible();
+
+    // Sugerencia media de la auditoría de código: no basta con que el botón
+    // esté visible — se ejercita de verdad como Marta, para probar que es
+    // realmente funcional para su rol, no solo un botón renderizado y roto.
+    await page.getByRole("button", { name: "Añadir nota" }).click();
+    const dialog = page.getByRole("dialog", { name: "Nueva nota" });
+    await dialog.getByLabel("Tipo de contacto").selectOption("call");
+    await dialog.getByLabel("Resumen").fill("Nota añadida por Marta en verificación de rol");
+    await dialog.getByRole("button", { name: "Guardar" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByText("Nota añadida por Marta en verificación de rol")).toBeVisible();
   });
 
   test("defensa de servidor: createContact/changeContactStatus/closeSale rechazan a Marta con ConvexError(No autorizado)", async ({

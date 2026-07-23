@@ -38,11 +38,15 @@ test.describe("Panel: refresco automático en tiempo real", () => {
       status: "talking",
     });
 
-    // Espera real de pared, deliberada — NO page.reload(). Margen de 24s
-    // sobre el intervalo real de 20s, sin acercarse al siguiente ciclo de
-    // 40s.
-    await page.waitForTimeout(24_000);
-
-    await expect(talkingTile).toContainText(String(before.talking + 1));
+    // Espera real de pared, deliberada — NO page.reload(). expect.poll en
+    // vez de un waitForTimeout fijo (sugerencia baja de la auditoría de
+    // código): reintenta leyendo el texto del tile cada 2s hasta 30s de
+    // margen sobre el intervalo real de 20s — más robusto ante lentitud
+    // ocasional del runner sin alargar el caso normal (se resuelve en
+    // cuanto el próximo router.refresh() automático aplica el cambio,
+    // típicamente ~20-22s, en vez de esperar siempre el máximo).
+    await expect
+      .poll(async () => (await talkingTile.textContent()) ?? "", { timeout: 30_000, intervals: [2_000] })
+      .toContain(String(before.talking + 1));
   });
 });
