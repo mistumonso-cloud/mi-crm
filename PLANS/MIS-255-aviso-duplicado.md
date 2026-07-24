@@ -1,6 +1,6 @@
 # MIS-255 — Aviso de contacto duplicado al crear
 
-> **Estado**: Código implementado, verificado y con **auditoría de plan GO** (sin blockers ni majors). **Pendiente de auditoría de código y de PR/merge/deploy**, a la espera de autorización explícita para hacer push. Rama `feature/mis-255-aviso-duplicado`.
+> **Estado**: Código implementado, verificado y con **auditoría de plan y de código GO** (sin blockers ni majors). **Pendiente de PR/merge**, a la espera de autorización explícita para hacer push. Rama `feature/mis-255-aviso-duplicado`.
 
 ## Contexto
 
@@ -414,4 +414,6 @@ Evidencia real de verificación:
    - Contacto existente con teléfono `+34 600 XXX XXX` → en "Añadir contacto", escribir el mismo número sin prefijo y con guiones (`600-XXX-XXX`) → aparece el aviso «Ya existe un contacto con este teléfono: [nombre]» con el enlace correcto (`href="/contactos/{id}"`) → **crear igualmente** (Guardar) → el contacto nuevo se crea sin bloqueo, redirige a su propia ficha.
    - Teléfono sin coincidencia → sin aviso. Teléfono coincidente → aviso. Borrar el campo → el aviso desaparece solo (reactividad de `useMemo`, sin recargar).
 
-**Pendiente:** auditoría de código, PR a `main` (sin push todavía, pendiente de autorización explícita del usuario). Este ticket no toca Convex — no requiere `npx convex deploy` tras el merge.
+**Auditoría de código:** GO. Sin blockers ni majors. Sugerencias no bloqueantes adoptadas como follow-up (no en este ticket): e2e dedicado para duplicado con formato distinto/enlace/crear igualmente; si se soportan teléfonos fuera de España, mover `phoneKey` a un ticket aparte con parser real.
+
+**Pendiente:** PR a `main` (sin push todavía, pendiente de autorización explícita del usuario). Este ticket no toca Convex — no requiere `npx convex deploy` tras el merge.
