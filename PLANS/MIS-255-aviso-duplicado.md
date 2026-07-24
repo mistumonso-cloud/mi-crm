@@ -1,6 +1,6 @@
 # MIS-255 — Aviso de contacto duplicado al crear
 
-> **Estado**: Código implementado, verificado y con **auditoría de plan y de código GO** (sin blockers ni majors). **Pendiente de PR/merge**, a la espera de autorización explícita para hacer push. Rama `feature/mis-255-aviso-duplicado`.
+> **Estado**: **Instalado en producción** (no toca Convex, así que "producción" aquí es simplemente el merge a `main` — sin paso de `convex deploy`). PR #27 fusionado a `main` (2026-07-24). Ver PR de la rama `feature/mis-255-aviso-duplicado`.
 
 ## Contexto
 
@@ -416,4 +416,4 @@ Evidencia real de verificación:
 
 **Auditoría de código:** GO. Sin blockers ni majors. Sugerencias no bloqueantes adoptadas como follow-up (no en este ticket): e2e dedicado para duplicado con formato distinto/enlace/crear igualmente; si se soportan teléfonos fuera de España, mover `phoneKey` a un ticket aparte con parser real.
 
-**Pendiente:** PR a `main` (sin push todavía, pendiente de autorización explícita del usuario). Este ticket no toca Convex — no requiere `npx convex deploy` tras el merge.
+**Desplegado:** PR #27 fusionado a `main` (squash merge, 2026-07-24). El check `e2e` de CI falló como es sabido (MIS-258, sin secrets configurados — no bloquea el merge); `build` pasó limpio. Este ticket no toca Convex — no requiere `npx convex deploy`.
