@@ -1,3 +1,85 @@
+# MIS-17 — Código completo (Reapertura v3: el desglose del panel muestra Inactivo en vez de Ganado)
+
+Todos los archivos tocados por esta reapertura, concatenados en un único documento para copiar a auditoría. Cada sección indica la ruta real de destino y si es NUEVO o EDITAR. Ver `PLANS/MIS-17-panel-oportunidades.md` (sección "Reapertura (jul 2026) — v3") para el porqué de cada decisión.
+
+Ya verificado antes de generar este documento: `npx convex dev --once`, `npx tsc --noEmit`, `npm run lint`, `npm run build` limpios; suite Playwright completa 15/15 en verde; 2 comprobaciones manuales de los comportamientos nuevos (desglose muestra Inactivo/no Ganado, tarjeta Inactivo enlaza a lista filtrada y `?status=won` se ignora).
+
+---
+
+## `src/lib/contacts/status.ts` (EDITAR)
+
+```ts
+// Tipo del estado de pipeline de un contacto — mismos 7 literales que
+// contacts.status en convex/schema.ts / contactStatusValidator en
+// convex/contacts.ts. Tipo puro (sin v.union de Convex), duplicado a
+// propósito frente al schema — mismo criterio ya aceptado en el repo (ver
+// contactStatusValidator duplicado en convex/reminders.ts). Existe para
+// tipar código de src/ (incluido src/lib/notes/history.ts) sin acoplar a
+// los tipos generados de Convex.
+export type ContactStatus =
+  | "lead"
+  | "talking"
+  | "proposal"
+  | "negotiating"
+  | "won"
+  | "lost"
+  | "inactive";
+
+// Subconjunto seleccionable desde "Cambiar estado" (MIS-14, reapertura jul
+// 2026): los 6 estados del AC reabierto, de "Lead nuevo" a "Perdido", SIN
+// "Ganado". "Ganado" deja de ser alcanzable por este picker manual a partir
+// de esta reapertura: solo se asigna al cerrar una venta (closeSale en
+// convex/sales.ts, MIS-15) — closeSale nunca consultó esta constante, no le
+// afecta este cambio. "Inactivo" entra a cambio: existe en el schema desde
+// MIS-9, pero hasta esta reapertura ningún código podía asignarlo. v1/v2 de
+// este ticket tenía la combinación inversa exacta — ver
+// PLANS/MIS-14-gestion-estados-contacto.md, sección histórica.
+//
+// No confundir con PIPELINE_SUMMARY_STATUSES, más abajo: consumidor
+// distinto (panel de Marta / filtro de la lista), que conserva a propósito
+// los 6 valores ANTIGUOS.
+//
+// Sin labels propios aquí: los textos vienen siempre de PIPELINE_STATES en
+// StatusBadge.jsx (única fuente de verdad ya usada en
+// ContactList/Pendientes/ficha) — no se duplica texto en este archivo.
+export const SELECTABLE_STATUSES: readonly Exclude<ContactStatus, "won">[] = [
+  "lead",
+  "talking",
+  "proposal",
+  "negotiating",
+  "inactive",
+  "lost",
+];
+
+// Subconjunto usado por el desglose del panel de Marta (MIS-17,
+// panel/page.tsx) y por el filtro ?status= de /contactos (contactos/
+// page.tsx, que valida los deep links que el propio panel genera) — los 6
+// estados "activos canónicos" del AC reabierto de MIS-17 (de "Lead nuevo"
+// a "Perdido", CON "Inactivo", SIN "Ganado"), en la misma forma que
+// devuelve getPipelineSummary en convex/contacts.ts.
+//
+// A partir de esta reapertura de MIS-17 (jul 2026) coincide en valor con
+// SELECTABLE_STATUSES, arriba — por COINCIDENCIA, no por fusión: son
+// conceptos distintos (picker de "Cambiar estado" vs. desglose del panel)
+// que ya divergieron una vez por decisión deliberada de MIS-14 (mientras
+// este archivo seguía sin corregir) y podrían volver a divergir en el
+// futuro. Se mantienen como dos constantes separadas a propósito — ver
+// PLANS/MIS-17-panel-oportunidades.md, sección "Reapertura", decisión 2.
+export const PIPELINE_SUMMARY_STATUSES: readonly Exclude<ContactStatus, "won">[] = [
+  "lead",
+  "talking",
+  "proposal",
+  "negotiating",
+  "inactive",
+  "lost",
+];
+```
+
+---
+
+## `convex/contacts.ts` (EDITAR)
+
+```ts
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireRole, requireUser } from "./lib/authz";
@@ -463,3 +545,227 @@ export const getPipelineSummary = query({
     return summary;
   },
 });
+```
+
+---
+
+## `src/app/(app)/(with-nav)/panel/page.tsx` (EDITAR — solo comentario, sin cambios de JSX)
+
+```tsx
+import Link from "next/link";
+import { fetchQuery } from "convex/nextjs";
+import { api } from "../../../../../convex/_generated/api";
+import { getUser } from "@/lib/auth/dal";
+import { readSessionToken } from "@/lib/auth/cookie";
+import { Badge } from "@/components/ui/feedback/Badge";
+import { Card } from "@/components/ui/core/Card";
+import { StatusBadge } from "@/components/ui/feedback/StatusBadge";
+import { PIPELINE_SUMMARY_STATUSES } from "@/lib/contacts/status";
+import { formatCurrencyCents } from "@/lib/contacts/format";
+import { PanelAutoRefresh } from "./PanelAutoRefresh";
+
+// Sustituye el placeholder de MIS-9/MIS-18 con el panel real de Marta
+// (MIS-17): resumen del pipeline por estado + total de ventas ganadas,
+// cada estado pulsable hacia /contactos?status=<estado>. Accesible también
+// a Carlos desde el ADR de MIS-18 (ambos roles, solo lectura). Ver
+// PLANS/MIS-17-panel-oportunidades.md para el ADR de "tiempo real"
+// (PanelAutoRefresh) y el resto de decisiones.
+//
+// A partir de MIS-14 (reapertura jul 2026), este archivo usa
+// PIPELINE_SUMMARY_STATUSES en vez de SELECTABLE_STATUSES — antes ambas
+// constantes coincidían por casualidad; MIS-14 las diverge (ver
+// src/lib/contacts/status.ts).
+//
+// MIS-17 (reapertura jul 2026): el desglose pasa a mostrar Lead nuevo / En
+// conversación / Propuesta enviada / Negociando / Inactivo / Perdido — sin
+// "Ganado" (se sigue mostrando aparte, en la sección "Ventas ganadas" más
+// abajo). Sin cambios de JSX ni de lógica en este archivo: el `.map()`
+// sobre PIPELINE_SUMMARY_STATUSES y el índice `pipeline[status]` ya eran
+// genéricos; el cambio real vive en la constante y en getPipelineSummary.
+export default async function PanelPage() {
+  const user = await getUser();
+  const token = await readSessionToken(); // getUser() ya garantiza sesión válida aquí
+
+  const [pipeline, wonSales] = await Promise.all([
+    fetchQuery(api.contacts.getPipelineSummary, { token: token! }),
+    fetchQuery(api.sales.getWonSalesSummary, { token: token! }),
+  ]);
+
+  return (
+    <div className="flex flex-1 flex-col" style={{ padding: "16px 20px 24px", gap: 20 }}>
+      <PanelAutoRefresh />
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <Badge tone="accent" style={{ alignSelf: "flex-start" }}>
+          Supervisora
+        </Badge>
+        <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Hola, {user.name}</h1>
+        <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>Estado del negocio de un vistazo.</p>
+      </div>
+
+      <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <h2 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>Pipeline por estado</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          {PIPELINE_SUMMARY_STATUSES.map((status) => (
+            // Sin aria-label manual a propósito (hallazgo real durante la
+            // verificación de MIS-17): StatusBadge.jsx es "use client", así
+            // que PIPELINE_STATES[status].label no se puede leer desde este
+            // Server Component — solo se puede renderizar el componente
+            // <StatusBadge> como referencia cliente, no leer sus datos en el
+            // servidor. El nombre accesible del Link se deriva de su
+            // contenido visible (el número + el texto del badge ya
+            // hidratado), que ya coincide exactamente con lo que se ve en
+            // pantalla — evita además duplicar las etiquetas en un segundo
+            // sitio (PIPELINE_STATES sigue siendo la única fuente).
+            <Link
+              key={status}
+              href={`/contactos?status=${status}`}
+              // minWidth: 0 anula el min-width:auto por defecto de los
+              // grid items — sin esto, CSS Grid ensancha la columna entera
+              // hasta caber la palabra más larga sin partir (p. ej.
+              // "conversación", 12 caracteres, en la columna de "En
+              // conversación"/"Negociando"/"Perdido"), desbordando el grid
+              // completo a 320px aunque whiteSpace:"normal" ya permita
+              // envolver dentro de cada badge individual. Hallazgo real
+              // durante la verificación (Playwright a 320px), no solo
+              // razonado — ver decisión 13 del plan.
+              style={{ textDecoration: "none", color: "inherit", display: "block", minWidth: 0 }}
+            >
+              <Card
+                interactive
+                padding="md"
+                style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}
+              >
+                <span style={{ fontSize: 28, fontWeight: 800, lineHeight: 1, color: "var(--text-primary)" }}>
+                  {pipeline[status]}
+                </span>
+                {/* MIS-17 v2 (corrige M1 de la auditoría de plan): whiteSpace
+                    "normal" + maxWidth 100% anulan el nowrap por defecto de
+                    StatusBadge — "Propuesta enviada" (la etiqueta más larga)
+                    envuelve a 2 líneas en vez de desbordar la tarjeta en
+                    320-375px. boxSizing "border-box" explícito y defensivo:
+                    Tailwind Preflight (src/app/globals.css) ya lo pone
+                    global, pero se fija aquí para no depender de eso. Ver
+                    decisión 13 del plan. */}
+                <StatusBadge
+                  state={status}
+                  style={{
+                    alignSelf: "flex-start",
+                    whiteSpace: "normal",
+                    maxWidth: "100%",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </Card>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <h2 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>Ventas ganadas</h2>
+        <Card padding="md" style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 28, fontWeight: 800, lineHeight: 1, color: "var(--text-primary)" }}>
+              {wonSales.count}
+            </span>
+            <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
+              {wonSales.count === 1 ? "venta cerrada" : "ventas cerradas"}
+            </span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 28, fontWeight: 800, lineHeight: 1, color: "var(--status-won-fg)" }}>
+              {formatCurrencyCents(wonSales.totalAmountCents)}
+            </span>
+            <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>importe total</span>
+          </div>
+        </Card>
+      </section>
+    </div>
+  );
+}
+```
+
+---
+
+## `src/app/(app)/(with-nav)/contactos/page.tsx` (EDITAR — solo comentario, sin cambios de lógica)
+
+```tsx
+import { fetchQuery } from "convex/nextjs";
+import { api } from "../../../../../convex/_generated/api";
+import { getUser } from "@/lib/auth/dal";
+import { readSessionToken } from "@/lib/auth/cookie";
+import { getRequestTime } from "@/lib/request-time";
+import { PIPELINE_SUMMARY_STATUSES } from "@/lib/contacts/status";
+import type { ContactStatus } from "@/lib/contacts/status";
+import { ContactList } from "./ContactList";
+
+// MIS-17: además del filtro de texto ya existente (MIS-9), la lista acepta
+// un filtro de estado inicial vía ?status=<estado> — la forma en que el
+// panel de Marta enlaza a "los contactos en esta fase" (AC: "al pulsar un
+// estado, abre la lista de contactos filtrada por ese estado"). Se valida
+// aquí, en el Server Component, contra PIPELINE_SUMMARY_STATUSES (los
+// mismos 6 estados pulsables del panel) y se entrega a ContactList ya
+// tipado; un ?status= manipulado a mano se ignora silenciosamente, sin
+// error.
+//
+// MIS-14 (reapertura jul 2026): este archivo importaba antes
+// SELECTABLE_STATUSES (el array del picker de "Cambiar estado"), que
+// coincidía con los estados pulsables del panel por casualidad, no por
+// diseño. MIS-14 flipeó SELECTABLE_STATUSES (quita "won", añade
+// "inactive"), así que se cambió aquí a PIPELINE_SUMMARY_STATUSES para no
+// romper el deep link "Ganado" del panel -> /contactos?status=won.
+//
+// MIS-17 (reapertura jul 2026): PIPELINE_SUMMARY_STATUSES se corrige a su
+// vez (quita "won", añade "inactive") — así que a partir de ahora es
+// "?status=inactive" el que funciona como deep link válido desde el
+// panel, y "?status=won" el que se ignora silenciosamente (antes era al
+// revés). Sin cambios de lógica en este archivo: la validación
+// `.includes(...)` ya era genérica sobre la constante.
+export default async function ContactosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string }>;
+}) {
+  const user = await getUser();
+  const token = await readSessionToken();
+  const contacts = await fetchQuery(api.contacts.listContacts, { token: token! });
+  const now = await getRequestTime(); // capturado una vez, pasado como prop — evita mismatch de hidratación
+
+  const { status } = await searchParams;
+  const statusRaw = status ?? "";
+  const initialStatusFilter: ContactStatus | null = PIPELINE_SUMMARY_STATUSES.includes(
+    statusRaw as (typeof PIPELINE_SUMMARY_STATUSES)[number],
+  )
+    ? (statusRaw as (typeof PIPELINE_SUMMARY_STATUSES)[number])
+    : null;
+
+  return (
+    <ContactList
+      // MIS-17 v2 (corrige M2 de la auditoría de plan): key fuerza remount
+      // cuando cambia el filtro resuelto por la URL — necesario porque
+      // BottomNav enlaza a "/contactos" sin query string, y sin esta key
+      // el useState(initialStatusFilter) de ContactList conservaría el
+      // filtro viejo tras ese salto. Ver decisión 14 del plan.
+      key={initialStatusFilter ?? "all"}
+      contacts={contacts}
+      now={now}
+      canCreate={user.role === "rep"}
+      initialStatusFilter={initialStatusFilter}
+    />
+  );
+}
+```
+
+---
+
+## Archivos afectados
+
+| Archivo | Tipo |
+|---|---|
+| `src/lib/contacts/status.ts` | Editar |
+| `convex/contacts.ts` | Editar |
+| `src/app/(app)/(with-nav)/panel/page.tsx` | Editar (solo comentario) |
+| `src/app/(app)/(with-nav)/contactos/page.tsx` | Editar (solo comentario) |
+
+No se toca ningún otro archivo (`ContactList.tsx`, `ChangeStatusForm.tsx`, `convex/sales.ts`, `convex/schema.ts`, ningún test e2e) — ver "Fuera de alcance" en `PLANS/MIS-17-panel-oportunidades.md`.

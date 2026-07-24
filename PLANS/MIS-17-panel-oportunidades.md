@@ -1,4 +1,187 @@
-# MIS-17 — Panel de oportunidades (vista de Marta) (v2)
+# MIS-17 — Panel de oportunidades (vista de Marta) (v3)
+
+> **Estado**: Código de v3 implementado, verificado y con **auditoría de plan y de código GO** (sin blockers ni majors). **Pendiente de PR/merge/deploy**, a la espera de autorización explícita para hacer push. Rama `feature/mis-17-panel-oportunidades` (recreada desde `main` actual — la copia remota anterior estaba obsoleta).
+
+## Reapertura (jul 2026) — v3: el desglose del panel pasa a mostrar Inactivo en vez de Ganado
+
+Linear reabrió MIS-17 porque el desglose "por estado" del panel (instalado en PR #13) usaba el vocabulario viejo del pipeline — 6 tarjetas incluyendo "Ganado", sin "Inactivo" — y dependía de la migración de estados de MIS-14, entonces sin construir. MIS-14 ya está instalada y desplegada a producción (v3, esta misma sesión): `Inactivo` entra al picker manual de "Cambiar estado", `Ganado` sale de él y pasa a asignarse solo vía "Cerrar venta".
+
+Checklist reabierto en Linear (texto literal):
+
+1. El desglose "por estado" debe mostrar los 6 activos canónicos: `Lead nuevo · En conversación · Propuesta enviada · Negociando · Inactivo · Perdido` (en vez de Comprado/Descartado).
+2. "Total de ventas ganadas" (estado `Ganado`) se sigue mostrando aparte, sin cambios.
+3. El filtro al pulsar un estado debe usar los nuevos valores.
+4. Depende de la migración de datos de MIS-14.
+
+### Hallazgo clave (verificado leyendo el código real post-MIS-14)
+
+Cuando se instaló MIS-14, para no romper este panel (que entonces aún usaba el vocabulario viejo) se desacopló deliberadamente una constante nueva, `PIPELINE_SUMMARY_STATUSES` (`src/lib/contacts/status.ts`), separada de la constante del picker de "Cambiar estado" (`SELECTABLE_STATUSES`). Estado actual de ambas:
+
+- `SELECTABLE_STATUSES` (picker manual, ya arreglada por MIS-14) = `[lead, talking, proposal, negotiating, inactive, lost]` — sin `won`.
+- `PIPELINE_SUMMARY_STATUSES` (panel + filtro `/contactos?status=`, todavía sin tocar) = `[lead, talking, proposal, negotiating, won, lost]` — con `won`, sin `inactive`. **Este es exactamente el vocabulario viejo que este checklist pide corregir.**
+- `getPipelineSummary` (`convex/contacts.ts`) devuelve `{lead, talking, proposal, negotiating, won, lost}` (excluye `inactive` del conteo) — mismo desfase.
+
+Es decir: el cambio real de esta reapertura es literalmente el mismo intercambio que ya hizo MIS-14 (`won` sale, `inactive` entra), aplicado ahora a `PIPELINE_SUMMARY_STATUSES` y `getPipelineSummary` en vez de a `SELECTABLE_STATUSES`/`CHANGEABLE_STATUSES`.
+
+### Discrepancia ticket vs. estado real del código
+
+| # checklist | Estado real verificado | Acción en v3 |
+|---|---|---|
+| 1. Desglose con los 6 activos canónicos (Inactivo, sin Ganado) | `PIPELINE_SUMMARY_STATUSES` = `[lead,talking,proposal,negotiating,won,lost]` — el vocabulario viejo exacto. | **Cambio real**: pasa a `[lead,talking,proposal,negotiating,inactive,lost]`. |
+| 2. "Ventas ganadas" sigue aparte, sin cambios | La sección "Ventas ganadas" de `panel/page.tsx` usa `getWonSalesSummary` (`convex/sales.ts`), independiente de `PIPELINE_SUMMARY_STATUSES`/`getPipelineSummary`. | Ninguna. Verificado — no se toca. |
+| 3. El filtro debe usar los nuevos valores | `contactos/page.tsx` ya valida `?status=` contra `PIPELINE_SUMMARY_STATUSES` de forma genérica (`.includes(...)`, sin literal `"won"`/`"inactive"` hardcodeado) — al cambiar la constante, `?status=inactive` pasa a ser válido y `?status=won` deja de serlo, sin tocar ese archivo. | Ninguna de lógica; solo el comentario que documenta el porqué. |
+| 4. Depende de MIS-14 | MIS-14 v3 instalada y desplegada a producción (`greedy-tapir-20`) esta misma sesión. | Ya satisfecha. |
+
+### Decisiones fijadas (v3)
+
+1. **`PIPELINE_SUMMARY_STATUSES`** (`src/lib/contacts/status.ts`): el tipo pasa de `readonly Exclude<ContactStatus, "inactive">[]` a `readonly Exclude<ContactStatus, "won">[]`; valores `[lead, talking, proposal, negotiating, inactive, lost]`.
+
+2. **No se fusiona `PIPELINE_SUMMARY_STATUSES` con `SELECTABLE_STATUSES`** aunque, tras este cambio, ambas constantes vuelvan a tener idéntico valor. Representan conceptos de negocio distintos (picker de cambio manual vs. desglose del panel) que ya divergieron una vez por decisión deliberada de MIS-14 y podrían volver a divergir en el futuro (p. ej. si un ticket futuro decide que el panel debe mostrar 7 estados, o que el picker gane un estado que el panel no muestra). Fusionarlas reintroduciría exactamente el acoplamiento accidental que MIS-14 tuvo que deshacer para no romper este mismo panel. Se mantienen como dos constantes con el mismo valor por coincidencia, no por fusión.
+
+3. **`getPipelineSummary`** (`convex/contacts.ts`): la clave `won` del objeto `returns` se sustituye por `inactive`; el handler excluye `"won"` del conteo en vez de `"inactive"` (`if (c.status !== "won") summary[c.status] += 1`). Mismo patrón exacto que el cambio de `CHANGEABLE_STATUSES` en la reapertura de MIS-14.
+
+4. **`panel/page.tsx` y `contactos/page.tsx`: sin cambios de lógica.** Ambos ya son genéricos sobre `PIPELINE_SUMMARY_STATUSES` — iteran el array e indexan `pipeline[status]`/validan con `.includes(...)`, sin ningún literal `"won"`/`"inactive"` hardcodeado fuera de la propia constante. Solo se actualizan los comentarios que quedarían desactualizados (la nota de `panel/page.tsx` sobre "con Ganado incluido"; la nota de `contactos/page.tsx` sobre qué valor "nunca es destino de enlace válido", que se invierte).
+
+5. **Sin cambios de CSS/overflow.** La etiqueta más larga del pipeline sigue siendo "Propuesta enviada" (18 caracteres); "Inactivo" (8) y "Ganado" (6) no cambian el caso peor ya cubierto por los fixes de `whiteSpace`/`minWidth`/`boxSizing` de la v2 original (decisión 13 de aquella versión, sección histórica más abajo).
+
+6. **Ningún test e2e se modifica.** Verificado por grep: `panel-flow.spec.ts`, `realtime-panel.spec.ts` y `role-gating.spec.ts` usan `talking` como tile de prueba del desglose y `getWonSalesSummary`/`closeSale` (independientes) para "Ventas ganadas" — ninguno referencia la tarjeta "Ganado" del desglose ni destructura `pipeline.won`.
+
+### `src/lib/contacts/status.ts` (EDITAR)
+
+```ts
+// Subconjunto usado por el desglose del panel de Marta (MIS-17,
+// panel/page.tsx) y por el filtro ?status= de /contactos (contactos/
+// page.tsx, que valida los deep links que el propio panel genera) — los 6
+// estados "activos canónicos" del AC reabierto de MIS-17 (de "Lead nuevo"
+// a "Perdido", CON "Inactivo", SIN "Ganado"), en la misma forma que
+// devuelve getPipelineSummary en convex/contacts.ts.
+//
+// A partir de esta reapertura (jul 2026) coincide en valor con
+// SELECTABLE_STATUSES, más arriba — por COINCIDENCIA, no por fusión: son
+// conceptos distintos (picker de "Cambiar estado" vs. desglose del panel)
+// que ya divergieron una vez por decisión deliberada de MIS-14 (mientras
+// este archivo seguía sin corregir) y podrían volver a divergir en el
+// futuro. Se mantienen como dos constantes separadas a propósito — ver
+// PLANS/MIS-17-panel-oportunidades.md, sección "Reapertura", decisión 2.
+export const PIPELINE_SUMMARY_STATUSES: readonly Exclude<ContactStatus, "won">[] = [
+  "lead",
+  "talking",
+  "proposal",
+  "negotiating",
+  "inactive",
+  "lost",
+];
+```
+
+### `convex/contacts.ts` (EDITAR)
+
+```ts
+// MIS-17 (reapertura jul 2026): resumen del pipeline por estado, para las
+// 6 tarjetas del desglose del panel de Marta (AC reabierto: "Lead nuevo ·
+// En conversación · Propuesta enviada · Negociando · Inactivo · Perdido").
+// Mismas 6 claves que PIPELINE_SUMMARY_STATUSES en src/lib/contacts/
+// status.ts — "won" queda fuera a propósito (se muestra aparte, en la
+// sección "Ventas ganadas", vía getWonSalesSummary en convex/sales.ts).
+// Antes de esta reapertura, este objeto excluía "inactive" e incluía
+// "won" — vocabulario viejo, corregido aquí con el mismo intercambio que
+// ya hizo MIS-14 sobre CHANGEABLE_STATUSES.
+//
+// Full table scan sin índice, deliberado — mismo criterio que listContacts
+// (ver comentario original, sin cambios): contacts tiene hoy un volumen
+// pequeño, un índice por estado no aporta ventaja medible.
+export const getPipelineSummary = query({
+  args: { token: v.string() },
+  returns: v.object({
+    lead: v.number(),
+    talking: v.number(),
+    proposal: v.number(),
+    negotiating: v.number(),
+    inactive: v.number(),
+    lost: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    await requireUser(ctx, args.token); // lectura: ambos roles, igual que listContacts
+    const contacts = await ctx.db.query("contacts").collect();
+
+    const summary = { lead: 0, talking: 0, proposal: 0, negotiating: 0, inactive: 0, lost: 0 };
+    for (const c of contacts) {
+      if (c.status !== "won") {
+        summary[c.status] += 1;
+      }
+    }
+    return summary;
+  },
+});
+```
+
+### `src/app/(app)/(with-nav)/panel/page.tsx` (EDITAR — solo comentario)
+
+El comentario de cabecera (el que MIS-14 añadió: *"...con 'Ganado' incluido"*) se corrige para reflejar el estado vigente: las 6 tarjetas del desglose ahora son Lead nuevo/En conversación/Propuesta enviada/Negociando/**Inactivo**/Perdido; "Ganado" se sigue mostrando solo en la sección aparte "Ventas ganadas". Sin cambios de JSX ni de lógica — el `.map()` sobre `PIPELINE_SUMMARY_STATUSES` y el índice `pipeline[status]` ya son genéricos.
+
+### `src/app/(app)/(with-nav)/contactos/page.tsx` (EDITAR — solo comentario)
+
+El comentario que decía *"inactive nunca es destino de enlace válido"* se invierte: a partir de esta reapertura, `inactive` sí es un destino válido (`/contactos?status=inactive`, generado por la nueva tarjeta del panel) y `won` deja de serlo. Sin cambios de lógica — la validación `.includes(...)` ya es genérica sobre `PIPELINE_SUMMARY_STATUSES`.
+
+### Fuera de alcance (explícito, v3)
+
+- **Fusionar `SELECTABLE_STATUSES`/`PIPELINE_SUMMARY_STATUSES`** — decisión 2 de arriba, deliberadamente no.
+- **`ContactList.tsx`, `ChangeStatusForm.tsx`, `convex/schema.ts`, `convex/sales.ts`** — sin cambios, no relacionados con este AC.
+- **Nuevo test e2e dedicado** a la tarjeta "Inactivo" — no se añade en este plan. Se revisaron los existentes (`panel-flow`, `realtime-panel`, `role-gating`): ninguno se rompe. Recomendado como mejora futura no bloqueante, mismo criterio que la reapertura de MIS-14.
+
+### Verificación end-to-end (v3)
+
+1. `npx convex dev --once`, `npx tsc --noEmit`, `npm run lint`, `npm run build` limpios.
+2. `/panel`: el desglose muestra exactamente 6 tarjetas — Lead nuevo, En conversación, Propuesta enviada, Negociando, **Inactivo**, Perdido — confirmar que **Ganado está ausente** de esta sección.
+3. Sección "Ventas ganadas" (aparte) sigue mostrando count + importe acumulado, sin cambios.
+4. Pulsar la tarjeta "Inactivo" → navega a `/contactos?status=inactive`, lista filtrada correctamente (deep link nuevo, antes inválido — antes de esta reapertura `inactive` no era miembro de `PIPELINE_SUMMARY_STATUSES`).
+5. Navegar manualmente a `/contactos?status=won` (URL vieja, ya no generada por ningún link del panel) → se ignora silenciosamente, lista sin filtrar, sin error.
+6. Reejecutar `panel-flow.spec.ts`, `realtime-panel.spec.ts`, `role-gating.spec.ts` (Playwright) — deben seguir en verde sin modificarlos.
+7. Viewport móvil 320-375px: sin regresión de overflow (mismo caso peor ya cubierto por los fixes de la v2 original).
+8. `npx convex data contacts` (o dashboard): confirmar que un contacto real en estado `inactive` (creado vía "Cambiar estado" tras MIS-14) se refleja en la tarjeta correspondiente del panel.
+
+### Archivos afectados (v3, al codificar, tras GO)
+
+| Archivo | Tipo |
+|---|---|
+| `src/lib/contacts/status.ts` | Editar — `PIPELINE_SUMMARY_STATUSES`: intercambia `won`↔`inactive` |
+| `convex/contacts.ts` | Editar — `getPipelineSummary`: mismo intercambio en `returns` y en el handler |
+| `src/app/(app)/(with-nav)/panel/page.tsx` | Editar — solo comentario de cabecera |
+| `src/app/(app)/(with-nav)/contactos/page.tsx` | Editar — solo comentario |
+| `PLANS/README.md` | Editar (fila MIS-17) |
+
+No se toca: `ContactList.tsx`, `ChangeStatusForm.tsx`, `convex/sales.ts`, `convex/schema.ts`, ningún test e2e.
+
+### Puntos abiertos (no bloqueantes, v3)
+
+- Sin e2e dedicado para la tarjeta "Inactivo" del panel — mismo criterio ya aceptado en la reapertura de MIS-14 (comprobación manual declarada cubre el riesgo actual).
+- `SELECTABLE_STATUSES`/`PIPELINE_SUMMARY_STATUSES` vuelven a coincidir en valor por segunda vez (v1 coincidían por accidente antes de MIS-14; ahora coinciden de nuevo tras esta reapertura) — si un futuro ticket vuelve a divergirlas, revisar ambos consumidores (picker y panel) explícitamente, no asumir que siguen sincronizadas.
+
+## Estado (v3)
+
+**Auditoría de plan:** GO sin blockers ni majors. Sugerencias no bloqueantes adoptadas como follow-up (no en este ticket): añadir un e2e dedicado para `/contactos?status=won` desde la tarjeta "Ganado" del panel (la comprobación manual ya cubre el riesgo actual); si producto pide más adelante consultar "Inactivo" por URL fuera del flujo del panel, abrir un ticket aparte.
+
+**Auditoría de código:** GO. Sin blockers ni majors.
+
+**Implementado** en la rama `feature/mis-17-panel-oportunidades` (recreada desde `main`, la copia remota previa estaba obsoleta). Cambios reales: `src/lib/contacts/status.ts` (`PIPELINE_SUMMARY_STATUSES`), `convex/contacts.ts` (`getPipelineSummary`), `src/app/(app)/(with-nav)/panel/page.tsx` y `src/app/(app)/(with-nav)/contactos/page.tsx` (solo comentarios).
+
+Evidencia real de verificación:
+
+1. **`npx convex dev --once`**: `✔ Convex functions ready!`, sin errores.
+2. **`npx tsc --noEmit`**: limpio.
+3. **`npm run lint`**: 0 errores (1 warning preexistente en `Avatar.jsx`, no introducido por este cambio).
+4. **`npm run build`**: compilación de producción correcta, las 7 rutas generadas sin error.
+5. **Suite Playwright completa** (`npx playwright test`): **15/15 tests existentes en verde** (incluidos `panel-flow.spec.ts` y `realtime-panel.spec.ts`), sin modificarlos.
+6. **Verificación manual real de los 2 comportamientos nuevos**, con 2 tests Playwright temporales añadidos a `edge-cases.spec.ts`, ejecutados y luego **revertidos** (`git checkout`) antes de commitear:
+   - `/panel`: el desglose "Pipeline por estado" muestra la tarjeta "Inactivo" y **no** muestra ninguna tarjeta "Ganado" ahí; la sección aparte "Ventas ganadas" sigue presente sin cambios.
+   - Un contacto pasado a `inactive` (vía `changeContactStatus`) aparece contado en la tarjeta "Inactivo"; al pulsarla, navega a `/contactos?status=inactive` con la lista realmente filtrada (el contacto de prueba es visible). Navegar directamente a `/contactos?status=won` (URL vieja) se ignora silenciosamente — sin chip "Filtrado por:", lista sin filtrar.
+
+**Pendiente:** PR a `main` (sin push todavía, pendiente de autorización explícita del usuario). Este ticket no toca `convex/schema.ts`, pero sí `convex/contacts.ts` (`getPipelineSummary`) — requiere `npx convex deploy` a producción tras el merge, igual que MIS-14.
+
+---
+
+## Historial (v1 → v2, instalado en producción — pendiente de re-verificación tras esta reapertura)
+
+*Contenido conservado tal cual de la versión anterior de este documento, antes de la reapertura de jul 2026 — ver arriba para el estado y los cambios vigentes.*
 
 ## Respuesta a la auditoría de plan v1 → v2
 
