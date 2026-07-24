@@ -1,6 +1,6 @@
 # MIS-14 — Gestión de estados del contacto (v3)
 
-> **Estado**: Código de v3 implementado y verificado en la rama `feature/mis-14-gestion-estados-contacto` (recreada desde `main` actual — la copia anterior de esta rama estaba obsoleta, 43 archivos por detrás). **Pendiente de PR/merge/deploy**, a la espera de autorización explícita para hacer push.
+> **Estado**: Código de v3 implementado, verificado y con **auditoría de código GO** (sin blockers ni majors). **Pendiente de PR/merge/deploy**, a la espera de autorización explícita para hacer push.
 
 ## Reapertura (jul 2026) — v3: alinear "Cambiar estado" a los 7 estados canónicos
 
@@ -263,6 +263,8 @@ Evidencia real de verificación:
    - Contacto cerrado como "Ganado" vía `closeSale` (simulando un contacto cerrado antes de este cambio) → "Cambiar estado" sigue visible → picker con **7 botones** (6 estados seleccionables, ninguno filtrado por ser "el actual" ya que "won" no es miembro del array, + Cancelar) → elegir "Negociando" → guarda sin bloqueo → "Cerrar venta" **reaparece**.
    - Defensa en profundidad: `changeContactStatus` con `status:"won"` directo → `{success:false, error:"Estado no disponible", field:"status"}`; con `status:"inactive"` → `{success:true}` — exactamente invertido respecto a antes de esta reapertura.
    - Panel: pulsar la tarjeta "Ganado" → navega a `/contactos?status=won` → la lista queda **realmente filtrada** (confirma que el desacoplo de `contactos/page.tsx` evitó la regresión identificada en el diseño).
+
+**Auditoría de código:** GO. Sin blockers ni majors. Sugerencias no bloqueantes adoptadas como follow-up (no en este ticket): añadir un e2e dedicado para `/contactos?status=won` desde la tarjeta "Ganado" del panel (la comprobación manual ya declarada cubre el riesgo actual); si producto pide más adelante consultar "Inactivo" por URL/panel, abrir un ticket aparte — hoy `/contactos?status=inactive` queda inválido a propósito, fuera de alcance de esta reapertura.
 
 **Pendiente:** PR a `main` (sin push todavía, pendiente de autorización explícita del usuario) y, tras el merge, `npx convex deploy` a producción — obligatorio porque este ticket toca `convex/contacts.ts`.
 
