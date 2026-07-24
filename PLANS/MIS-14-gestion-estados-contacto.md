@@ -1,6 +1,6 @@
 # MIS-14 — Gestión de estados del contacto (v3)
 
-> **Estado**: Código de v3 implementado, verificado y con **auditoría de código GO** (sin blockers ni majors). **Pendiente de PR/merge/deploy**, a la espera de autorización explícita para hacer push.
+> **Estado**: **Instalado en producción** (v3, reapertura jul 2026 — Inactivo entra al picker manual, Ganado sale). PR #23 fusionado a `main` (2026-07-24), `npx convex deploy` a `greedy-tapir-20` completado el mismo día. Ver PR de la rama `feature/mis-14-gestion-estados-contacto`.
 
 ## Reapertura (jul 2026) — v3: alinear "Cambiar estado" a los 7 estados canónicos
 
@@ -266,7 +266,7 @@ Evidencia real de verificación:
 
 **Auditoría de código:** GO. Sin blockers ni majors. Sugerencias no bloqueantes adoptadas como follow-up (no en este ticket): añadir un e2e dedicado para `/contactos?status=won` desde la tarjeta "Ganado" del panel (la comprobación manual ya declarada cubre el riesgo actual); si producto pide más adelante consultar "Inactivo" por URL/panel, abrir un ticket aparte — hoy `/contactos?status=inactive` queda inválido a propósito, fuera de alcance de esta reapertura.
 
-**Pendiente:** PR a `main` (sin push todavía, pendiente de autorización explícita del usuario) y, tras el merge, `npx convex deploy` a producción — obligatorio porque este ticket toca `convex/contacts.ts`.
+**Desplegado:** PR #23 fusionado a `main` (squash merge, 2026-07-24). El check `e2e` de CI falló como es sabido (MIS-258, sin secrets configurados — no bloquea el merge); `build` pasó limpio. `npx convex deploy` a `greedy-tapir-20` (producción) completado sin errores: `✔ No indexes are deleted by this push` + `✔ Deployed Convex functions to https://greedy-tapir-20.eu-west-1.convex.cloud`.
 
 ---
 
