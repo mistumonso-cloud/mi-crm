@@ -1,6 +1,6 @@
 # MIS-17 — Panel de oportunidades (vista de Marta) (v3)
 
-> **Estado**: Código de v3 implementado, verificado y con **auditoría de plan y de código GO** (sin blockers ni majors). **Pendiente de PR/merge/deploy**, a la espera de autorización explícita para hacer push. Rama `feature/mis-17-panel-oportunidades` (recreada desde `main` actual — la copia remota anterior estaba obsoleta).
+> **Estado**: **Instalado en producción** (v3, reapertura jul 2026 — el desglose del panel muestra Inactivo en vez de Ganado). PR #25 fusionado a `main` (2026-07-24), `npx convex deploy` a `greedy-tapir-20` completado el mismo día. Ver PR de la rama `feature/mis-17-panel-oportunidades`.
 
 ## Reapertura (jul 2026) — v3: el desglose del panel pasa a mostrar Inactivo en vez de Ganado
 
@@ -175,7 +175,7 @@ Evidencia real de verificación:
    - `/panel`: el desglose "Pipeline por estado" muestra la tarjeta "Inactivo" y **no** muestra ninguna tarjeta "Ganado" ahí; la sección aparte "Ventas ganadas" sigue presente sin cambios.
    - Un contacto pasado a `inactive` (vía `changeContactStatus`) aparece contado en la tarjeta "Inactivo"; al pulsarla, navega a `/contactos?status=inactive` con la lista realmente filtrada (el contacto de prueba es visible). Navegar directamente a `/contactos?status=won` (URL vieja) se ignora silenciosamente — sin chip "Filtrado por:", lista sin filtrar.
 
-**Pendiente:** PR a `main` (sin push todavía, pendiente de autorización explícita del usuario). Este ticket no toca `convex/schema.ts`, pero sí `convex/contacts.ts` (`getPipelineSummary`) — requiere `npx convex deploy` a producción tras el merge, igual que MIS-14.
+**Desplegado:** PR #25 fusionado a `main` (squash merge, 2026-07-24). El check `e2e` de CI falló como es sabido (MIS-258, sin secrets configurados — no bloquea el merge); `build` pasó limpio. `npx convex deploy` a `greedy-tapir-20` (producción) completado sin errores: `✔ No indexes are deleted by this push` + `✔ Deployed Convex functions to https://greedy-tapir-20.eu-west-1.convex.cloud`.
 
 ---
 
