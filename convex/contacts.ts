@@ -31,14 +31,20 @@ const contactChannelValidator = v.union(
 );
 
 // Subconjunto de contactStatusValidator seleccionable desde "Cambiar
-// estado" (MIS-14) — exactamente los 6 estados del AC del ticket en
-// Linear. "inactive" existe en el schema desde MIS-9 pero ningún ticket
-// define cómo se llega a él; se mantiene fuera de alcance aquí a
-// propósito. Duplicado respecto a SELECTABLE_STATUSES en
+// estado" (MIS-14, reapertura jul 2026) — los 6 estados del AC reabierto:
+// de "Lead nuevo" a "Perdido", SIN "Ganado". "Ganado" deja de ser
+// alcanzable por esta vía manual a partir de esta reapertura: solo se
+// asigna al cerrar una venta (closeSale en convex/sales.ts, MIS-15) —
+// closeSale no consulta esta constante, no le afecta este cambio.
+// "Inactivo" entra a cambio: existe en el schema desde MIS-9 pero, hasta
+// esta reapertura, ningún ticket definía cómo llegar a él. (v1/v2 de este
+// ticket tenía ["lead","talking","proposal","negotiating","won","lost"] —
+// la combinación inversa; ver PLANS/MIS-14-gestion-estados-contacto.md,
+// sección histórica.) Duplicado respecto a SELECTABLE_STATUSES en
 // src/lib/contacts/status.ts a propósito: convex/ y src/ son módulos
 // independientes, sin validador compartido (mismo criterio que
 // contactStatusValidator duplicado en convex/reminders.ts).
-const CHANGEABLE_STATUSES = ["lead", "talking", "proposal", "negotiating", "won", "lost"] as const;
+const CHANGEABLE_STATUSES = ["lead", "talking", "proposal", "negotiating", "inactive", "lost"] as const;
 
 const NAME_MAX = 120;
 const PHONE_MAX = 40;
@@ -343,7 +349,9 @@ export const changeContactStatus = mutation({
 
     // Defensa en profundidad: la mutation es un endpoint público invocable
     // directamente con un token válido, sin pasar por changeStatusAction.
-    // Un valor fuera de CHANGEABLE_STATUSES (p.ej. "inactive") no debe
+    // Un valor fuera de CHANGEABLE_STATUSES (p.ej. "won", que a partir de
+    // esta reapertura ya no es un estado manejable por changeContactStatus
+    // — solo closeSale en convex/sales.ts puede asignarlo) no debe
     // persistirse aunque pase el v.union de 7 literales del validador de
     // argumentos.
     if (!CHANGEABLE_STATUSES.includes(args.status as (typeof CHANGEABLE_STATUSES)[number])) {
@@ -413,11 +421,20 @@ export const listStatusChanges = query({
 
 // MIS-17: resumen del pipeline por estado, para las 6 tarjetas del panel
 // de Marta (AC: "Muestra cuántos contactos hay en cada estado activo").
-// Mismos 6 estados que CHANGEABLE_STATUSES arriba — "inactive" queda fuera
-// a propósito, mismo criterio ya aplicado ahí. Objeto con las 6 claves ya
-// contadas (no un array {status,count}[]): panel/page.tsx conoce de
-// antemano esas 6 categorías fijas, indexar por clave evita un .find() por
-// tarjeta en el cliente.
+// Mismas 6 claves que PIPELINE_SUMMARY_STATUSES en
+// src/lib/contacts/status.ts — "inactive" queda fuera a propósito, mismo
+// criterio ya aplicado ahí. NOTA (MIS-14, reapertura jul 2026): antes de
+// esta reapertura este comentario decía "mismos 6 estados que
+// CHANGEABLE_STATUSES arriba", porque ambas constantes coincidían por
+// casualidad; esta reapertura cambió CHANGEABLE_STATUSES para excluir
+// "won" e incluir "inactive" (AC reabierto), así que esa igualdad deja de
+// ser cierta. Este query NO cambia: el AC de MIS-17 (fuera de alcance de
+// esta reapertura, todavía en Backlog) sigue pidiendo la tarjeta "Ganado"
+// en el panel — el propio checklist de esta reapertura excluye
+// explícitamente al panel de las pantallas a revisar. Objeto con las 6
+// claves ya contadas (no un array {status,count}[]): panel/page.tsx
+// conoce de antemano esas 6 categorías fijas, indexar por clave evita un
+// .find() por tarjeta en el cliente.
 //
 // Full table scan sin índice, deliberado — mismo criterio que listContacts
 // arriba: la guía oficial de Convex (node_modules/convex/dist/esm-types/

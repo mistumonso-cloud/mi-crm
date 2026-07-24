@@ -6,7 +6,7 @@ import { readSessionToken } from "@/lib/auth/cookie";
 import { Badge } from "@/components/ui/feedback/Badge";
 import { Card } from "@/components/ui/core/Card";
 import { StatusBadge } from "@/components/ui/feedback/StatusBadge";
-import { SELECTABLE_STATUSES } from "@/lib/contacts/status";
+import { PIPELINE_SUMMARY_STATUSES } from "@/lib/contacts/status";
 import { formatCurrencyCents } from "@/lib/contacts/format";
 import { PanelAutoRefresh } from "./PanelAutoRefresh";
 
@@ -16,6 +16,13 @@ import { PanelAutoRefresh } from "./PanelAutoRefresh";
 // a Carlos desde el ADR de MIS-18 (ambos roles, solo lectura). Ver
 // PLANS/MIS-17-panel-oportunidades.md para el ADR de "tiempo real"
 // (PanelAutoRefresh) y el resto de decisiones.
+//
+// A partir de MIS-14 (reapertura jul 2026), este archivo usa
+// PIPELINE_SUMMARY_STATUSES en vez de SELECTABLE_STATUSES — antes ambas
+// constantes coincidían por casualidad; MIS-14 las diverge (ver
+// src/lib/contacts/status.ts). Este archivo permanece funcionalmente sin
+// cambios: sigue mostrando las mismas 6 tarjetas, en el mismo orden, con
+// "Ganado" incluido.
 export default async function PanelPage() {
   const user = await getUser();
   const token = await readSessionToken(); // getUser() ya garantiza sesión válida aquí
@@ -40,7 +47,7 @@ export default async function PanelPage() {
       <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <h2 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>Pipeline por estado</h2>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          {SELECTABLE_STATUSES.map((status) => (
+          {PIPELINE_SUMMARY_STATUSES.map((status) => (
             // Sin aria-label manual a propósito (hallazgo real durante la
             // verificación de MIS-17): StatusBadge.jsx es "use client", así
             // que PIPELINE_STATES[status].label no se puede leer desde este
