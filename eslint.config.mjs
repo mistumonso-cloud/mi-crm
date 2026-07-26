@@ -16,6 +16,7 @@ const eslintConfig = defineConfig([
     "CODIGO/**",
     "DESIGN/**",
     "convex/_generated/**",
+    ".claude/skills/**",
   ]),
 ]);
 
