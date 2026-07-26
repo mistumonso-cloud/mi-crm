@@ -1,6 +1,6 @@
 # MIS-258 — CI: el job `e2e` falla en GitHub Actions por falta de secrets
 
-> **Estado**: Secrets configurados y verificados en verde. Pendiente de auditoría antes de abrir PR.
+> **Estado**: Secrets configurados y verificados en verde. PR #30 abierto (rama `chore/mis-258-ci-secrets-e2e`), CI del propio PR confirma `build`+`e2e` en verde. Pendiente de merge.
 
 ## Contexto
 
@@ -69,4 +69,6 @@ No se toca ningún archivo de `src/`, `convex/`, `e2e/` ni `.github/workflows/ci
 
 ## Estado
 
-**Secrets configurados y verificados en verde** (ver sección Verificación). Pendiente de auditoría sobre este documento y el diff de los README antes de abrir PR — al abrir el PR se disparará un run de CI normal sobre la propia rama, que confirmará `e2e` en verde una segunda vez con los secrets ya puestos.
+**Auditoría:** GO condicionado — condiciones: excluir del commit los cambios ajenos de `DESIGN/`, incluir este documento (estaba untracked) y confirmar en el run de CI del propio PR que `e2e` vuelve a pasar. Las tres se cumplieron antes de mergear.
+
+**Secrets configurados y verificados en verde** (ver sección Verificación). PR #30 abierto en la rama `chore/mis-258-ci-secrets-e2e`; el run de CI disparado por el propio PR confirmó `build` (33s) y `e2e` (2m20s) en verde: <https://github.com/mistumonso-cloud/mi-crm/actions/runs/30208187112>.
