@@ -45,3 +45,19 @@ tomadas al adoptarla:
   siempre con el número de ticket de Linear, sustituyendo el antiguo `feature/mis-N-slug`.
 - La regla de "seguridad de datos por defecto" se reescribió para el modelo real de este
   proyecto (Convex: `requireRole`/`requireUser`), no Row Level Security de Postgres.
+
+## Skill de Linear (`.claude/skills/linear-skill/`)
+
+2026-07-26: instalado también aquí (además de a nivel global del usuario, en
+`~/.claude/skills/`). Usa el mismo servidor MCP de Linear que ya teníamos activo
+(`mcp__linear__*`) como capa primaria para operación puntual, y scripts propios en
+TypeScript (GraphQL directo, sin dependencias externas) solo para batch/webhooks. Sin
+conflicto con el flujo ya establecido.
+
+**Ojo al aplicarlo a este proyecto**: el skill asume una organización más grande de la
+que tenemos (team "ENG", cycles semanales, Triage formal, taxonomía de labels, auto-cierre
+de issues por "magic words" en el PR). Este proyecto no usa nada de eso — un solo team
+(`MIS`), fases en vez de cycles, sin labels, cierre manual de issues (`Done` = merged +
+enlazado, nunca automático). Los workflows del skill (triage, cycle planning/review) no
+aplican tal cual aquí; los prompts puntuales (crear issue con dedupe, buscar duplicados,
+weekly report) sí son reutilizables sin fricción.

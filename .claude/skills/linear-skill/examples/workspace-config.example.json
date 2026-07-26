@@ -1,0 +1,155 @@
+{
+  "_comment": "Configuración del workspace ACME. Reemplaza los UUIDs <fill-in> con los reales de tu workspace ejecutando los queries listados al final.",
+
+  "workspace": {
+    "name": "ACME",
+    "urlKey": "acme"
+  },
+
+  "team": {
+    "name": "Engineering",
+    "key": "ENG",
+    "id": "<fill-in: team UUID>",
+    "cycleConfig": {
+      "duration": "1 week",
+      "startDay": "monday",
+      "cooldown": 0,
+      "autoCreateAhead": 2,
+      "addStartedIssues": true,
+      "addCompletedIssues": true,
+      "addActiveIssuesWithDueDate": false
+    }
+  },
+
+  "initiatives": [
+    {
+      "name": "Web App 2026",
+      "id": "<fill-in: initiative UUID>",
+      "vertical": "web",
+      "platform": "web.example.com",
+      "targetDate": "2026-12-31"
+    },
+    {
+      "name": "Mobile App 2026",
+      "id": "<fill-in: initiative UUID>",
+      "vertical": "mobile",
+      "platform": "mobile.example.com",
+      "targetDate": "2026-12-31"
+    },
+    {
+      "name": "Platform 2026",
+      "id": "<fill-in: initiative UUID>",
+      "vertical": "platform",
+      "platform": "platform.example.com",
+      "targetDate": "2026-12-31"
+    },
+    {
+      "name": "Growth 2026",
+      "id": "<fill-in: initiative UUID>",
+      "vertical": "growth",
+      "platform": "Growth & marketing surfaces",
+      "targetDate": "2026-12-31"
+    },
+    {
+      "name": "Data Platform 2026",
+      "id": "<fill-in: initiative UUID>",
+      "vertical": "data",
+      "platform": "Internal tools (dashboards, automations)",
+      "targetDate": "2026-12-31"
+    }
+  ],
+
+  "labels": {
+    "vertical": [
+      { "name": "vertical/web", "id": "<fill-in>", "color": "#5e6ad2" },
+      { "name": "vertical/platform", "id": "<fill-in>", "color": "#bb87fc" },
+      { "name": "vertical/mobile", "id": "<fill-in>", "color": "#26b5ce" },
+      { "name": "vertical/growth", "id": "<fill-in>", "color": "#0f7488" },
+      { "name": "vertical/data", "id": "<fill-in>", "color": "#f2c94c" }
+    ],
+
+    "type": [
+      { "name": "type/feature", "id": "<fill-in or create>", "color": "#26b5ce" },
+      { "name": "type/bug", "id": "<fill-in or create>", "color": "#eb5757" },
+      { "name": "type/chore", "id": "<fill-in or create>", "color": "#95a2b3" },
+      { "name": "type/refactor", "id": "<fill-in or create>", "color": "#bb87fc" },
+      { "name": "type/security", "id": "<fill-in or create>", "color": "#f7c8c1" },
+      { "name": "type/docs", "id": "<fill-in or create>", "color": "#4cb782" }
+    ],
+
+    "actor": [
+      { "name": "actor/human", "id": "<fill-in or create>", "color": "#5e6ad2" },
+      { "name": "actor/ai", "id": "<fill-in or create>", "color": "#f2c94c" },
+      { "name": "actor/needs-review", "id": "<fill-in or create>", "color": "#eb5757" }
+    ],
+
+    "area": [
+      { "name": "area/frontend", "id": "<fill-in or create>", "color": "#26b5ce" },
+      { "name": "area/backend", "id": "<fill-in or create>", "color": "#bb87fc" },
+      { "name": "area/infra", "id": "<fill-in or create>", "color": "#95a2b3" },
+      { "name": "area/db", "id": "<fill-in or create>", "color": "#f2c94c" },
+      { "name": "area/integrations", "id": "<fill-in or create>", "color": "#4cb782" }
+    ],
+
+    "risk": [
+      { "name": "risk/low", "id": "<fill-in or create>", "color": "#4cb782" },
+      { "name": "risk/medium", "id": "<fill-in or create>", "color": "#f2c94c" },
+      { "name": "risk/high", "id": "<fill-in or create>", "color": "#eb5757" }
+    ],
+
+    "legacy": [
+      { "name": "Bug", "id": "<fill-in>", "color": "#eb5757", "_note": "Mantener temporalmente, migrar a type/bug" },
+      { "name": "Feature", "id": "<fill-in>", "color": "#26b5ce", "_note": "Mantener temporalmente, migrar a type/feature" },
+      { "name": "Improvement", "id": "<fill-in>", "color": "#bb87fc", "_note": "Mantener temporalmente, migrar a type/refactor" }
+    ]
+  },
+
+  "workflowStates": {
+    "_comment": "Estados de workflow del team ENG. IDs por completar.",
+    "triage": { "name": "Triage", "id": "<fill-in>", "type": "triage" },
+    "backlog": { "name": "Backlog", "id": "<fill-in>", "type": "backlog" },
+    "todo": { "name": "Todo", "id": "<fill-in>", "type": "unstarted" },
+    "inProgress": { "name": "In Progress", "id": "<fill-in>", "type": "started" },
+    "inReview": { "name": "In Review", "id": "<fill-in>", "type": "started" },
+    "done": { "name": "Done", "id": "<fill-in>", "type": "completed" },
+    "canceled": { "name": "Canceled", "id": "<fill-in>", "type": "canceled" },
+    "duplicate": { "name": "Duplicate", "id": "<fill-in>", "type": "canceled" }
+  },
+
+  "estimates": {
+    "scale": "fibonacci",
+    "values": [1, 2, 3, 5, 8],
+    "rules": {
+      "max_per_issue": 5,
+      "split_threshold": 5,
+      "_note": "Si una issue requiere estimate >5, romper en sub-issues. Si requiere >8, convertir a Project con milestones."
+    }
+  },
+
+  "agents": {
+    "_comment": "Agentes IA configurados. Por completar cuando se instalen desde el marketplace.",
+    "code-agent": {
+      "installed": false,
+      "userId": "<fill-in cuando se instale>",
+      "labels_for_workflow_selection": ["actor/ai-plan", "actor/ai-bug", "actor/ai-feature"]
+    },
+    "review-agent": {
+      "installed": false,
+      "userId": "<fill-in cuando se instale>"
+    }
+  },
+
+  "queries_to_fill_uuids": {
+    "_comment": "Ejecuta estas queries con tu Personal API Key para obtener los UUIDs y completar el JSON.",
+
+    "team_id": "{ teams(filter: { key: { eq: \"ENG\" } }) { nodes { id name key } } }",
+
+    "initiative_ids": "{ initiatives(first: 20) { nodes { id name } } }",
+
+    "label_ids": "{ issueLabels(first: 100) { nodes { id name parent { name } } } }",
+
+    "workflow_state_ids": "{ team(id: \"<team-id>\") { states { nodes { id name type } } } }",
+
+    "all_in_one_ts_script": "Ejecutar scripts/linear-client.ts con un script que haga las 4 queries arriba e imprima un JSON listo para pegar aquí. Pendiente."
+  }
+}
