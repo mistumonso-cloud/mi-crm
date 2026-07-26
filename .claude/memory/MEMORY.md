@@ -61,3 +61,21 @@ de issues por "magic words" en el PR). Este proyecto no usa nada de eso — un s
 enlazado, nunca automático). Los workflows del skill (triage, cycle planning/review) no
 aplican tal cual aquí; los prompts puntuales (crear issue con dedupe, buscar duplicados,
 weekly report) sí son reutilizables sin fricción.
+
+## Skill de redacción/auditoría de issues (`.claude/skills/talent-issue-craft/`)
+
+2026-07-26: instalado también aquí (además de a nivel global). No compite con
+`linear-skill` — este aporta "qué debe contener una issue de calidad" (núcleo canónico +
+9 plantillas por tipo + auditor `audit-issue` como gate de despachabilidad), no "cómo
+hablar con la API de Linear". Registrado en `CLAUDE.md` § Skills por Dominio.
+
+`templates/perfil-de-repo.md` ya está parametrizado para este repo (gates reales:
+`tsc`/`lint`/`build`/Playwright; régimen de cierre manual sin magic words; superficies
+sensibles en `convex/auth.ts`+`convex/lib/authz.ts`; escalera "Dev solo"). Se propone
+`audit-issue` como pre-check **adicional** antes del plan, no como sustituto de la
+auditoría GO/NO-GO que ya tiene este proyecto. Sin historial propio todavía — el umbral
+de score (default 70) está pendiente de recalibrar tras 10+ issues reales.
+
+El aprovisionamiento de plantillas nativas en el workspace de Linear
+(`provision-templates --apply`) es una operación de escritura aparte, deliberadamente NO
+incluida en esta instalación — requiere visto bueno explícito por separado.

@@ -85,7 +85,8 @@ proyecto y adapta las reglas que dependen del stack real.
 | Next.js (App Router, Turbopack) | — | Antes de tocar rutas/páginas: leer `node_modules/next/dist/docs/` (ver nota de versión abajo), esta versión difiere de lo habitual |
 | Convex | — | Antes de cualquier query, mutation o cambio de schema |
 | Railway | — | Antes de tocar configuración de deploy o variables de entorno |
-| Linear | `mcp__linear__*` (ya disponible) | Antes de crear o mover issues |
+| Linear | `mcp__linear__*` (ya disponible) + `.claude/skills/linear-skill/` | Antes de crear o mover issues |
+| Redacción/auditoría de issues | `.claude/skills/talent-issue-craft/` | Siempre, antes de crear, redactar, optimizar o auditar cualquier issue — ver `templates/perfil-de-repo.md` parametrizado para este repo |
 
 ---
 
