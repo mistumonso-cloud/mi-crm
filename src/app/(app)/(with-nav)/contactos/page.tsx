@@ -34,7 +34,7 @@ export default async function ContactosPage({
 }: {
   searchParams: Promise<{ status?: string }>;
 }) {
-  const user = await getUser();
+  await getUser(); // solo chequeo de sesión — MIS-251 retira el gating por rol de "Añadir contacto" (ver ContactList.tsx)
   const token = await readSessionToken();
   const contacts = await fetchQuery(api.contacts.listContacts, { token: token! });
   const now = await getRequestTime(); // capturado una vez, pasado como prop — evita mismatch de hidratación
@@ -57,7 +57,6 @@ export default async function ContactosPage({
       key={initialStatusFilter ?? "all"}
       contacts={contacts}
       now={now}
-      canCreate={user.role === "rep"}
       initialStatusFilter={initialStatusFilter}
     />
   );

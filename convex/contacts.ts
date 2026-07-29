@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireRole, requireUser } from "./lib/authz";
+import { requireUser } from "./lib/authz";
 
 const contactStatusValidator = v.union(
   v.literal("lead"),
@@ -75,11 +75,12 @@ export const createContact = mutation({
     }),
   ),
   handler: async (ctx, args) => {
-    // Solo "rep" (Carlos) puede crear contactos — Marta tiene acceso de
-    // lectura, no de escritura, según el criterio original de MIS-7. No
-    // confundir con el ADR de MIS-18: ese abrió acceso de LECTURA a páginas
-    // (Pendientes/Panel), nunca tocó operaciones de escritura.
-    const user = await requireRole(ctx, args.token, "rep");
+    // MIS-251 (reapertura): Marta pasa a tener acceso de escritura completo,
+    // igual que Carlos — decisión de negocio confirmada por el usuario, que
+    // revierte el ADR de MIS-18 ("Qué NO cambia"). Ya no se distingue por
+    // rol, solo se exige sesión válida (requireUser). Ver
+    // PLANS/MIS-251-rol-supervision-marta.md, sección "Decisión fijada".
+    const user = await requireUser(ctx, args.token);
 
     const name = args.name.trim();
     if (!name) {
@@ -136,8 +137,9 @@ export const createContact = mutation({
   },
 });
 
-// MIS-252: edita nombre/teléfono/email/canal de un contacto existente
-// desde su ficha. Solo "rep" (Carlos) — Marta no tiene esta acción (AC).
+// MIS-252: edita nombre/teléfono/email/canal de un contacto existente desde
+// su ficha. MIS-251 (reapertura): ya no restringido a "rep" — ver decisión
+// de negocio documentada en createContact de arriba.
 export const updateContact = mutation({
   args: {
     token: v.string(),
@@ -164,12 +166,12 @@ export const updateContact = mutation({
     }),
   ),
   handler: async (ctx, args) => {
-    // Solo "rep" (Carlos) puede editar datos del contacto (AC: "no es
-    // visible para Marta") — mismo gating que changeContactStatus/
-    // closeSale, mismo ADR de MIS-18. No se usa el usuario devuelto:
-    // a diferencia de createContact, esta mutation no registra "quién
-    // editó" (el AC no lo pide, y no hay tabla de historial para ello).
-    await requireRole(ctx, args.token, "rep");
+    // MIS-251 (reapertura): igual que createContact/changeContactStatus,
+    // deja de exigir rol "rep" — cualquier usuario autenticado puede editar.
+    // No se usa el usuario devuelto: a diferencia de createContact, esta
+    // mutation no registra "quién editó" (el AC no lo pide, y no hay tabla
+    // de historial para ello).
+    await requireUser(ctx, args.token);
 
     const contactId = ctx.db.normalizeId("contacts", args.contactId);
     if (!contactId) {
@@ -263,8 +265,10 @@ export const getContact = query({
     if (!contact) return null; // formato válido, fila borrada/inexistente
 
     // "Responsable" = quien dio de alta el contacto (createdBy, obligatorio
-    // en el schema). No hay campo de asignación separado — createContact
-    // solo permite rol "rep", así que en la práctica es siempre Carlos.
+    // en el schema). No hay campo de asignación separado. MIS-251
+    // (reapertura): createContact ya no restringe por rol, así que a partir
+    // de ahora puede ser tanto Carlos como Marta — este campo simplemente
+    // refleja quién lo creó, sin implicación de rol.
     // No se añade `company` al contrato: existe en el schema pero ninguna
     // mutation lo rellena hoy y la ficha (MIS-10) no lo muestra — devolverlo
     // sin consumidor ensancharía el contrato para nada (hallazgo de la
@@ -332,11 +336,13 @@ export const changeContactStatus = mutation({
     }),
   ),
   handler: async (ctx, args) => {
-    // Solo "rep" (Carlos) puede cambiar el estado — condición YA CERRADA
-    // por el ADR de MIS-18 (PLANS/MIS-18-navegacion-principal.md, "Qué NO
-    // cambia"): "cambio de estado en MIS-14... sigue debiendo llamar
-    // [requireRole] como primera línea, sin excepción."
-    const user = await requireRole(ctx, args.token, "rep");
+    // MIS-251 (reapertura): revierte explícitamente el ADR de MIS-18 (PLANS/
+    // MIS-18-navegacion-principal.md, "Qué NO cambia" — "cambio de estado en
+    // MIS-14... sigue debiendo llamar [requireRole] como primera línea, sin
+    // excepción"). Decisión de negocio confirmada por el usuario: Marta
+    // conserva acceso de escritura completo. Ver PLANS/MIS-251-rol-
+    // supervision-marta.md, sección "Decisión fijada".
+    const user = await requireUser(ctx, args.token);
 
     const contactId = ctx.db.normalizeId("contacts", args.contactId);
     if (!contactId) {

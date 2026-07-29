@@ -54,12 +54,10 @@ function ClearIcon() {
 export function ContactList({
   contacts,
   now,
-  canCreate,
   initialStatusFilter,
 }: {
   contacts: Contact[];
   now: number;
-  canCreate: boolean;
   initialStatusFilter: ContactStatus | null;
 }) {
   const [query, setQuery] = useState("");
@@ -172,28 +170,22 @@ export function ContactList({
             style={{ height: "100%", padding: "40px 32px", gap: 12 }}
           >
             <p style={{ fontSize: 17, fontWeight: 600, color: "var(--text-primary)" }}>Aún no hay contactos</p>
-            {canCreate ? (
-              <>
-                <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>Empieza añadiendo tu primer contacto</p>
-                <Link
-                  href="/contactos/nuevo"
-                  style={{
-                    marginTop: 8,
-                    background: "var(--color-accent)",
-                    color: "var(--color-accent-contrast)",
-                    borderRadius: "var(--radius-md)",
-                    padding: "12px 20px",
-                    fontSize: 14,
-                    fontWeight: 600,
-                    textDecoration: "none",
-                  }}
-                >
-                  Añadir primer contacto
-                </Link>
-              </>
-            ) : (
-              <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>Carlos puede darlos de alta.</p>
-            )}
+            <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>Empieza añadiendo tu primer contacto</p>
+            <Link
+              href="/contactos/nuevo"
+              style={{
+                marginTop: 8,
+                background: "var(--color-accent)",
+                color: "var(--color-accent-contrast)",
+                borderRadius: "var(--radius-md)",
+                padding: "12px 20px",
+                fontSize: 14,
+                fontWeight: 600,
+                textDecoration: "none",
+              }}
+            >
+              Añadir primer contacto
+            </Link>
           </div>
         )}
 
