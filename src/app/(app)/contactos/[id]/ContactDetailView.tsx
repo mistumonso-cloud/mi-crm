@@ -10,6 +10,7 @@ import { StatusBadge, PIPELINE_STATES } from "@/components/ui/feedback/StatusBad
 import { BottomSheet } from "@/components/ui/overlays/BottomSheet";
 import { formatDateTime, formatDate, formatCurrencyCents } from "@/lib/contacts/format";
 import { CONTACT_CHANNELS } from "@/lib/contacts/channel";
+import { whatsappDigits } from "@/lib/contacts/phone";
 import { buildHistory } from "@/lib/notes/history";
 import { NOTE_TYPES } from "@/lib/notes/types";
 import { AddNoteForm } from "./AddNoteForm";
@@ -58,6 +59,18 @@ function MailIcon() {
   );
 }
 
+// MIS-254: icono de WhatsApp — mismo estilo (stroke, 14x14) que
+// PhoneIcon/MailIcon de arriba, silueta simplificada del logo oficial (sin
+// usar el asset de marca real, evita cuestiones de licencia de un SVG
+// pixel-perfect para un icono de 14px).
+function WhatsAppIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20.52 3.48A11.94 11.94 0 0 0 12.04 0C5.5 0 .2 5.3.2 11.85c0 2.09.55 4.13 1.6 5.93L0 24l6.4-1.68a11.9 11.9 0 0 0 5.64 1.44h.01c6.54 0 11.85-5.3 11.85-11.85 0-3.17-1.23-6.14-3.38-8.43z" />
+    </svg>
+  );
+}
+
 export function ContactDetailView({
   contact,
   notes,
@@ -74,6 +87,11 @@ export function ContactDetailView({
   const [sheet, setSheet] = useState<SheetKind>(null);
   const isClosed = contact.status === "won" || contact.status === "lost";
   const history = buildHistory(contact, notes, reminders.completed, statusChanges, saleClosures);
+  // MIS-254: null si el teléfono no tiene un número nacional de España
+  // válido (menos de 9 dígitos) — el link de WhatsApp no se renderiza en
+  // ese caso, a diferencia de tel: (que sí es tolerante a cualquier
+  // formato y sigue mostrándose siempre que haya contact.phone).
+  const waDigits = contact.phone ? whatsappDigits(contact.phone) : null;
 
   return (
     <div className="flex flex-1 flex-col" style={{ padding: "16px 20px 24px", gap: 16 }}>
@@ -91,20 +109,45 @@ export function ContactDetailView({
         </div>
 
         {contact.phone && (
-          <a
-            href={`tel:${contact.phone}`}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              fontSize: 14,
-              color: "var(--text-secondary)",
-              textDecoration: "none",
-            }}
-          >
-            <PhoneIcon />
-            {contact.phone}
-          </a>
+          <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+            <a
+              href={`tel:${contact.phone}`}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 14,
+                color: "var(--text-secondary)",
+                textDecoration: "none",
+              }}
+            >
+              <PhoneIcon />
+              {contact.phone}
+            </a>
+            {/* MIS-254: no envía nada desde el CRM, solo abre la app nativa
+                de WhatsApp con la conversación lista (AC del ticket).
+                target="_blank": a diferencia de tel:/mailto: (que abren un
+                diálogo del sistema sin navegar), wa.me es una URL http(s)
+                real — sin target="_blank" navegaría fuera del CRM. */}
+            {waDigits && (
+              <a
+                href={`https://wa.me/${waDigits}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 14,
+                  color: "var(--text-secondary)",
+                  textDecoration: "none",
+                }}
+              >
+                <WhatsAppIcon />
+                WhatsApp
+              </a>
+            )}
+          </div>
         )}
         {contact.email && (
           <a

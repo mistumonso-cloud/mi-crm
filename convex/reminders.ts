@@ -221,6 +221,39 @@ export const completeReminder = mutation({
   },
 });
 
+// MIS-254: reprograma un recordatorio pendiente en un solo toque (mañana /
+// +3 días), sin abrir la ficha ni pedir un motivo nuevo — por eso no
+// reutiliza scheduleReminder (que exige `reason` no vacío). Mismo molde
+// mínimo que completeReminder: busca la fila, valida que siga "pending", y
+// aplica el patch. Sugerencia de la auditoría de plan: actualiza también
+// `createdBy`, igual que hace scheduleReminder al reprogramar (arriba) —
+// conserva la invariante de "quién tocó el recordatorio por última vez".
+export const postponeReminder = mutation({
+  args: { token: v.string(), id: v.string(), dueAt: v.number() },
+  returns: v.union(
+    v.object({ success: v.literal(true) }),
+    v.object({ success: v.literal(false), error: v.string() }),
+  ),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx, args.token); // ambos roles, igual que completeReminder/scheduleReminder
+
+    if (!isValidEpochMs(args.dueAt)) {
+      return { success: false as const, error: "Fecha inválida" };
+    }
+
+    const id = ctx.db.normalizeId("reminders", args.id);
+    if (!id) return { success: false as const, error: "Recordatorio no encontrado" };
+    const reminder = await ctx.db.get(id);
+    if (!reminder) return { success: false as const, error: "Recordatorio no encontrado" };
+    if (reminder.status === "done") {
+      return { success: false as const, error: "Este seguimiento ya estaba marcado como hecho" };
+    }
+
+    await ctx.db.patch(id, { dueAt: args.dueAt, createdBy: user.id });
+    return { success: true as const };
+  },
+});
+
 // Recordatorios vencidos o de hoy, de TODOS los contactos — vista
 // compartida entre Carlos y Marta, sin filtrar por quién los creó (mismo
 // criterio que la ADR de MIS-18: ambos ven las mismas pantallas de

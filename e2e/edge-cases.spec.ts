@@ -162,3 +162,175 @@ test("Carlos edita datos de un contacto existente", async ({ page, context }) =>
   await expect(page.getByText(newName)).toBeVisible();
   await expect(page.getByText(originalName)).toHaveCount(0);
 });
+
+// MIS-254: "Posponer" reprograma un recordatorio en un toque desde
+// Pendientes, sin abrir la ficha. Se siembra un recordatorio con dueAt
+// "ahora" (cae dentro de "Para hoy", igual que cualquier dueAt de hoy o
+// anterior — ver listDueToday) y se comprueba que, tras pulsar "Mañana",
+// la fila desaparece de "Para hoy" (dueAt ya no cumple
+// `dueAt < tomorrowStart`) y que el dueAt real en Convex avanzó de verdad
+// (no solo un efecto visual).
+// Sugerencia media de la auditoría de código: cubrir las DOS opciones
+// ("Mañana" y "+3 días"), no solo la primera — dos contactos/recordatorios
+// distintos, uno por opción, para no depender de que la reprogramación de
+// uno afecte al orden/visibilidad del otro en la misma lista.
+test("posponer un seguimiento desde Pendientes lo reprograma sin abrir la ficha (Mañana y +3 días)", async ({
+  page,
+  context,
+}) => {
+  const client = convexClient();
+  const token = await sessionTokenFrom(context);
+
+  async function seedDueToday(label: string) {
+    const name = uniqueContactName(label);
+    const created = await client.mutation(api.contacts.createContact, { token, name, phone: uniquePhone() });
+    if (!created.success) throw new Error("setup failed");
+    const originalDueAt = Date.now();
+    const reminderResult = await client.mutation(api.reminders.scheduleReminder, {
+      token,
+      contactId: created.id,
+      dueAt: originalDueAt,
+      reason: `Seguimiento de prueba para posponer (${label})`,
+    });
+    if (!reminderResult.success) throw new Error("no se pudo sembrar el recordatorio");
+    return { contactId: created.id, name, originalDueAt };
+  }
+
+  async function postponeAndVerify(seed: { contactId: string; name: string; originalDueAt: number }, buttonLabel: string) {
+    await page.goto("/pendientes");
+    const todaySection = page.locator("section").filter({ has: page.getByRole("heading", { name: "Para hoy" }) });
+    const row = todaySection.getByRole("listitem").filter({ hasText: seed.name });
+    await expect(row).toBeVisible();
+
+    await row.getByRole("button", { name: buttonLabel }).click();
+    await expect(row).toBeHidden();
+
+    const remindersForContact = await client.query(api.reminders.listRemindersForContact, {
+      token,
+      contactId: seed.contactId,
+    });
+    expect(remindersForContact.current?.dueAt).toBeGreaterThan(seed.originalDueAt);
+
+    // Limpieza (mismo criterio que el test de "atrasado" de arriba): se
+    // completa el recordatorio para no dejarlo pendiente indefinidamente en
+    // el deployment de dev compartido.
+    if (remindersForContact.current) {
+      await client.mutation(api.reminders.completeReminder, { token, id: remindersForContact.current._id });
+    }
+    return remindersForContact.current?.dueAt;
+  }
+
+  const seedManana = await seedDueToday("PosponerManana");
+  const dueAtManana = await postponeAndVerify(seedManana, "Mañana");
+
+  const seedTresDias = await seedDueToday("PosponerTresDias");
+  const dueAtTresDias = await postponeAndVerify(seedTresDias, "+3 días");
+
+  // "+3 días" debe quedar más lejos en el tiempo que "Mañana" — confirma
+  // que los dos botones no están enviando el mismo offset por error.
+  expect(dueAtTresDias!).toBeGreaterThan(dueAtManana!);
+});
+
+// MIS-254: la ficha muestra, junto al teléfono, un link de llamar (ya
+// existente, sin cambios) y uno nuevo de WhatsApp. Teléfono con espacios y
+// prefijo +34 a propósito — ejercita la normalización de whatsappDigits()
+// (dígitos puros + prefijo de país), no solo el caso ya-limpio.
+test("la ficha del contacto muestra los links de llamar y WhatsApp junto al teléfono", async ({
+  page,
+  context,
+}) => {
+  const client = convexClient();
+  const token = await sessionTokenFrom(context);
+  const name = uniqueContactName("Whatsapp");
+  const created = await client.mutation(api.contacts.createContact, {
+    token,
+    name,
+    phone: "+34 612 345 678",
+  });
+  if (!created.success) throw new Error("setup failed");
+
+  await page.goto(`/contactos/${created.id}`);
+
+  // tel: sin normalizar, tal cual se guardó — comportamiento ya existente,
+  // sin cambios de MIS-254.
+  await expect(page.getByRole("link", { name: /\+34 612 345 678/ })).toHaveAttribute(
+    "href",
+    "tel:+34 612 345 678",
+  );
+
+  // wa.me con dígitos puros + prefijo de país, sin espacios ni "+", en
+  // pestaña nueva (no navega fuera del CRM).
+  const waLink = page.getByRole("link", { name: "WhatsApp" });
+  await expect(waLink).toHaveAttribute("href", "https://wa.me/34612345678");
+  await expect(waLink).toHaveAttribute("target", "_blank");
+});
+
+// MIS-254 (sugerencia baja de la auditoría de código, ronda 2): un teléfono
+// sin número nacional de España válido (menos de 9 dígitos, ver
+// whatsappDigits()/phoneKey() en src/lib/contacts/phone.ts) no debe mostrar
+// el link de WhatsApp — pero tel: sigue siendo tolerante a cualquier
+// formato y debe seguir mostrándose igual que hoy.
+test("un teléfono demasiado corto no muestra el link de WhatsApp, pero sí el de llamar", async ({
+  page,
+  context,
+}) => {
+  const client = convexClient();
+  const token = await sessionTokenFrom(context);
+  const name = uniqueContactName("TelefonoCorto");
+  const created = await client.mutation(api.contacts.createContact, {
+    token,
+    name,
+    phone: "12345",
+  });
+  if (!created.success) throw new Error("setup failed");
+
+  await page.goto(`/contactos/${created.id}`);
+
+  await expect(page.getByRole("link", { name: /12345/ })).toHaveAttribute("href", "tel:12345");
+  await expect(page.getByRole("link", { name: "WhatsApp" })).toHaveCount(0);
+});
+
+// MIS-254 (sugerencia media de la auditoría de código, ronda 2): el NO-GO
+// de la primera ronda fue exactamente un overflow horizontal en Pendientes
+// a 320px con los 3 botones de acción (Marcar hecho / Mañana / +3 días).
+// Tras la corrección (PostponeReminderButtons como forms planos, sin
+// contenedor propio), esto queda cubierto por diseño/comentario — esta
+// prueba lo comprueba de verdad, en un navegador real, no solo por
+// inspección manual puntual: mismo criterio exacto que pidió la auditoría
+// (document.documentElement.scrollWidth === clientWidth), ahora como
+// regresión permanente en la suite.
+test("Pendientes no desborda horizontalmente en 320px con los 3 botones de acción visibles", async ({
+  page,
+  context,
+}) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+
+  const client = convexClient();
+  const token = await sessionTokenFrom(context);
+  const name = uniqueContactName("Viewport320");
+  const created = await client.mutation(api.contacts.createContact, { token, name, phone: uniquePhone() });
+  if (!created.success) throw new Error("setup failed");
+  const reminderResult = await client.mutation(api.reminders.scheduleReminder, {
+    token,
+    contactId: created.id,
+    dueAt: Date.now(),
+    reason: "Verificación de ancho a 320px",
+  });
+  if (!reminderResult.success) throw new Error("no se pudo sembrar el recordatorio");
+
+  await page.goto("/pendientes");
+  const row = page.getByRole("listitem").filter({ hasText: name });
+  await expect(row).toBeVisible();
+  await expect(row.getByRole("button", { name: "Marcar hecho" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Mañana" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "+3 días" })).toBeVisible();
+
+  const overflow = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  expect(overflow.scrollWidth).toBe(overflow.clientWidth);
+
+  // Limpieza, mismo criterio que el resto de tests de este archivo.
+  await client.mutation(api.reminders.completeReminder, { token, id: reminderResult.id });
+});
