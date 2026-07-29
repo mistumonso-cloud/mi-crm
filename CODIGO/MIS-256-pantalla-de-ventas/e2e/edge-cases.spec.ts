@@ -337,32 +337,39 @@ test("Pendientes no desborda horizontalmente en 320px con los 3 botones de acci�
 
 // MIS-256: la pantalla Ventas lista las ventas ganadas del periodo
 // seleccionado y filtra por purchaseDate — se siembra una venta con fecha
-// de hoy (visible en Mes/Año) y otra 1ms antes del inicio del mes en
-// curso (SIEMPRE excluida de "Mes", en cualquier fecha de ejecución, sin
-// excepción de calendario), para comprobar que el filtro de periodo
-// funciona de verdad, no solo que la pantalla carga. Además confirma que
-// pulsar una venta abre la ficha del contacto correcto (AC: "al pulsar
-// una venta, abre la ficha del contacto").
+// de hoy (visible en Mes/Trimestre/Año) y otras con fechas claramente
+// anteriores al mes/trimestre en curso, para comprobar que el filtro de
+// periodo funciona de verdad, no solo que la pantalla carga. Además
+// confirma que pulsar una venta abre la ficha del contacto correcto (AC:
+// "al pulsar una venta, abre la ficha del contacto").
 //
-// Corrige un Major de la auditoría de código (ronda 1): la versión
-// anterior usaba un "15 de febrero" fijo como fecha "de un periodo
-// anterior", que en ejecuciones de enero/febrero podía caer en el mes
-// actual o incluso en el futuro (la query filtra purchaseDate <= ahora),
-// dejando la aserción de "excluida de Mes" inestable según la fecha real
-// de ejecución. La fecha de aquí (monthStart - 1) es matemáticamente
-// anterior al mes en curso SIEMPRE — no depende de qué mes sea "ahora".
+// Ronda 1 (Major de auditoría): la versión original usaba un "15 de
+// febrero" fijo como fecha "de un periodo anterior", inestable en
+// ejecuciones de enero/febrero.
 //
-// Lo que SÍ depende de la fecha de ejecución es si esa fecha cae también
-// en el año en curso: solo deja de ser así cuando el test corre en enero
-// (monthStart - 1 cruza a diciembre del año anterior) — la única
-// excepción posible por pura aritmética de calendario (no existe ningún
-// instante "antes del mes en curso" que siga en el mismo año si el mes en
-// curso es enero). La aserción de "Año" comprueba esa condición real en
-// vez de asumirla, así que el test es correcto en cualquier fecha de
-// ejecución, incluida esa.
+// Ronda 3 (fallo real en CI, no detectado en verificación local): las
+// versiones siguientes calculaban monthStart/quarterStart con
+// `new Date(year, month, 1)` — construcción que usa el huso horario LOCAL
+// del proceso que ejecuta el test. En verificación local (entorno Europe/
+// Madrid) coincidía con la frontera que calcula el backend (Madrid-aware,
+// ver convex/sales.ts), pero los runners de GitHub Actions corren en UTC
+// por defecto — hasta 2h de diferencia en verano, suficiente para que la
+// venta "anterior" cayera del lado equivocado de la frontera real y el
+// test fallara en CI aunque pasara siempre en local.
+//
+// Corregido de raíz: en vez de construir fechas de calendario locales
+// (ambiguas por huso horario), se usan desplazamientos ABSOLUTOS en días
+// desde Date.now() — 32 días (mayor que cualquier mes posible, 28-31
+// días) garantiza caer en un mes civil anterior, y 95 días (mayor que
+// cualquier trimestre posible, máx. 92 días) garantiza caer en un
+// trimestre anterior, en CUALQUIER huso horario del entorno donde corra
+// el test, sin necesidad de replicar la lógica Madrid-aware del backend
+// aquí.
 test("Ventas filtra por periodo y navega a la ficha del contacto al pulsar una venta", async ({ page, context }) => {
   const client = convexClient();
   const token = await sessionTokenFrom(context);
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+  const now = Date.now();
 
   const thisMonthName = uniqueContactName("VentaEsteMes");
   const thisMonthContact = await client.mutation(api.contacts.createContact, {
@@ -377,7 +384,7 @@ test("Ventas filtra por periodo y navega a la ficha del contacto al pulsar una v
     outcome: "won",
     product: "Producto de este mes",
     amountCents: 12345,
-    purchaseDate: Date.now(),
+    purchaseDate: now,
   });
   if (!thisMonthClose.success) throw new Error("no se pudo cerrar la venta de este mes");
 
@@ -389,9 +396,7 @@ test("Ventas filtra por periodo y navega a la ficha del contacto al pulsar una v
   });
   if (!earlierContact.success) throw new Error("setup failed");
 
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-  const earlierPurchaseDate = monthStart - 1; // 1ms antes del mes en curso, siempre
+  const earlierPurchaseDate = now - 32 * ONE_DAY_MS; // mes civil anterior, en cualquier huso horario
 
   const earlierClose = await client.mutation(api.sales.closeSale, {
     token,
@@ -405,13 +410,9 @@ test("Ventas filtra por periodo y navega a la ficha del contacto al pulsar una v
 
   // Sugerencia no bloqueante de la auditoría (ronda 2): el filtro de
   // Trimestre no tenía ninguna venta que cambiara de visibilidad al
-  // cambiar de pestaña. Misma técnica que earlierPurchaseDate arriba, pero
-  // anclada al inicio del TRIMESTRE en curso, no del mes — earlierName
-  // (monthStart - 1) no sirve aquí: si el mes en curso no es el primero
-  // del trimestre, monthStart - 1 sigue cayendo dentro del mismo
-  // trimestre. quarterStart - 1 es SIEMPRE anterior al trimestre en
-  // curso, sin excepción de calendario, igual que monthStart - 1 lo es
-  // para el mes.
+  // cambiar de pestaña. earlierName (32 días atrás) no sirve aquí: podría
+  // seguir cayendo dentro del mismo trimestre. 95 días atrás sí garantiza
+  // trimestre civil anterior, en cualquier huso horario.
   const earlierQuarterName = uniqueContactName("VentaTrimestreAnterior");
   const earlierQuarterContact = await client.mutation(api.contacts.createContact, {
     token,
@@ -420,9 +421,7 @@ test("Ventas filtra por periodo y navega a la ficha del contacto al pulsar una v
   });
   if (!earlierQuarterContact.success) throw new Error("setup failed");
 
-  const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3;
-  const quarterStart = new Date(now.getFullYear(), quarterStartMonth, 1).getTime();
-  const earlierQuarterPurchaseDate = quarterStart - 1; // 1ms antes del trimestre en curso, siempre
+  const earlierQuarterPurchaseDate = now - 95 * ONE_DAY_MS; // trimestre civil anterior, en cualquier huso horario
 
   const earlierQuarterClose = await client.mutation(api.sales.closeSale, {
     token,
@@ -436,25 +435,23 @@ test("Ventas filtra por periodo y navega a la ficha del contacto al pulsar una v
 
   await page.goto("/ventas");
 
-  // Mes (por defecto): solo la venta de este mes — earlierPurchaseDate es
-  // SIEMPRE anterior al inicio del mes en curso, sin excepción posible.
+  // Mes (por defecto): solo la venta de este mes.
   await expect(page.getByText(thisMonthName)).toBeVisible();
   await expect(page.getByText(earlierName)).toHaveCount(0);
 
   // Trimestre: la venta "de este mes" sigue visible (el mes en curso
   // siempre cae dentro del trimestre en curso); la de trimestre anterior
-  // queda excluida — quarterStart - 1 es SIEMPRE anterior al trimestre en
-  // curso, sin excepción de calendario, así que esta aserción no depende
-  // de la fecha de ejecución.
+  // queda excluida.
   await page.getByRole("tab", { name: "Trimestre", exact: true }).click();
   await expect(page.getByText(thisMonthName)).toBeVisible();
   await expect(page.getByText(earlierQuarterName)).toHaveCount(0);
 
-  // "Año" solo debe incluir la venta "de periodo anterior" si cae en el
-  // mismo año que "ahora" — deja de ser cierto únicamente si el test corre
-  // en enero. Se comprueba la condición real, no se asume, para que la
-  // aserción sea correcta en cualquier fecha de ejecución.
-  const earlierIsSameYear = new Date(earlierPurchaseDate).getFullYear() === now.getFullYear();
+  // Año: la venta "de periodo anterior" (32 días atrás) cae dentro del
+  // mismo año civil salvo que el test corra en los primeros ~32 días de
+  // enero — caso de borde real pero minúsculo, se comprueba la condición,
+  // no se asume, para que la aserción sea correcta en cualquier fecha de
+  // ejecución.
+  const earlierIsSameYear = new Date(earlierPurchaseDate).getUTCFullYear() === new Date(now).getUTCFullYear();
   await page.getByRole("tab", { name: "Año", exact: true }).click();
   await expect(page.getByText(thisMonthName)).toBeVisible();
   if (earlierIsSameYear) {

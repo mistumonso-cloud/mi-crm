@@ -10,17 +10,22 @@ Resumen de cambios:
 - `src/app/(app)/(with-nav)/panel/page.tsx` — la tarjeta "Ventas ganadas" se vuelve clicable hacia `/ventas` (sin cambiar los datos que muestra).
 - `e2e/edge-cases.spec.ts` — 3 tests nuevos al final del archivo; el resto del archivo se repite tal cual, sin cambios, por contexto.
 
-**Ronda 2 (corrige NO-GO — test inestable):** el test de filtro por periodo usaba `new Date(year, 1, 15)` (15 de febrero fijo) como fecha "de un periodo anterior" — inestable en ejecuciones de enero/febrero. Corregido: la fecha anterior ahora se calcula como `monthStart - 1` (1ms antes del inicio del mes en curso), matemáticamente anterior al mes en curso SIEMPRE; la aserción de "Año" comprueba en tiempo real si esa fecha sigue en el mismo año (única excepción posible: enero, por aritmética de calendario) en vez de asumirlo.
+**Ronda 2 (corrige NO-GO — test inestable):** el test de filtro por periodo usaba `new Date(year, 1, 15)` (15 de febrero fijo) como fecha "de un periodo anterior" — inestable en ejecuciones de enero/febrero. Corregido con una fecha calculada relativa al mes en curso.
 
-**Ronda 3 (corrige NO-GO — Major M2, offset de Madrid incorrecto en fronteras de periodo):** `startOfMadridMonth`/`Quarter`/`Year` calculaban el offset horario de Madrid a partir de "ahora" (el instante de la consulta) y lo reutilizaban para construir la frontera del periodo (que puede caer semanas o meses antes, al otro lado de un cambio de hora) — ej. consultado en noviembre/diciembre (CET, GMT+1), el inicio de Q4 (1 de octubre, todavía CEST, GMT+2) se calculaba con el offset equivocado, desplazando la frontera 1 hora y excluyendo ventas legítimas del primer día del trimestre. **Corregido:** los helpers ahora resuelven el offset de Madrid EN EL INSTANTE DE LA PROPIA FRONTERA (construyen un candidato ingenuo year/month/day-a-medianoche-como-UTC, buscan el offset real de Madrid en ese candidato, y lo aplican), no en el instante de la consulta. Verificado con un script aparte reproduciendo exactamente el ejemplo de la auditoría (consulta en noviembre, frontera de Q4): con el fix, `startOfMadridQuarter` da `2026-09-30T22:00:00Z` (correcto, antes daba `2026-09-30T23:00:00Z`, incorrecto). También se añadió cobertura e2e real de Trimestre (antes solo Mes/Año tenían una venta que cambiara de visibilidad al cambiar de pestaña) y se cambió el selector frágil del test de Panel (`hasText:"ventas cerradas"` → `hasText:"importe total"`, inmune a la variación singular/plural del contador).
+**Ronda 3 (corrige NO-GO — Major M2, offset de Madrid incorrecto en fronteras de periodo):** `startOfMadridMonth`/`Quarter`/`Year` calculaban el offset horario de Madrid a partir de "ahora" (el instante de la consulta) y lo reutilizaban para construir la frontera del periodo (que puede caer semanas o meses antes, al otro lado de un cambio de hora) — ej. consultado en noviembre/diciembre (CET, GMT+1), el inicio de Q4 (1 de octubre, todavía CEST, GMT+2) se calculaba con el offset equivocado. **Corregido:** los helpers ahora resuelven el offset de Madrid EN EL INSTANTE DE LA PROPIA FRONTERA, no en el instante de la consulta. Verificado con un script aparte reproduciendo el ejemplo exacto de la auditoría. También se añadió cobertura e2e real de Trimestre y se cambió el selector frágil del test de Panel (`hasText:"ventas cerradas"` → `hasText:"importe total"`).
 
-Deuda aceptada, no cerrada en esta tarea: no hay infraestructura de mock de reloj para el `Date.now()` del lado servidor de Convex en la suite e2e actual (solo Playwright contra el deployment real), así que no se puede simular en un test end-to-end el escenario exacto de "consulta justo después de un cambio de hora, frontera justo antes" — la corrección se verificó con un script Node aparte reproduciendo la aritmética exacta del caso de la auditoría (ver arriba), no con una prueba de regresión automatizada en CI. Añadir esa infraestructura de mock de tiempo, si se necesita, es trabajo de follow-up fuera del alcance de este ticket.
+**Ronda 4 (fallo real en CI tras el GO condicionado, no detectado en verificación local):** el job `e2e` de GitHub Actions falló en el PR — `getByText(earlierName)).toHaveCount(0)` recibió 1 en vez de 0. Causa: el test calculaba `monthStart`/`quarterStart` con `new Date(year, month, 1)`, que usa el huso horario LOCAL del proceso. La verificación local de este ticket se hizo en un entorno Europe/Madrid (mismo huso que asume el backend), por eso pasó siempre en local — pero los runners de GitHub Actions corren en UTC por defecto, con hasta 2h de diferencia en verano respecto a Madrid, suficiente para que la venta "anterior" cayera del lado equivocado de la frontera real. Es el mismo tipo de fragilidad que la sugerencia "Baja" de la ronda 3 ya advertía, solo que la premisa de esa sugerencia ("el entorno declarado es Madrid") no se cumplía en CI.
 
-**Verificación ya realizada** (overlay real sobre el repo, revertido tras verificar, tres rondas):
+**Corregido de raíz:** el test ya no construye fechas de calendario locales — usa desplazamientos absolutos en días desde `Date.now()` (32 días para garantizar mes civil anterior, mayor que cualquier mes posible de 28-31 días; 95 días para trimestre civil anterior, mayor que cualquier trimestre posible de hasta 92 días), válidos en cualquier huso horario del runner. Verificado localmente forzando `TZ=UTC` (reproduce las condiciones exactas de GitHub Actions): el test de filtro por periodo pasa limpio, tanto aislado (2/2) como en la suite completa.
+
+**Verificación ya realizada** (overlay real sobre el repo + instalación real en la rama, cuatro rondas):
 - `tsc --noEmit`, `eslint`, `npm run build`: sin errores.
 - `npx convex dev --once` + servidor real + Playwright: navegación Panel→Ventas→ficha OK, selector Mes/Trimestre/Año recalcula bien (las tres pestañas, cada una con una venta que cambia de visibilidad), sin overflow horizontal en 320px (`scrollWidth === clientWidth`).
-- Suite e2e completa (21 tests, ambos roles): **21 passed** en las tres rondas, sin regresiones en el resto.
-- Convex dev resincronizado con el código de `main` tras cada verificación.
+- Suite e2e completa (21 tests, ambos roles): **21 passed** en local (huso Europe/Madrid) en las cuatro rondas.
+- Tras el fallo real en CI (ronda 4): re-verificado forzando `TZ=UTC` localmente (mismas condiciones que GitHub Actions) — test de filtro por periodo aislado 2/2, suite completa 20/21 (el único fallo, `full-flow.spec.ts`, es un test preexistente no relacionado con esta tarea que SÍ pasó en el CI real del PR — ver nota de "deuda" abajo).
+- Convex dev resincronizado con el código de `main`/de la rama tras cada verificación.
+
+**Nota sobre datos de prueba acumulados (no es un bug de código):** en la re-verificación local de la ronda 4, `full-flow.spec.ts` (test preexistente, sin relación con MIS-256) falló de forma intermitente. Diagnóstico: el deployment de dev compartido (`dutiful-mole-111`) acumula contactos/ventas de las numerosas rondas de verificación de esta sesión (157+ contactos en pipeline al momento de escribir esto), degradando queries de scan completo — mismo patrón ya diagnosticado y limpiado una vez antes en esta sesión (ver `PLANS/MIS-254-*.md`). No bloquea este PR (el CI real, con su propio entorno, pasó `full-flow.spec.ts` limpio); limpieza de datos de dev enviada como acción de seguimiento a discreción del usuario, no como parte de este ticket.
 
 ---
 
@@ -1387,32 +1392,39 @@ test("Pendientes no desborda horizontalmente en 320px con los 3 botones de acci�
 
 // MIS-256: la pantalla Ventas lista las ventas ganadas del periodo
 // seleccionado y filtra por purchaseDate — se siembra una venta con fecha
-// de hoy (visible en Mes/Año) y otra 1ms antes del inicio del mes en
-// curso (SIEMPRE excluida de "Mes", en cualquier fecha de ejecución, sin
-// excepción de calendario), para comprobar que el filtro de periodo
-// funciona de verdad, no solo que la pantalla carga. Además confirma que
-// pulsar una venta abre la ficha del contacto correcto (AC: "al pulsar
-// una venta, abre la ficha del contacto").
+// de hoy (visible en Mes/Trimestre/Año) y otras con fechas claramente
+// anteriores al mes/trimestre en curso, para comprobar que el filtro de
+// periodo funciona de verdad, no solo que la pantalla carga. Además
+// confirma que pulsar una venta abre la ficha del contacto correcto (AC:
+// "al pulsar una venta, abre la ficha del contacto").
 //
-// Corrige un Major de la auditoría de código (ronda 1): la versión
-// anterior usaba un "15 de febrero" fijo como fecha "de un periodo
-// anterior", que en ejecuciones de enero/febrero podía caer en el mes
-// actual o incluso en el futuro (la query filtra purchaseDate <= ahora),
-// dejando la aserción de "excluida de Mes" inestable según la fecha real
-// de ejecución. La fecha de aquí (monthStart - 1) es matemáticamente
-// anterior al mes en curso SIEMPRE — no depende de qué mes sea "ahora".
+// Ronda 1 (Major de auditoría): la versión original usaba un "15 de
+// febrero" fijo como fecha "de un periodo anterior", inestable en
+// ejecuciones de enero/febrero.
 //
-// Lo que SÍ depende de la fecha de ejecución es si esa fecha cae también
-// en el año en curso: solo deja de ser así cuando el test corre en enero
-// (monthStart - 1 cruza a diciembre del año anterior) — la única
-// excepción posible por pura aritmética de calendario (no existe ningún
-// instante "antes del mes en curso" que siga en el mismo año si el mes en
-// curso es enero). La aserción de "Año" comprueba esa condición real en
-// vez de asumirla, así que el test es correcto en cualquier fecha de
-// ejecución, incluida esa.
+// Ronda 3 (fallo real en CI, no detectado en verificación local): las
+// versiones siguientes calculaban monthStart/quarterStart con
+// `new Date(year, month, 1)` — construcción que usa el huso horario LOCAL
+// del proceso que ejecuta el test. En verificación local (entorno Europe/
+// Madrid) coincidía con la frontera que calcula el backend (Madrid-aware,
+// ver convex/sales.ts), pero los runners de GitHub Actions corren en UTC
+// por defecto — hasta 2h de diferencia en verano, suficiente para que la
+// venta "anterior" cayera del lado equivocado de la frontera real y el
+// test fallara en CI aunque pasara siempre en local.
+//
+// Corregido de raíz: en vez de construir fechas de calendario locales
+// (ambiguas por huso horario), se usan desplazamientos ABSOLUTOS en días
+// desde Date.now() — 32 días (mayor que cualquier mes posible, 28-31
+// días) garantiza caer en un mes civil anterior, y 95 días (mayor que
+// cualquier trimestre posible, máx. 92 días) garantiza caer en un
+// trimestre anterior, en CUALQUIER huso horario del entorno donde corra
+// el test, sin necesidad de replicar la lógica Madrid-aware del backend
+// aquí.
 test("Ventas filtra por periodo y navega a la ficha del contacto al pulsar una venta", async ({ page, context }) => {
   const client = convexClient();
   const token = await sessionTokenFrom(context);
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+  const now = Date.now();
 
   const thisMonthName = uniqueContactName("VentaEsteMes");
   const thisMonthContact = await client.mutation(api.contacts.createContact, {
@@ -1427,7 +1439,7 @@ test("Ventas filtra por periodo y navega a la ficha del contacto al pulsar una v
     outcome: "won",
     product: "Producto de este mes",
     amountCents: 12345,
-    purchaseDate: Date.now(),
+    purchaseDate: now,
   });
   if (!thisMonthClose.success) throw new Error("no se pudo cerrar la venta de este mes");
 
@@ -1439,9 +1451,7 @@ test("Ventas filtra por periodo y navega a la ficha del contacto al pulsar una v
   });
   if (!earlierContact.success) throw new Error("setup failed");
 
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-  const earlierPurchaseDate = monthStart - 1; // 1ms antes del mes en curso, siempre
+  const earlierPurchaseDate = now - 32 * ONE_DAY_MS; // mes civil anterior, en cualquier huso horario
 
   const earlierClose = await client.mutation(api.sales.closeSale, {
     token,
@@ -1455,13 +1465,9 @@ test("Ventas filtra por periodo y navega a la ficha del contacto al pulsar una v
 
   // Sugerencia no bloqueante de la auditoría (ronda 2): el filtro de
   // Trimestre no tenía ninguna venta que cambiara de visibilidad al
-  // cambiar de pestaña. Misma técnica que earlierPurchaseDate arriba, pero
-  // anclada al inicio del TRIMESTRE en curso, no del mes — earlierName
-  // (monthStart - 1) no sirve aquí: si el mes en curso no es el primero
-  // del trimestre, monthStart - 1 sigue cayendo dentro del mismo
-  // trimestre. quarterStart - 1 es SIEMPRE anterior al trimestre en
-  // curso, sin excepción de calendario, igual que monthStart - 1 lo es
-  // para el mes.
+  // cambiar de pestaña. earlierName (32 días atrás) no sirve aquí: podría
+  // seguir cayendo dentro del mismo trimestre. 95 días atrás sí garantiza
+  // trimestre civil anterior, en cualquier huso horario.
   const earlierQuarterName = uniqueContactName("VentaTrimestreAnterior");
   const earlierQuarterContact = await client.mutation(api.contacts.createContact, {
     token,
@@ -1470,9 +1476,7 @@ test("Ventas filtra por periodo y navega a la ficha del contacto al pulsar una v
   });
   if (!earlierQuarterContact.success) throw new Error("setup failed");
 
-  const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3;
-  const quarterStart = new Date(now.getFullYear(), quarterStartMonth, 1).getTime();
-  const earlierQuarterPurchaseDate = quarterStart - 1; // 1ms antes del trimestre en curso, siempre
+  const earlierQuarterPurchaseDate = now - 95 * ONE_DAY_MS; // trimestre civil anterior, en cualquier huso horario
 
   const earlierQuarterClose = await client.mutation(api.sales.closeSale, {
     token,
@@ -1486,25 +1490,23 @@ test("Ventas filtra por periodo y navega a la ficha del contacto al pulsar una v
 
   await page.goto("/ventas");
 
-  // Mes (por defecto): solo la venta de este mes — earlierPurchaseDate es
-  // SIEMPRE anterior al inicio del mes en curso, sin excepción posible.
+  // Mes (por defecto): solo la venta de este mes.
   await expect(page.getByText(thisMonthName)).toBeVisible();
   await expect(page.getByText(earlierName)).toHaveCount(0);
 
   // Trimestre: la venta "de este mes" sigue visible (el mes en curso
   // siempre cae dentro del trimestre en curso); la de trimestre anterior
-  // queda excluida — quarterStart - 1 es SIEMPRE anterior al trimestre en
-  // curso, sin excepción de calendario, así que esta aserción no depende
-  // de la fecha de ejecución.
+  // queda excluida.
   await page.getByRole("tab", { name: "Trimestre", exact: true }).click();
   await expect(page.getByText(thisMonthName)).toBeVisible();
   await expect(page.getByText(earlierQuarterName)).toHaveCount(0);
 
-  // "Año" solo debe incluir la venta "de periodo anterior" si cae en el
-  // mismo año que "ahora" — deja de ser cierto únicamente si el test corre
-  // en enero. Se comprueba la condición real, no se asume, para que la
-  // aserción sea correcta en cualquier fecha de ejecución.
-  const earlierIsSameYear = new Date(earlierPurchaseDate).getFullYear() === now.getFullYear();
+  // Año: la venta "de periodo anterior" (32 días atrás) cae dentro del
+  // mismo año civil salvo que el test corra en los primeros ~32 días de
+  // enero — caso de borde real pero minúsculo, se comprueba la condición,
+  // no se asume, para que la aserción sea correcta en cualquier fecha de
+  // ejecución.
+  const earlierIsSameYear = new Date(earlierPurchaseDate).getUTCFullYear() === new Date(now).getUTCFullYear();
   await page.getByRole("tab", { name: "Año", exact: true }).click();
   await expect(page.getByText(thisMonthName)).toBeVisible();
   if (earlierIsSameYear) {
