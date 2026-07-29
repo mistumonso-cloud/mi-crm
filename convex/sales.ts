@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireRole, requireUser } from "./lib/authz";
+import { requireUser } from "./lib/authz";
 
 // "Producto o servicio vendido" y "motivo de pérdida" son ambos texto libre
 // corto — mismo orden de magnitud que REASON_MAX en convex/reminders.ts (no
@@ -67,11 +67,13 @@ export const closeSale = mutation({
     }),
   ),
   handler: async (ctx, args) => {
-    // Solo "rep" (Carlos) puede cerrar una venta — condición YA CERRADA por
-    // el ADR de MIS-18 (PLANS/MIS-18-navegacion-principal.md, "Qué NO
-    // cambia"): "cierre de venta en MIS-15... sigue debiendo llamar
-    // [requireRole] como primera línea, sin excepción."
-    const user = await requireRole(ctx, args.token, "rep");
+    // MIS-251 (reapertura): revierte explícitamente el ADR de MIS-18 (PLANS/
+    // MIS-18-navegacion-principal.md, "Qué NO cambia" — "cierre de venta en
+    // MIS-15... sigue debiendo llamar [requireRole] como primera línea, sin
+    // excepción"). Decisión de negocio confirmada por el usuario: Marta
+    // conserva acceso de escritura completo, igual que Carlos. Ver PLANS/
+    // MIS-251-rol-supervision-marta.md, sección "Decisión fijada".
+    const user = await requireUser(ctx, args.token);
 
     const contactId = ctx.db.normalizeId("contacts", args.contactId);
     if (!contactId) {

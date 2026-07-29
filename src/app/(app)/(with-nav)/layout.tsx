@@ -26,7 +26,7 @@ import { readSessionToken } from "@/lib/auth/cookie";
 // del header en node_modules/next/dist/docs/01-app/01-getting-started/
 // 07-mutating-data.md).
 export default async function WithNavLayout({ children }: { children: ReactNode }) {
-  const user = await getUser();
+  await getUser(); // solo chequeo de sesión — MIS-251 retira el gating por rol del FAB (ver abajo)
   const token = await readSessionToken(); // getUser() ya garantiza sesión válida aquí
   const dueTodayCount = await fetchQuery(api.reminders.countDueToday, { token: token! });
 
@@ -38,14 +38,13 @@ export default async function WithNavLayout({ children }: { children: ReactNode 
       >
         {children}
       </div>
-      {/* MIS-20 (corrige Major de la auditoría de plan): el FAB solo tiene
-          sentido para quien puede crear contactos (requireRole "rep" en
-          createContact) — mostrarlo a Marta la llevaba a un callejón sin
-          salida en /contactos/nuevo (formulario reemplazado por un mensaje
-          de solo lectura). Se oculta por completo para supervisor; el
-          guard de servidor en contactos/nuevo/page.tsx se mantiene como
-          defensa en profundidad ante navegación directa a la URL. */}
-      {user.role === "rep" && <AddContactFab />}
+      {/* MIS-251 (reapertura): antes solo visible para "rep" (MIS-20) —
+          revertido por decisión de negocio (Marta conserva acceso de
+          escritura completo, igual que Carlos; ver PLANS/MIS-251-rol-
+          supervision-marta.md). createContact ya no exige rol "rep" en el
+          servidor, así que mostrarlo a Marta ya no lleva a un callejón sin
+          salida. */}
+      <AddContactFab />
       <BottomNav dueTodayCount={dueTodayCount} />
     </>
   );

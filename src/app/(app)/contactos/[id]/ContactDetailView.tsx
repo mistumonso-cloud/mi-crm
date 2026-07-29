@@ -64,14 +64,12 @@ export function ContactDetailView({
   reminders,
   statusChanges,
   saleClosures,
-  canChangeStatus,
 }: {
   contact: Contact;
   notes: Notes;
   reminders: Reminders;
   statusChanges: StatusChanges;
   saleClosures: SaleClosures;
-  canChangeStatus: boolean;
 }) {
   const [sheet, setSheet] = useState<SheetKind>(null);
   const isClosed = contact.status === "won" || contact.status === "lost";
@@ -185,43 +183,33 @@ export function ContactDetailView({
         <Button variant="secondary" size="sm" style={{ flex: "1 1 130px" }} onClick={() => setSheet("note")}>
           Añadir nota
         </Button>
-        {/* MIS-14: solo Carlos ("rep") puede cambiar el estado — condición
-            ya cerrada por el ADR de MIS-18 (requireRole en la mutation).
-            Se oculta el botón en vez de mostrarlo deshabilitado con
-            mensaje, mismo criterio que canCreate en ContactList.tsx: evita
-            que Marta llegue a una hoja que solo puede fallar en el
-            servidor. No lleva !isClosed: Carlos puede reabrir un contacto
-            cerrado desde aquí en cualquier momento (AC de MIS-14, "cualquier
-            estado a cualquier otro, sin bloqueos"). */}
-        {canChangeStatus && (
-          <Button variant="secondary" size="sm" style={{ flex: "1 1 130px" }} onClick={() => setSheet("status")}>
-            Cambiar estado
-          </Button>
-        )}
-        {/* MIS-15: "Cerrar venta" ejecuta closeSale, que exige
-            requireRole("rep") igual que changeContactStatus — se reutiliza
-            canChangeStatus (ya significa "puede ejecutar acciones de
-            pipeline reservadas a rep") para no dejar a Marta abrir un
-            formulario que solo puede fallar al confirmar (mismo criterio
-            que ya se aplica arriba a "Cambiar estado"). A diferencia de
-            "Cambiar estado", SÍ lleva !isClosed: no tiene sentido volver a
-            cerrar una venta ya cerrada por esta vía (closeSale lo rechaza
-            también en el servidor como defensa en profundidad). */}
-        {canChangeStatus && !isClosed && (
+        {/* MIS-251 (reapertura): "Cambiar estado" deja de estar restringido a
+            "rep" — revierte el ADR de MIS-18 ("Qué NO cambia") por decisión
+            de negocio confirmada por el usuario (Marta conserva acceso de
+            escritura completo, igual que Carlos; ver PLANS/MIS-251-rol-
+            supervision-marta.md). changeContactStatus ya no exige rol "rep"
+            en el servidor. No lleva !isClosed: Carlos puede reabrir un
+            contacto cerrado desde aquí en cualquier momento (AC de MIS-14,
+            "cualquier estado a cualquier otro, sin bloqueos"). */}
+        <Button variant="secondary" size="sm" style={{ flex: "1 1 130px" }} onClick={() => setSheet("status")}>
+          Cambiar estado
+        </Button>
+        {/* MIS-251 (reapertura): mismo criterio que "Cambiar estado" — deja
+            de estar restringido a "rep" (closeSale ya no exige rol "rep" en
+            el servidor). Se conserva !isClosed: sigue siendo lógica de
+            negocio, no de rol — no tiene sentido volver a cerrar una venta
+            ya cerrada por esta vía (closeSale lo rechaza también en el
+            servidor como defensa en profundidad). */}
+        {!isClosed && (
           <Button variant="primary" size="sm" style={{ flex: "1 1 130px" }} onClick={() => setSheet("close")}>
             Cerrar venta
           </Button>
         )}
-        {/* MIS-252: mismo gating que "Cambiar estado" (canChangeStatus,
-            sin !isClosed) — Carlos puede corregir nombre/teléfono/email/
-            canal de un contacto ya cerrado (won/lost) en cualquier
-            momento; el AC no condiciona esta acción al estado del
-            pipeline, a diferencia de "Cerrar venta". */}
-        {canChangeStatus && (
-          <Button variant="secondary" size="sm" style={{ flex: "1 1 130px" }} onClick={() => setSheet("edit")}>
-            Editar datos
-          </Button>
-        )}
+        {/* MIS-251 (reapertura): mismo criterio que "Cambiar estado" —
+            updateContact ya no exige rol "rep" en el servidor. */}
+        <Button variant="secondary" size="sm" style={{ flex: "1 1 130px" }} onClick={() => setSheet("edit")}>
+          Editar datos
+        </Button>
       </div>
 
       <div>

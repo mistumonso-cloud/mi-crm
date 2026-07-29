@@ -6,7 +6,7 @@ import { readSessionToken } from "@/lib/auth/cookie";
 import { ContactDetailView } from "./ContactDetailView";
 
 export default async function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await getUser(); // MIS-14: se captura el valor (antes no hacía falta) para user.role -> canChangeStatus
+  await getUser(); // solo chequeo de sesión — MIS-251 retira canChangeStatus (ver ContactDetailView.tsx)
   const { id } = await params;
   const token = await readSessionToken(); // getUser() ya garantiza sesión válida aquí
 
@@ -45,7 +45,6 @@ export default async function ContactDetailPage({ params }: { params: Promise<{ 
         reminders={reminders}
         statusChanges={statusChanges}
         saleClosures={saleClosures}
-        canChangeStatus={user.role === "rep"}
       />
     </div>
   );

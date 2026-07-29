@@ -7,8 +7,8 @@ import { hashToken } from "./token";
 // funciones de Convex en sí — cualquier query/mutation expuesta es invocable
 // directamente por cualquier cliente con un token válido, sin pasar por
 // Next.js. Toda función futura (MIS-9/13/17/18...) que lea o escriba datos
-// dependientes del usuario conectado debe llamar a requireUser/requireRole
-// como primera línea, no confiar en que ya se validó en el DAL de Next.
+// dependientes del usuario conectado debe llamar a requireUser como primera
+// línea, no confiar en que ya se validó en el DAL de Next.
 
 type Ctx = QueryCtx | MutationCtx;
 
@@ -42,12 +42,11 @@ export async function requireUser(ctx: Ctx, token: string): Promise<SessionUser>
   return user;
 }
 
-export async function requireRole(
-  ctx: Ctx,
-  token: string,
-  role: "rep" | "supervisor",
-): Promise<SessionUser> {
-  const user = await requireUser(ctx, token);
-  if (user.role !== role) throw new ConvexError("No autorizado");
-  return user;
-}
+// MIS-251 (reapertura): se retira requireRole — llegó a exigir role==="rep"
+// en createContact/updateContact/changeContactStatus/closeSale, pero esa
+// distinción por rol se revierte por decisión de negocio (Marta conserva
+// acceso de escritura completo, igual que Carlos; ver PLANS/MIS-251-rol-
+// supervision-marta.md). Sin ningún call site restante en el repo tras ese
+// cambio. `role` se mantiene en SessionUser/el schema solo para la
+// experiencia de navegación (pantalla de aterrizaje por defecto), no para
+// autorización de escrituras.

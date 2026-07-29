@@ -52,13 +52,12 @@ export async function createContactAction(
       initialNote: initialNoteRaw || undefined,
     });
   } catch (err) {
-    // requireRole lanza ConvexError("No autenticado") si la sesión se
-    // revocó/expiró entre cargar la página y enviar el formulario, o
-    // ConvexError("No autorizado") si un usuario no-"rep" fuerza la request
-    // saltándose el guard de la page — se distinguen para no mandar a /login
-    // a alguien que sí tiene sesión válida, solo el rol equivocado.
+    // MIS-251 (reapertura): createContact ya no exige rol "rep" — la única
+    // ConvexError posible aquí es "No autenticado" (sesión revocada/expirada
+    // entre cargar la página y enviar el formulario). Ya no hace falta
+    // distinguir un caso "No autorizado" (dejó de poder ocurrir).
     if (err instanceof ConvexError) {
-      redirect(err.data === "No autorizado" ? "/contactos" : "/login");
+      redirect("/login");
     }
     throw err; // cualquier otro error, no lo enmascaramos
   }
@@ -79,9 +78,7 @@ export type UpdateContactState =
 // desde su ficha, en un solo paso (EditContactForm.tsx). A diferencia de
 // createContactAction (redirige a la ficha del contacto NUEVO), esta se
 // queda en la misma ficha — mismo patrón que changeStatusAction/
-// closeSaleAction: ya hay un contactId concreto, así que un "No
-// autorizado" (Marta forzando el POST) redirige de vuelta a esa misma
-// ficha, no a "/contactos".
+// closeSaleAction: ya hay un contactId concreto.
 export async function updateContactAction(
   _prevState: UpdateContactState,
   formData: FormData,
@@ -115,8 +112,11 @@ export async function updateContactAction(
       channel,
     });
   } catch (err) {
+    // MIS-251 (reapertura): updateContact ya no exige rol "rep" — mismo
+    // motivo que createContactAction, la única ConvexError posible es "No
+    // autenticado".
     if (err instanceof ConvexError) {
-      redirect(err.data === "No autorizado" ? `/contactos/${contactId}` : "/login");
+      redirect("/login");
     }
     throw err;
   }
@@ -160,15 +160,13 @@ export async function changeStatusAction(
   try {
     result = await fetchMutation(api.contacts.changeContactStatus, { token, contactId, status });
   } catch (err) {
-    // requireRole(ctx, token, "rep") — ConvexError("No autenticado") si la
-    // sesión se revocó/expiró entre cargar la ficha y pulsar un estado, o
-    // ConvexError("No autorizado") si Marta fuerza la request saltándose
-    // el gating de UI (ver ContactDetailView.tsx, prop canChangeStatus).
-    // A diferencia de createContactAction (que redirige a "/contactos"
-    // porque en ese punto el contacto ni siquiera existe todavía), aquí sí
-    // hay un contactId concreto: se redirige de vuelta a esa misma ficha.
+    // MIS-251 (reapertura): changeContactStatus ya no exige rol "rep" —
+    // revierte el ADR de MIS-18. La única ConvexError posible aquí ya es
+    // "No autenticado" (sesión revocada/expirada entre cargar la ficha y
+    // pulsar un estado); ya no hace falta distinguir un caso "No
+    // autorizado" (dejó de poder ocurrir).
     if (err instanceof ConvexError) {
-      redirect(err.data === "No autorizado" ? `/contactos/${contactId}` : "/login");
+      redirect("/login");
     }
     throw err;
   }
@@ -284,15 +282,13 @@ export async function closeSaleAction(
       lossReason,
     });
   } catch (err) {
-    // requireRole(ctx, token, "rep") — ConvexError("No autenticado") si la
-    // sesión se revocó/expiró entre cargar la ficha y confirmar, o
-    // ConvexError("No autorizado") si Marta fuerza la request saltándose el
-    // gating de UI (ver ContactDetailView.tsx, canChangeStatus reutilizada
-    // también para "Cerrar venta" — decisión 4 del plan). Mismo patrón que
-    // changeStatusAction: hay un contactId concreto, se redirige de vuelta
-    // a esa misma ficha en vez de a "/contactos".
+    // MIS-251 (reapertura): closeSale ya no exige rol "rep" — revierte el
+    // ADR de MIS-18. La única ConvexError posible aquí ya es "No
+    // autenticado" (sesión revocada/expirada entre cargar la ficha y
+    // confirmar); ya no hace falta distinguir un caso "No autorizado"
+    // (dejó de poder ocurrir).
     if (err instanceof ConvexError) {
-      redirect(err.data === "No autorizado" ? `/contactos/${contactId}` : "/login");
+      redirect("/login");
     }
     throw err;
   }

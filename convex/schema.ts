@@ -27,9 +27,11 @@ export default defineSchema({
     initialNote: v.optional(v.string()),
     // Quién dio de alta el contacto — obligatorio porque createContact
     // (MIS-8) es la única vía de escritura hoy y siempre corre autenticada
-    // vía requireRole. Confirmado seguro de aplicar como obligatorio: la
-    // tabla no tenía ninguna fila en dev ni en producción en el momento de
-    // este cambio (ver CODIGO/MIS-8-anadir-contacto/NOTES.md).
+    // vía requireUser. MIS-251 (reapertura): createContact ya no exige rol
+    // "rep" — cualquier usuario autenticado (Carlos o Marta) puede figurar
+    // aquí. Confirmado seguro de aplicar como obligatorio: la tabla no
+    // tenía ninguna fila en dev ni en producción en el momento del cambio
+    // original (ver CODIGO/MIS-8-anadir-contacto/NOTES.md).
     createdBy: v.id("users"),
     status: v.union(
       v.literal("lead"),
