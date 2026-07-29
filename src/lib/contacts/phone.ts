@@ -23,6 +23,7 @@
 // otros países). Mismo supuesto de un solo país ya aceptado en este
 // directorio (ver timeZone "Europe/Madrid" fija en format.ts).
 const SPAIN_PHONE_DIGITS = 9;
+const SPAIN_COUNTRY_CODE = "34";
 
 // Deja solo los dígitos y, si hay más de 9, se queda con los últimos 9 —
 // el número nacional real, sea cual sea lo que venga delante (+34, 0034,
@@ -50,4 +51,23 @@ export function phoneKey(phone: string): string {
   const digits = phone.replace(/\D/g, "");
   if (digits.length < SPAIN_PHONE_DIGITS) return "";
   return digits.slice(-SPAIN_PHONE_DIGITS);
+}
+
+// MIS-254: dígitos completos con prefijo de país, para el link
+// `https://wa.me/<número>` de la ficha del contacto — a diferencia de
+// phoneKey (que DESCARTA el prefijo, porque para comparar duplicados el
+// prefijo es irrelevante), aquí hace falta GARANTIZARLO: wa.me exige
+// código de país + número nacional, solo dígitos, sin "+". Reutiliza
+// phoneKey para obtener el número nacional de 9 dígitos (mismo criterio de
+// tolerancia a formatos: espacios, guiones, +34/0034 delante) y le
+// antepone "34" fijo — mismo supuesto de un solo país ya aceptado arriba.
+// Sin número nacional válido (menos de 9 dígitos), devuelve null: el
+// llamador (ContactDetailView.tsx) no renderiza el link de WhatsApp en ese
+// caso, sin bloquear el link tel: existente (que sí tolera cualquier
+// formato). Soporte de teléfonos extranjeros: fuera de alcance del MVP,
+// igual que el resto de este archivo — ver PLANS/MIS-254-acciones-rapidas-
+// contactar-posponer.md, deuda de follow-up de la auditoría de plan.
+export function whatsappDigits(phone: string): string | null {
+  const key = phoneKey(phone);
+  return key ? `${SPAIN_COUNTRY_CODE}${key}` : null;
 }

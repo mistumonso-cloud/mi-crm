@@ -14,6 +14,8 @@ export type ScheduleReminderState =
 
 export type CompleteReminderState = { success: true } | { success: false; error: string } | undefined;
 
+export type PostponeReminderState = { success: true } | { success: false; error: string } | undefined;
+
 // Duplicada de convex/reminders.ts a propósito — mismo motivo que
 // isValidEpochMs en src/lib/notes/actions.ts: la mutation es un endpoint
 // público invocable directamente con un token válido, sin pasar por esta
@@ -82,6 +84,38 @@ export async function completeReminderAction(
   let result;
   try {
     result = await fetchMutation(api.reminders.completeReminder, { token, id });
+  } catch (err) {
+    if (err instanceof ConvexError) redirect("/login");
+    throw err;
+  }
+
+  if (!result.success) return { success: false, error: result.error };
+
+  refresh();
+  return { success: true };
+}
+
+// MIS-254: reprograma un recordatorio en un solo toque (mañana / +3 días)
+// desde Pendientes, sin abrir la ficha. `dueAt` llega ya calculado en el
+// navegador (ver PostponeReminderButtons.tsx) — mismo criterio que
+// dueDateMs en scheduleReminderAction: esta Server Action nunca recalcula
+// fechas, solo valida el epoch ms recibido.
+export async function postponeReminderAction(
+  _prevState: PostponeReminderState,
+  formData: FormData,
+): Promise<PostponeReminderState> {
+  const token = await readSessionToken();
+  if (!token) redirect("/login");
+
+  const id = String(formData.get("reminderId") ?? "");
+
+  const dueAtRaw = formData.get("dueAt");
+  const dueAt = typeof dueAtRaw === "string" ? Number(dueAtRaw) : NaN;
+  if (!isValidEpochMs(dueAt)) return { success: false, error: "Fecha inválida" };
+
+  let result;
+  try {
+    result = await fetchMutation(api.reminders.postponeReminder, { token, id, dueAt });
   } catch (err) {
     if (err instanceof ConvexError) redirect("/login");
     throw err;

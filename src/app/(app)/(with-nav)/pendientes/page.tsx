@@ -9,13 +9,16 @@ import { Badge } from "@/components/ui/feedback/Badge";
 import { StatusBadge } from "@/components/ui/feedback/StatusBadge";
 import { formatDate } from "@/lib/contacts/format";
 import { CompleteReminderButton } from "@/components/crm/CompleteReminderButton";
+import { PostponeReminderButtons } from "@/components/crm/PostponeReminderButtons";
 
 // Home de Carlos (MIS-13): recordatorios de seguimiento vencidos o de hoy
 // (convex/reminders.ts::listDueToday), ordenados por dueAt asc (vencidos
 // primero — dueAt es fecha sin hora, medianoche Europe/Madrid, decisión ya
 // cerrada en MIS-12, no reabierta aquí). Cada fila muestra nombre, estado
 // de pipeline (StatusBadge) y motivo; "marcar hecho" y el tap en el nombre
-// son acciones directas sin entrar en la ficha (AC del ticket).
+// son acciones directas sin entrar en la ficha (AC del ticket). MIS-254
+// añade "Posponer" (Mañana / +3 días) junto a "Marcar hecho" — misma idea,
+// reprogramar sin entrar en la ficha.
 //
 // MIS-253: segunda sección "Requieren atención" — contactos activos sin
 // ningún seguimiento programado (convex/contacts.ts::listNeedsAttention),
@@ -70,7 +73,18 @@ export default async function PendientesPage() {
                     <p style={{ fontSize: 12, color: "var(--text-tertiary)" }}>{formatDate(r.dueAt)}</p>
                     <p style={{ fontSize: 14, color: "var(--text-secondary)" }}>{r.reason}</p>
                   </div>
-                  <CompleteReminderButton reminderId={r._id} style={{ flex: "0 0 auto" }} />
+                  {/* MIS-254 (corrige Major de la auditoría de código):
+                      "Marcar hecho" y "Posponer" van PLANOS, sin ningún
+                      <div> envolvente propio — hermanos directos dentro del
+                      ÚNICO flexWrap de esta Card (junto a Avatar y el
+                      bloque de nombre), mismo patrón ya probado en
+                      ContactDetailView.tsx. Un contenedor intermedio con su
+                      propio flex-shrink:0 es un flex container ANIDADO cuyo
+                      ancho "auto" puede calcularse sin contar su wrap
+                      interno, arriesgando overflow horizontal en 320px —
+                      evitado aquí por construcción, no solo verificado. */}
+                  <CompleteReminderButton reminderId={r._id} style={{ flex: "1 1 130px" }} />
+                  <PostponeReminderButtons reminderId={r._id} style={{ flex: "1 1 90px" }} />
                 </Card>
               </li>
             ))}
