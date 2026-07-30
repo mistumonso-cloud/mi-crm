@@ -17,10 +17,14 @@ export default async function VentasPage() {
   await getUser();
   const token = await readSessionToken(); // getUser() ya garantiza sesión válida aquí
 
-  const [month, quarter, year] = await Promise.all([
+  // MIS-259: listContacts se pide aquí en paralelo (no en SalesList/cliente)
+  // para alimentar el selector de contacto de "Registrar venta" sin un
+  // round-trip extra — mismo patrón servidor-fetch que los 3 periodos.
+  const [month, quarter, year, contacts] = await Promise.all([
     fetchQuery(api.sales.listWonSalesForPeriod, { token: token!, period: "month" }),
     fetchQuery(api.sales.listWonSalesForPeriod, { token: token!, period: "quarter" }),
     fetchQuery(api.sales.listWonSalesForPeriod, { token: token!, period: "year" }),
+    fetchQuery(api.contacts.listContacts, { token: token! }),
   ]);
 
   return (
@@ -29,7 +33,7 @@ export default async function VentasPage() {
         <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)" }}>Ventas</h1>
         <p style={{ fontSize: 13, color: "var(--text-secondary)" }}>Ventas cerradas y facturación por periodo.</p>
       </div>
-      <SalesList month={month} quarter={quarter} year={year} />
+      <SalesList month={month} quarter={quarter} year={year} contacts={contacts} />
     </div>
   );
 }

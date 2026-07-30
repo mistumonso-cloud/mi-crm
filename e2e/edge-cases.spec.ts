@@ -503,3 +503,131 @@ test("Ventas no desborda horizontalmente en 320px con la nav de 4 pestañas y el
   }));
   expect(overflow.scrollWidth).toBe(overflow.clientWidth);
 });
+
+// MIS-259: "Registrar venta" (FAB propio de /ventas) permite anotar una
+// venta repetida de un contacto que YA está "Ganado" — el gap que motiva la
+// tarea (closeSale rechaza cerrar dos veces el mismo contacto). Se conduce
+// el flujo real por la UI (FAB -> hoja -> buscar/elegir contacto -> rellenar
+// -> Confirmar), condición explícita de la auditoría de plan, no solo se
+// invoca la mutation directamente. La primera venta sí se siembra vía
+// closeSale (mismo criterio de seeding ya usado en el resto de este
+// archivo); es la SEGUNDA la que se registra por la UI nueva.
+test("Registrar venta directa permite una segunda venta a un contacto ya Ganado, sin duplicar el cambio de estado", async ({
+  page,
+  context,
+}) => {
+  const client = convexClient();
+  const token = await sessionTokenFrom(context);
+
+  const name = uniqueContactName("VentaRepetida");
+  const created = await client.mutation(api.contacts.createContact, { token, name, phone: uniquePhone() });
+  if (!created.success) throw new Error("setup failed");
+
+  const firstClose = await client.mutation(api.sales.closeSale, {
+    token,
+    contactId: created.id,
+    outcome: "won",
+    product: "Primera venta",
+    amountCents: 10000,
+    purchaseDate: Date.now(),
+  });
+  if (!firstClose.success) throw new Error("no se pudo cerrar la primera venta");
+
+  await page.goto("/ventas");
+  await page.getByRole("button", { name: "Registrar venta" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Registrar venta" });
+  await dialog.getByRole("textbox", { name: "Buscar contacto" }).fill(name);
+  const row = dialog.locator("button").filter({ hasText: name });
+  await expect(row).toBeVisible();
+  // El picker muestra el estado de cada contacto (StatusBadge) — confirma
+  // que se ve a simple vista que este contacto ya está "Ganado", el caso de
+  // venta repetida que motiva la tarea.
+  await expect(row.getByText("Ganado")).toBeVisible();
+  await row.click();
+
+  await dialog.getByLabel("Producto o servicio vendido").fill("Segunda venta");
+  await dialog.getByLabel("Importe de la venta").fill("50");
+  // "Fecha de la compra" ya viene precargada a hoy por defecto.
+  await dialog.getByRole("button", { name: "Confirmar" }).click();
+  await expect(dialog).toBeHidden();
+
+  // Ambas ventas visibles en el listado (filas independientes, mismo
+  // contacto) y el resumen las cuenta a las dos. Se escopa por el nombre
+  // (único por ejecución) en vez de por el texto del producto a secas: el
+  // deployment de dev compartido acumula ventas de ejecuciones anteriores de
+  // este mismo test, y "Primera venta"/"Segunda venta" no son textos únicos
+  // por sí solos (a diferencia del nombre del contacto).
+  const contactSaleRows = page.getByRole("link").filter({ hasText: name });
+  await expect(contactSaleRows.filter({ hasText: "Primera venta" })).toBeVisible();
+  await expect(contactSaleRows.filter({ hasText: "Segunda venta" })).toBeVisible();
+
+  const closures = await client.query(api.sales.listSaleClosures, { token, contactId: created.id });
+  expect(closures).toHaveLength(2);
+
+  // No se duplica el cambio de estado: solo la fila "won" original de
+  // closeSale, ninguna nueva "won" -> "won" generada por la venta repetida
+  // (decisión de diseño de registerDirectSale, ver convex/sales.ts).
+  const statusChanges = await client.query(api.contacts.listStatusChanges, { token, contactId: created.id });
+  expect(statusChanges).toHaveLength(1);
+});
+
+// MIS-259: sobre un contacto todavía en pipeline (nunca cerrado), Registrar
+// venta directa también funciona y lo pasa a "Ganado" — mismo efecto que
+// "Cerrar venta" tendría, pero disparado desde /ventas en vez de la ficha.
+test("Registrar venta directa sobre un contacto en pipeline abierto lo marca como Ganado", async ({ page, context }) => {
+  const client = convexClient();
+  const token = await sessionTokenFrom(context);
+
+  const name = uniqueContactName("VentaDirectaPipeline");
+  const created = await client.mutation(api.contacts.createContact, { token, name, phone: uniquePhone() });
+  if (!created.success) throw new Error("setup failed");
+
+  await page.goto("/ventas");
+  await page.getByRole("button", { name: "Registrar venta" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Registrar venta" });
+  await dialog.getByRole("textbox", { name: "Buscar contacto" }).fill(name);
+  const row = dialog.locator("button").filter({ hasText: name });
+  await expect(row).toBeVisible();
+  // Contacto recién creado: estado inicial "Lead nuevo", no "Ganado" — a
+  // diferencia del test anterior.
+  await expect(row.getByText("Lead nuevo")).toBeVisible();
+  await row.click();
+
+  await dialog.getByLabel("Producto o servicio vendido").fill("Venta directa sin pasar por pipeline");
+  await dialog.getByLabel("Importe de la venta").fill("75");
+  await dialog.getByRole("button", { name: "Confirmar" }).click();
+  await expect(dialog).toBeHidden();
+
+  await page.goto(`/contactos/${created.id}`);
+  await expect(page.getByText("Ganado", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Venta ganada: Venta directa sin pasar por pipeline/)).toBeVisible();
+});
+
+// MIS-259 (condición de la auditoría de plan): comprobación real en
+// navegador de que el paso 1 (buscador + lista de contactos) del formulario
+// "Registrar venta" no desborda en 320px — mismo criterio ya establecido en
+// este archivo para Pendientes y Ventas.
+test("El paso de elegir contacto de Registrar venta no desborda horizontalmente en 320px", async ({ page, context }) => {
+  const client = convexClient();
+  const token = await sessionTokenFrom(context);
+
+  const name = uniqueContactName("Viewport320RegistrarVenta");
+  const created = await client.mutation(api.contacts.createContact, { token, name, phone: uniquePhone() });
+  if (!created.success) throw new Error("setup failed");
+
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto("/ventas");
+  await page.getByRole("button", { name: "Registrar venta" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Registrar venta" });
+  await dialog.getByRole("textbox", { name: "Buscar contacto" }).fill(name);
+  await expect(dialog.locator("button").filter({ hasText: name })).toBeVisible();
+
+  const overflow = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  expect(overflow.scrollWidth).toBe(overflow.clientWidth);
+});

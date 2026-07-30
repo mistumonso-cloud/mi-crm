@@ -270,6 +270,99 @@ export const closeSale = mutation({
   },
 });
 
+// MIS-259: registra una venta directamente desde la pantalla de Ventas,
+// sin pasar por el cierre de pipeline — a diferencia de closeSale, NO
+// exige que el contacto siga abierto (permite ventas repetidas de un
+// contacto ya "won", y reabre como "won" un contacto "lost"/pipeline).
+// outcome siempre "won": esta vía no registra pérdidas.
+export const registerDirectSale = mutation({
+  args: {
+    token: v.string(),
+    contactId: v.string(), // v.string(), no v.id("contacts"): mismo motivo que en closeSale/getContact
+    product: v.string(),
+    amountCents: v.number(),
+    purchaseDate: v.number(),
+  },
+  returns: v.union(
+    v.object({ success: v.literal(true) }),
+    v.object({
+      success: v.literal(false),
+      error: v.string(),
+      field: v.optional(
+        v.union(
+          v.literal("contactId"),
+          v.literal("product"),
+          v.literal("amountCents"),
+          v.literal("purchaseDate"),
+        ),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const user = await requireUser(ctx, args.token);
+
+    const contactId = ctx.db.normalizeId("contacts", args.contactId);
+    if (!contactId) {
+      return { success: false as const, error: "Contacto no encontrado", field: "contactId" as const };
+    }
+    const contact = await ctx.db.get(contactId);
+    if (!contact) {
+      return { success: false as const, error: "Contacto no encontrado", field: "contactId" as const };
+    }
+
+    const product = args.product.trim();
+    if (!product) {
+      return { success: false as const, error: "El producto o servicio es obligatorio", field: "product" as const };
+    }
+    if (product.length > PRODUCT_MAX) {
+      return {
+        success: false as const,
+        error: `El producto no puede superar ${PRODUCT_MAX} caracteres`,
+        field: "product" as const,
+      };
+    }
+    if (!isValidAmountCents(args.amountCents)) {
+      return { success: false as const, error: "El importe debe ser un número positivo", field: "amountCents" as const };
+    }
+    // Decisión deliberada (sugerencia de la auditoría de plan de MIS-259):
+    // se permite una purchaseDate futura, igual que ya permite closeSale
+    // (isValidEpochMs no impone límite superior) — no es un caso bloqueante,
+    // solo se deja constancia de que es intencional, no un descuido.
+    if (!isValidEpochMs(args.purchaseDate)) {
+      return { success: false as const, error: "Fecha de compra inválida", field: "purchaseDate" as const };
+    }
+
+    const closedAt = Date.now();
+
+    await ctx.db.insert("saleClosures", {
+      contactId,
+      outcome: "won" as const,
+      product,
+      amountCents: args.amountCents,
+      purchaseDate: args.purchaseDate,
+      closedBy: user.id,
+      closedAt,
+    });
+
+    // Solo se toca el pipeline si el contacto no estaba ya "won" — una
+    // venta repetida de un contacto ya ganado no genera un cambio de
+    // estado "won" -> "won" sin información real (mismo criterio de
+    // no-op que changeContactStatus).
+    if (contact.status !== "won") {
+      await ctx.db.insert("statusChanges", {
+        contactId,
+        fromStatus: contact.status,
+        toStatus: "won",
+        changedBy: user.id,
+        changedAt: closedAt,
+      });
+      await ctx.db.patch(contactId, { status: "won" });
+    }
+
+    return { success: true as const };
+  },
+});
+
 // Historial de cierres de venta de un contacto, para la ficha (MIS-15) — un
 // contacto puede tener más de una fila (ver decisión 6 del plan). Mismo
 // patrón que listStatusChanges en convex/contacts.ts.

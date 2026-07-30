@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { fetchQuery } from "convex/nextjs";
 import { api } from "../../../../convex/_generated/api";
-import { AddContactFab } from "@/components/crm/AddContactFab";
+import { PageFab } from "@/components/crm/PageFab";
 import { BottomNav } from "@/components/crm/BottomNav";
 import { getUser } from "@/lib/auth/dal";
 import { readSessionToken } from "@/lib/auth/cookie";
@@ -44,7 +44,9 @@ export default async function WithNavLayout({ children }: { children: ReactNode 
           supervision-marta.md). createContact ya no exige rol "rep" en el
           servidor, así que mostrarlo a Marta ya no lleva a un callejón sin
           salida. */}
-      <AddContactFab />
+      {/* MIS-259: PageFab suprime este FAB en /ventas — esa pantalla pinta
+          el suyo propio ("Registrar venta", ver ventas/SalesList.tsx). */}
+      <PageFab />
       <BottomNav dueTodayCount={dueTodayCount} />
     </>
   );

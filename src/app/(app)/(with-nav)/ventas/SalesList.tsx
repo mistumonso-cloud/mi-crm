@@ -2,9 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import type { FunctionReturnType } from "convex/server";
+import type { api } from "../../../../../convex/_generated/api";
 import { Card } from "@/components/ui/core/Card";
 import { Avatar } from "@/components/ui/core/Avatar";
+import { BottomSheet } from "@/components/ui/overlays/BottomSheet";
 import { formatCurrencyCents, formatDate } from "@/lib/contacts/format";
+import { RegisterSaleForm } from "./RegisterSaleForm";
 
 type Period = "month" | "quarter" | "year";
 
@@ -18,6 +22,7 @@ type Sale = {
 };
 
 type SalesForPeriod = { count: number; totalAmountCents: number; sales: Sale[] };
+type Contact = FunctionReturnType<typeof api.contacts.listContacts>[number];
 
 const PERIOD_LABELS: Record<Period, string> = {
   month: "Mes",
@@ -35,12 +40,18 @@ export function SalesList({
   month,
   quarter,
   year,
+  contacts,
 }: {
   month: SalesForPeriod;
   quarter: SalesForPeriod;
   year: SalesForPeriod;
+  contacts: Contact[];
 }) {
   const [period, setPeriod] = useState<Period>("month");
+  // MIS-259: FAB local + hoja propia, mismo mecanismo que
+  // ContactDetailView.tsx usa para CloseSaleForm — PageFab.tsx suprime el
+  // FAB genérico "Añadir contacto" en esta ruta para no superponerlos.
+  const [sheetOpen, setSheetOpen] = useState(false);
   const dataByPeriod: Record<Period, SalesForPeriod> = { month, quarter, year };
   const data = dataByPeriod[period];
 
@@ -149,6 +160,44 @@ export function SalesList({
           ))}
         </ul>
       )}
+
+      {/* MIS-259: FAB propio de Ventas — mismo estilo/posición fijos que
+          AddContactFab.tsx, duplicado a propósito (criterio de "cada pieza
+          autocontenida" ya establecido en el repo) porque este abre una
+          hoja con estado local en vez de navegar. aria-label distinto de
+          "Añadir contacto" (sugerencia de la auditoría de plan) para que
+          ambos FABs tengan nombres accesibles inequívocos. */}
+      <button
+        type="button"
+        aria-label="Registrar venta"
+        onClick={() => setSheetOpen(true)}
+        style={{
+          position: "fixed",
+          right: 16,
+          bottom: "calc(88px + env(safe-area-inset-bottom))",
+          width: 52,
+          height: 52,
+          borderRadius: "var(--radius-full)",
+          background: "var(--color-accent)",
+          color: "var(--color-accent-contrast)",
+          border: "none",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 26,
+          fontWeight: 300,
+          lineHeight: 1,
+          cursor: "pointer",
+          boxShadow: "0 4px 14px rgba(59,82,102,.4)",
+          zIndex: 20,
+        }}
+      >
+        <span aria-hidden="true">+</span>
+      </button>
+
+      <BottomSheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Registrar venta">
+        <RegisterSaleForm contacts={contacts} onDone={() => setSheetOpen(false)} />
+      </BottomSheet>
     </div>
   );
 }

@@ -300,3 +300,66 @@ export async function closeSaleAction(
   refresh(); // Next 16: re-renderiza /contactos/[id] en la MISMA respuesta — mismo patrón que changeStatusAction
   return { success: true };
 }
+
+export type RegisterDirectSaleState =
+  | { success: true }
+  | {
+      success: false;
+      error: string;
+      field?: "contactId" | "product" | "amountCents" | "purchaseDate";
+    }
+  | undefined;
+
+// MIS-259: registra una venta directamente desde la pantalla de Ventas
+// (RegisterSaleForm.tsx) — a diferencia de closeSaleAction, no hay rama
+// "outcome"/"lossReason": esta vía solo registra ventas ganadas, nunca
+// pérdidas, y el contacto puede estar en cualquier estado (incluido
+// "won", para ventas repetidas).
+export async function registerDirectSaleAction(
+  _prevState: RegisterDirectSaleState,
+  formData: FormData,
+): Promise<RegisterDirectSaleState> {
+  const token = await readSessionToken();
+  if (!token) redirect("/login");
+
+  const contactId = String(formData.get("contactId") ?? "");
+  const product = String(formData.get("product") ?? "");
+
+  // amountCents/purchaseDateMs llegan ya calculados en el navegador — mismo
+  // criterio que closeSaleAction: esta Server Action nunca reparsea el
+  // string de euros o de fecha originales.
+  const amountRaw = formData.get("amountCents");
+  const amountCents = typeof amountRaw === "string" ? Number(amountRaw) : NaN;
+  if (!isValidAmountCents(amountCents)) {
+    return { success: false, error: "El importe debe ser un número positivo", field: "amountCents" };
+  }
+
+  const purchaseDateRaw = formData.get("purchaseDateMs");
+  const purchaseDate = typeof purchaseDateRaw === "string" ? Number(purchaseDateRaw) : NaN;
+  if (!isValidEpochMs(purchaseDate)) {
+    return { success: false, error: "Fecha de compra inválida", field: "purchaseDate" };
+  }
+
+  let result;
+  try {
+    result = await fetchMutation(api.sales.registerDirectSale, {
+      token,
+      contactId,
+      product,
+      amountCents,
+      purchaseDate,
+    });
+  } catch (err) {
+    if (err instanceof ConvexError) {
+      redirect("/login");
+    }
+    throw err;
+  }
+
+  if (!result.success) {
+    return { success: false, error: result.error, field: result.field };
+  }
+
+  refresh(); // Next 16: re-renderiza /ventas en la misma respuesta — mismo patrón que closeSaleAction
+  return { success: true };
+}
