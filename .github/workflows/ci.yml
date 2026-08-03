@@ -41,6 +41,10 @@ jobs:
           E2E_CARLOS_PASSWORD: ${{ secrets.E2E_CARLOS_PASSWORD }}
           E2E_MARTA_EMAIL: ${{ secrets.E2E_MARTA_EMAIL }}
           E2E_MARTA_PASSWORD: ${{ secrets.E2E_MARTA_PASSWORD }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_OAUTH_REDIRECT_URI: ${{ secrets.GOOGLE_OAUTH_REDIRECT_URI }}
+          GOOGLE_LOGIN_SHARED_SECRET: ${{ secrets.GOOGLE_LOGIN_SHARED_SECRET }}
 
       - uses: actions/upload-artifact@v4
         if: always()
