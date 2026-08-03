@@ -14,6 +14,7 @@ import type * as crons from "../crons.js";
 import type * as lib_authz from "../lib/authz.js";
 import type * as lib_password from "../lib/password.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
+import type * as lib_session from "../lib/session.js";
 import type * as lib_token from "../lib/token.js";
 import type * as notes from "../notes.js";
 import type * as reminders from "../reminders.js";
@@ -32,6 +33,7 @@ declare const fullApi: ApiFromModules<{
   "lib/authz": typeof lib_authz;
   "lib/password": typeof lib_password;
   "lib/rateLimit": typeof lib_rateLimit;
+  "lib/session": typeof lib_session;
   "lib/token": typeof lib_token;
   notes: typeof notes;
   reminders: typeof reminders;
