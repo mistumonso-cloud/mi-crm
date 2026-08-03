@@ -142,6 +142,17 @@ en dev) — todo esto **antes** de fusionar el PR (paso 7).
 - Automatizar el deploy de Convex tras merge (CI-driven) — deuda
   identificada en MIS-261, no se resuelve aquí.
 
+## Resultado real (pasos 1-6 ejecutados)
+
+- Variables de entorno en Railway (`--skip-deploys`, sin build disparado) y en Convex prod: confirmadas presentes.
+- Dry-run desde `feature/mis-260-login-google`: `patchMartaEmail` y `loginWithGoogle` en el árbol de funciones, `indexDiffs`/`authDiff`/`definitionDiffs`/`componentDiffs` vacíos.
+- Deploy real: `No indexes are deleted by this push`, `Deployed Convex functions to https://greedy-tapir-20.eu-west-1.convex.cloud`.
+- Patch de Marta: resultado exacto `"patched"`. Verificado con `npx convex data users --prod`: Marta con `mistumonso@gmail.com`, mismo `_id`/`name`/`role`; Carlos y Revisor intactos.
+- Archivo desechable borrado, redeploy de limpieza correcto.
+- `git status --short`: sin cambios locales pendientes (solo archivos ajenos a este ticket, preexistentes).
+
+**Pendiente**: paso 7 (fusionar PR #42) y paso 8 (verificación manual real) — a la espera de confirmación explícita antes de fusionar, ya que es el paso que pone el frontend nuevo en vivo.
+
 ## Verificación
 
 1. `npx convex deploy --dry-run --verbose` desde `feature/mis-260-login-google`, confirmar sin cambios de índices/esquema antes del deploy real (mismo patrón que MIS-261).
