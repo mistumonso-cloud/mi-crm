@@ -51,3 +51,6 @@ next-env.d.ts
 
 # claude code (local-only settings)
 .claude/settings.local.json
+
+# scratch space local (puede contener descargas sensibles, ej. credenciales de Google)
+/tmp/
