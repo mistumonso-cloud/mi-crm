@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="Ventas" description="Pantalla de ventas cerradas para Marta: periodo (Mes/Trimestre/Año), importe facturado como cifra protagonista, listado de ventas ganadas en tarjetas tappables, nav inferior y FAB. Móvil primero." -->
+<helmet>
+  <script src="./ds-base.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  </style>
+</helmet>
+
+<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; background:#E5E7EB;">
+  <div style="width:375px; height:812px; background:#FAFAFA; border-radius:40px; box-shadow:0 8px 24px rgba(16,24,40,.12), 0 32px 64px rgba(16,24,40,.16); overflow:hidden; position:relative; display:flex; flex-direction:column;">
+
+    <!-- Status bar -->
+    <div style="height:44px; background:#fff; display:flex; align-items:center; justify-content:space-between; padding:0 24px; flex-shrink:0;">
+      <span style="font:600 14px/1 'Inter',system-ui; color:#1A1D24;">9:41</span>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <svg width="16" height="12" viewBox="0 0 16 12" fill="#1A1D24"><rect x="0" y="4" width="3" height="8" rx="1"/><rect x="4.5" y="2.5" width="3" height="9.5" rx="1"/><rect x="9" y="0.5" width="3" height="11.5" rx="1"/><rect x="13.5" y="0" width="2.5" height="12" rx="1"/></svg>
+        <svg width="20" height="12" viewBox="0 0 20 12" fill="none"><rect x=".75" y=".75" width="17" height="10.5" rx="2.25" stroke="#1A1D24" stroke-width="1.5"/><rect x="18.25" y="3.5" width="1.25" height="5" rx=".625" fill="#1A1D24"/><rect x="2" y="2" width="12" height="8" rx="1.5" fill="#1A1D24"/></svg>
+      </div>
+    </div>
+
+    <!-- Header -->
+    <div style="background:#fff; border-bottom:1px solid #E5E7EB; padding:10px 20px 14px; flex-shrink:0;">
+      <h1 style="font:700 20px/1.2 'Inter',system-ui; color:#1A1D24; letter-spacing:-0.02em;">Ventas</h1>
+      <p style="font:400 13px/1 'Inter',system-ui; color:#6B7280; margin-top:3px;">{{ periodLabel }}</p>
+    </div>
+
+    <!-- Contenido con scroll -->
+    <div style="flex:1; overflow-y:auto; padding-bottom:8px;">
+
+      <!-- Resumen -->
+      <div style="padding:16px 20px 22px; background:#fff; border-bottom:1px solid #E5E7EB;">
+
+        <!-- Selector de periodo -->
+        <div style="display:flex; gap:0; background:#F3F4F6; border-radius:12px; padding:4px; margin-bottom:22px;">
+          <sc-for list="{{ periods }}" as="p" hint-placeholder-count="3">
+            <button
+              onClick="{{ p.select }}"
+              style="flex:1; position:relative; height:38px; border:none; border-radius:9px; background:transparent; cursor:pointer; display:flex; align-items:center; justify-content:center;">
+              <sc-if value="{{ p.active }}" hint-placeholder-val="{{ false }}">
+                <span style="position:absolute; inset:0; background:#fff; border-radius:9px; box-shadow:0 1px 3px rgba(16,24,40,.12);"></span>
+                <span style="position:relative; font:600 13px/1 'Inter',system-ui; color:#1A1D24;">{{ p.label }}</span>
+              </sc-if>
+              <sc-if value="{{ p.inactive }}" hint-placeholder-val="{{ true }}">
+                <span style="position:relative; font:600 13px/1 'Inter',system-ui; color:#6B7280;">{{ p.label }}</span>
+              </sc-if>
+            </button>
+          </sc-for>
+        </div>
+
+        <!-- Cifra protagonista: importe facturado -->
+        <div style="display:flex; flex-direction:column; gap:4px;">
+          <span style="font:500 12px/1 'Inter',system-ui; color:#6B7280; letter-spacing:0.02em;">Facturado</span>
+          <span style="font:700 46px/1 'Inter',system-ui; color:#15803D; letter-spacing:-0.035em;">{{ amount }}</span>
+          <div style="display:flex; align-items:center; gap:7px; margin-top:8px;">
+            <span style="width:8px; height:8px; border-radius:999px; background:#16A34A; flex-shrink:0;"></span>
+            <span style="font:500 14px/1 'Inter',system-ui; color:#374151;">{{ countLabel }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Listado de ventas -->
+      <sc-if value="{{ notEmpty }}" hint-placeholder-val="{{ true }}">
+        <div style="padding:16px 20px 8px;">
+          <span style="font:600 11px/1 'Inter',system-ui; color:#9CA3AF; letter-spacing:0.06em; text-transform:uppercase;">Ventas cerradas</span>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px; padding:0 16px;">
+          <sc-for list="{{ sales }}" as="sale" hint-placeholder-count="5">
+            <button
+              onClick="{{ sale.open }}"
+              style="width:100%; text-align:left; display:flex; align-items:center; gap:12px; padding:14px; background:#fff; border:1px solid #E5E7EB; border-radius:14px; cursor:pointer; transition:border-color .15s, box-shadow .15s;"
+              style-hover="border-color:#D1D5DB; box-shadow:0 1px 3px rgba(16,24,40,.08);"
+              style-active="background:#F9FAFB;">
+              {{ sale.avatarEl }}
+              <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:3px;">
+                <span style="font:600 14px/1.2 'Inter',system-ui; color:#1A1D24;">{{ sale.name }}</span>
+                <span style="font:400 13px/1.3 'Inter',system-ui; color:#6B7280; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ sale.product }}</span>
+              </div>
+              <div style="display:flex; flex-direction:column; align-items:flex-end; gap:3px; flex-shrink:0;">
+                <span style="font:700 16px/1 'Inter',system-ui; color:#15803D;">{{ sale.amount }}</span>
+                <span style="font:400 12px/1 'Inter',system-ui; color:#9CA3AF;">{{ sale.date }}</span>
+              </div>
+              <svg width="8" height="14" viewBox="0 0 8 14" fill="none" style="flex-shrink:0; margin-left:2px;"><polyline points="1 1 7 7 1 13" stroke="#C6CBD3" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <!-- Estado vacío -->
+      <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:72px 32px; text-align:center; gap:16px;">
+          <div style="width:72px; height:72px; border-radius:999px; background:#EAEFF3; display:flex; align-items:center; justify-content:center;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#3B5266" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <span style="font:600 17px/1.2 'Inter',system-ui; color:#1A1D24;">Aún no hay ventas en este periodo</span>
+            <span style="font:400 13px/1.55 'Inter',system-ui; color:#6B7280;">Cuando cierres una venta como ganada,<br>aparecerá aquí</span>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+
+    <!-- Barra de navegación inferior -->
+    <div style="height:72px; background:#fff; border-top:1px solid #E5E7EB; display:flex; align-items:center; padding:0 8px; flex-shrink:0;">
+
+      <button
+        style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 0; background:none; border:none; cursor:pointer; color:#9CA3AF; transition:color .15s;"
+        style-hover="color:#6B7280;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span style="font:500 11px/1 'Inter',system-ui;">Pendientes</span>
+      </button>
+
+      <button
+        style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 0; background:none; border:none; cursor:pointer; color:#9CA3AF; transition:color .15s;"
+        style-hover="color:#6B7280;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span style="font:500 11px/1 'Inter',system-ui;">Contactos</span>
+      </button>
+
+      <button
+        style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 0; background:none; border:none; cursor:pointer; color:#9CA3AF; transition:color .15s;"
+        style-hover="color:#6B7280;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span style="font:500 11px/1 'Inter',system-ui;">Panel</span>
+      </button>
+
+      <button
+        style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 0; background:none; border:none; cursor:pointer; color:#3B5266; transition:opacity .15s;"
+        style-hover="opacity:0.75;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+        <span style="font:600 11px/1 'Inter',system-ui;">Ventas</span>
+      </button>
+
+    </div>
+
+    <!-- FAB -->
+    <button
+      style="position:absolute; bottom:84px; right:16px; width:52px; height:52px; border-radius:999px; background:#3B5266; color:#fff; border:none; cursor:pointer; font:300 26px/1 'Inter',system-ui; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 12px rgba(59,82,102,.35); transition:background .15s, transform .1s;"
+      style-hover="background:#2E4252;"
+      style-active="transform:scale(0.94); background:#233442;">
+      +
+    </button>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 423, &quot;height&quot;: 860 },
+  &quot;demoState&quot;: {
+    &quot;editor&quot;: &quot;enum&quot;,
+    &quot;options&quot;: [&quot;list&quot;, &quot;empty&quot;],
+    &quot;default&quot;: &quot;list&quot;,
+    &quot;section&quot;: &quot;Estado de demo&quot;
+  }
+}">
+class Component extends DCLogic {
+  state = { period: 'month' };
+
+  select(p) { this.setState({ period: p }); }
+
+  fmtEuro(n) {
+    return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+  }
+
+  renderVals() {
+    const period = this.state.period;
+    const forceEmpty = this.props.demoState === 'empty';
+
+    const PERIODS = [
+      { id: 'month',   label: 'Mes',       range: 'Julio 2026' },
+      { id: 'quarter', label: 'Trimestre', range: 'May – Jul 2026' },
+      { id: 'year',    label: 'Año',       range: '2026' },
+    ];
+
+    // Ventas ganadas, más reciente arriba
+    const A = { bg: '#E0F2FE', fg: '#0369A1' }, B = { bg: '#F3E8FF', fg: '#7E22CE' },
+          C = { bg: '#FFEDD5', fg: '#C2410C' }, D = { bg: '#DCFCE7', fg: '#15803D' },
+          E = { bg: '#EAEFF3', fg: '#3B5266' };
+
+    const MONTH = [
+      { name: 'Ana López',    product: 'Curso Pro',            amount: 350, date: '12 jul', av: A },
+      { name: 'Marc Roig',    product: 'Consultoría',          amount: 600, date: '10 jul', av: B },
+      { name: 'Lia Prat',     product: 'Plantilla web',        amount: 49,  date: '9 jul',  av: C },
+      { name: 'Jordi Sanz',   product: 'Sesión de mentoría',   amount: 120, date: '8 jul',  av: D },
+      { name: 'Núria Vidal',  product: 'Pack redes sociales',  amount: 280, date: '6 jul',  av: E },
+      { name: 'David Camps',  product: 'Curso Pro',            amount: 350, date: '5 jul',  av: A },
+      { name: 'Elena Mas',    product: 'Auditoría SEO',        amount: 200, date: '4 jul',  av: B },
+      { name: 'Pau Ferrer',   product: 'Consultoría',          amount: 600, date: '3 jul',  av: C },
+      { name: 'Clara Bosch',  product: 'Plantilla web',        amount: 49,  date: '2 jul',  av: D },
+      { name: 'Toni Grau',    product: 'Pack redes sociales',  amount: 280, date: '2 jul',  av: E },
+      { name: 'Sara Lluch',   product: 'Sesión de mentoría',   amount: 120, date: '1 jul',  av: A },
+      { name: 'Marta Roca',   product: 'Curso avanzado',       amount: 452, date: '1 jul',  av: B },
+    ];
+
+    const QUARTER = MONTH.concat([
+      { name: 'Bruno Gil',    product: 'Mantenimiento anual',  amount: 1440, date: '14 jun', av: D },
+      { name: 'Sofía Méndez', product: 'Rediseño web + SEO',   amount: 3200, date: '3 jun',  av: E },
+      { name: 'Laura Peña',   product: 'Tienda online',        amount: 2750, date: '28 may', av: B },
+    ]);
+
+    const YEAR = QUARTER.concat([
+      { name: 'Iván Costa',   product: 'Consultoría marketing', amount: 1800, date: '15 mar', av: D },
+      { name: 'Nuria Blanco', product: 'Vídeo corporativo',     amount: 2100, date: '2 feb',  av: C },
+      { name: 'Pau Serra',    product: 'Newsletter mensual',    amount: 720,  date: '18 ene', av: A },
+    ]);
+
+    const DATA = { month: MONTH, quarter: QUARTER, year: YEAR };
+
+    const raw = forceEmpty ? [] : (DATA[period] || []);
+    const isEmpty = raw.length === 0;
+    const totalAmount = raw.reduce((s, v) => s + v.amount, 0);
+    const n = raw.length;
+
+    const periods = PERIODS.map(p => {
+      const active = p.id === period;
+      return { label: p.label, active, inactive: !active, select: () => this.select(p.id) };
+    });
+    const periodLabel = (PERIODS.find(p => p.id === period) || PERIODS[0]).range;
+
+    const sales = raw.map((v, i) => ({
+      name: v.name,
+      product: v.product,
+      amount: this.fmtEuro(v.amount),
+      date: v.date,
+      open: () => {},
+      avatarEl: React.createElement('div', {
+        key: i,
+        style: {
+          width: '40px', height: '40px', borderRadius: '999px',
+          background: v.av.bg, color: v.av.fg,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          font: "700 15px/1 'Inter',system-ui", flexShrink: 0,
+        },
+      }, v.name.charAt(0)),
+    }));
+
+    return {
+      periodLabel,
+      periods,
+      amount: this.fmtEuro(totalAmount),
+      countLabel: isEmpty ? '0 ventas cerradas' : `${n} venta${n !== 1 ? 's' : ''} cerrada${n !== 1 ? 's' : ''}`,
+      sales,
+      isEmpty,
+      notEmpty: !isEmpty,
+    };
+  }
+}
+</script>
+</body>
+</html>
