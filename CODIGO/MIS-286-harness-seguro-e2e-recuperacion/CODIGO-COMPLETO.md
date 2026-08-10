@@ -2,9 +2,9 @@
 
 > Harness seguro de pruebas e2e para recuperación de contraseña.
 > Plan: [PLANS/MIS-286-harness-seguro-e2e-recuperacion.md](../../PLANS/MIS-286-harness-seguro-e2e-recuperacion.md)
-> Rama: `mistumonso/mis-286-harness-seguro-e2e-recuperacion` · Commit: `350657b` (pendiente de commitear este fix)
+> Rama: `mistumonso/mis-286-harness-seguro-e2e-recuperacion` · Commit: `f03c10f` (pusheado) · **PR #47**: https://github.com/mistumonso-cloud/mi-crm/pull/47
 >
-> **Alcance declarado por auditoría para esta revisión (6ª ronda): B1** — falso verde en la fase B del gate.
+> **7ª ronda: GO CONDICIONADO.** B1 resuelto por completo (incluido el falso verde de la fase B, 6ª ronda). Condiciones de cableado ya cumplidas: fix en el commit final, `E2E_TEST_SUPPORT_KEY` en GitHub Secrets, CI en verde (`build` pass · `e2e` pass · gate de fugas pass, log real en la sección de evidencia). Pendiente solo confirmar la variable ausente en Convex producción antes de desplegar.
 > M10, M11 y los tres cerrojos de `testSupport.ts` quedaron resueltos en rondas anteriores y no se reabren.
 
 ## Qué cambió en esta ronda
@@ -1111,12 +1111,28 @@ index 6a26fb7..f00be65 100644
 | TypeScript / ESLint | ✅ `tsc --noEmit` limpio; ESLint sin errores (1 warning preexistente en `Avatar.jsx`) |
 | Tests del harness, 2 ejecuciones consecutivas | ✅ 4/4 passed en ambas |
 
-## Estado de la suite completa — sin edulcorar
+## Estado de la suite completa — local vs. CI real
 
-`npm run test:e2e` **no** está en verde, ni antes ni después de este ticket: hay **8 fallos preexistentes** en specs de Carlos y Marta (`full-flow`, `edge-cases`, `role-gating`), verificados contra `main` limpio (mismos fallos, algo flaky entre ejecuciones). **MIS-286 no introduce ninguna regresión.** Deuda preexistente, ticket propio pendiente.
+**En local** (`retries: 0`) se observaron **8 fallos preexistentes** en specs de Carlos y Marta (`full-flow`, `edge-cases`, `role-gating`), verificados contra `main` limpio antes de este ticket (mismos fallos, no una regresión).
 
-## Pendiente de cableado (no es código)
+**En CI real (PR #47, `retries: 1`)** esos fallos resultaron ser **flakiness**, no roturas: `30 passed, 1 flaky` — el único test inestable pasó al reintentar. Log real del job `e2e`:
 
-- `E2E_TEST_SUPPORT_KEY` ya configurada en Convex **dev** y en `.env.test.local` (gitignored).
-- Falta crearla como **GitHub Secret** para que el job `e2e` la reciba.
-- **Debe permanecer AUSENTE en Convex producción** (gate de predeploy: `npx convex env list --prod`).
+```
+✓  17 [chromium-carlos] › edge-cases.spec.ts:177:5 › posponer un seguimiento... (retry #1) (15.1s)
+  1 flaky
+  30 passed (2.8m)
+
+Fase A (control): captura ACTIVADA — el centinela DEBE aparecer.
+  OK — detectado en 1 artefacto(s); el escáner funciona.
+Fase B (garantía): política de "chromium-secrets" — el centinela NO debe aparecer.
+  OK — el fallo intencional se alcanzó y no hay rastro en artefactos, traces ni salida del proceso.
+
+✅ Gate de fugas superado: la política de no captura funciona y está demostrada.
+```
+
+**Conclusión: MIS-286 no introduce ninguna regresión — confirmado por CI, no solo por comparación local.** El job `e2e` del PR #47 está en verde.
+
+## Cableado (no es código)
+
+- `E2E_TEST_SUPPORT_KEY` configurada en Convex **dev**, en `.env.test.local` (gitignored) y **en GitHub Secrets** (mismo valor en las tres).
+- **Pendiente**: confirmar que permanece **AUSENTE en Convex producción** (gate de predeploy: `npx convex env list --prod`), antes de desplegar.
