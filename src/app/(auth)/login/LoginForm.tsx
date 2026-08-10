@@ -13,9 +13,12 @@ const initialState: LoginActionState = undefined;
 // conoce el resultado de un submit del propio formulario de password.
 type LoginFormProps = {
   initialError?: string;
+  // MIS-285: aviso tras completar la recuperación de contraseña
+  // (?reset=ok), leído en page.tsx igual que el error de Google.
+  initialSuccess?: string;
 };
 
-export function LoginForm({ initialError }: LoginFormProps) {
+export function LoginForm({ initialError, initialSuccess }: LoginFormProps) {
   const [state, formAction, isPending] = useActionState(loginAction, initialState);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -51,6 +54,23 @@ export function LoginForm({ initialError }: LoginFormProps) {
       </div>
 
       <form action={formAction} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {!displayError && initialSuccess && (
+          <div
+            role="status"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "10px 12px",
+              borderRadius: "var(--radius-md)",
+              background: "var(--color-success-bg)",
+              color: "var(--color-success-fg)",
+              fontSize: 13,
+            }}
+          >
+            {initialSuccess}
+          </div>
+        )}
         <Input
           label="Email"
           name="email"
@@ -86,6 +106,13 @@ export function LoginForm({ initialError }: LoginFormProps) {
             </button>
           }
         />
+
+        <a
+          href="/recuperar-contrasena"
+          style={{ alignSelf: "flex-end", fontSize: 13, color: "var(--color-accent)", textDecoration: "none" }}
+        >
+          ¿Olvidaste tu contraseña?
+        </a>
 
         {displayError && (
           <div

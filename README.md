@@ -83,6 +83,21 @@ Redirect URIs a registrar en Google Cloud Console (Authorized redirect URIs) —
 
 **Producción queda fuera de alcance de MIS-260**: el deployment de Convex de producción está pendiente de un fix aparte ya conocido (deploy manual olvidado varias veces) — la redirect URI de prod puede registrarse ya en Google Console (config estática, no cuesta nada tenerla lista), pero el código y los datos de producción no se tocan en este ticket.
 
+### Recuperación de contraseña por código (MIS-285)
+
+"¿Olvidaste tu contraseña?" en el login lleva a `/recuperar-contrasena`, un flujo de 3 pasos (email → código → nueva contraseña). El código son 6 dígitos, caduca en 15 minutos y admite 5 intentos; al verificarlo se emite un ticket opaco (también 15 min, un solo uso) que autoriza el cambio. Al cambiar la contraseña se invalidan **todas** las sesiones del usuario — no hay auto-login, hay que volver a entrar. La respuesta a "pedir código" es siempre genérica y con el mismo timing exista o no la cuenta (anti-enumeración): la mutation pública no consulta `users` ni espera al envío, solo programa el trabajo real vía `ctx.scheduler`.
+
+El envío usa la API REST de Resend directamente por `fetch` desde una Convex action (`convex/lib/resend.ts`), sin el SDK `resend` — mismo criterio que el cliente de Google OAuth (`src/lib/auth/google.ts`), que ya habla con una API externa sin depender de un SDK.
+
+Variables de entorno nuevas (**solo en Convex, nunca en `.env.local` ni en Railway** — no hay lógica de envío en Next.js):
+
+| Variable | Convex dev | Convex prod |
+|---|---|---|
+| `RESEND_API_KEY` | `npx convex env set RESEND_API_KEY <valor>` | Gate de predeploy: debe existir antes de `npx convex deploy` |
+| `RESEND_FROM` | `npx convex env set RESEND_FROM no-reply@mistu-monso.com` | Idem |
+
+El dominio `mistu-monso.com` ya está verificado en Resend (DKIM/SPF/DMARC en Cloudflare) — ver `PLANS/MIS-285-resend-dns-setup.md`.
+
 ### Harness seguro de pruebas e2e (MIS-286)
 
 El flujo de recuperación de contraseña (MIS-285) manda un **código por email** y en BD solo guarda su hash, así que un test no puede leerlo por medios normales. `convex/testSupport.ts` abre la mínima puerta que lo permite, cerrada con **tres cerrojos independientes**:
