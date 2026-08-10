@@ -45,6 +45,17 @@ jobs:
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           GOOGLE_OAUTH_REDIRECT_URI: ${{ secrets.GOOGLE_OAUTH_REDIRECT_URI }}
           GOOGLE_LOGIN_SHARED_SECRET: ${{ secrets.GOOGLE_LOGIN_SHARED_SECRET }}
+          E2E_TEST_SUPPORT_KEY: ${{ secrets.E2E_TEST_SUPPORT_KEY }}
+
+      # MIS-286: demuestra que los specs con contraseñas efímeras no dejan el
+      # secreto en trazas, artefactos ni logs. `if: always()` a propósito — si
+      # el e2e falla, es justo cuando Playwright conserva artefactos, así que es
+      # cuando MÁS importa comprobar que no contienen secretos.
+      - name: Gate de fugas de secretos en artefactos
+        if: always()
+        run: npm run test:e2e:secret-gate
+        env:
+          NEXT_PUBLIC_CONVEX_URL: ${{ secrets.NEXT_PUBLIC_CONVEX_URL }}
 
       - uses: actions/upload-artifact@v4
         if: always()

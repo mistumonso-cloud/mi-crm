@@ -83,6 +83,22 @@ Redirect URIs a registrar en Google Cloud Console (Authorized redirect URIs) —
 
 **Producción queda fuera de alcance de MIS-260**: el deployment de Convex de producción está pendiente de un fix aparte ya conocido (deploy manual olvidado varias veces) — la redirect URI de prod puede registrarse ya en Google Console (config estática, no cuesta nada tenerla lista), pero el código y los datos de producción no se tocan en este ticket.
 
+### Harness seguro de pruebas e2e (MIS-286)
+
+El flujo de recuperación de contraseña (MIS-285) manda un **código por email** y en BD solo guarda su hash, así que un test no puede leerlo por medios normales. `convex/testSupport.ts` abre la mínima puerta que lo permite, cerrada con **tres cerrojos independientes**:
+
+1. **Credencial de alta entropía** `E2E_TEST_SUPPORT_KEY`, comparada en tiempo constante y **fail-closed**. En producción esa variable **no existe**, así que todas esas funciones lanzan aunque el código esté desplegado.
+2. **Identidad dedicada** `reset@test.local`: las funciones rechazan cualquier otro email, así que el harness no puede tocar las cuentas de Carlos ni de Marta.
+3. **Secretos efímeros**: la contraseña de esa identidad **se genera en cada llamada** a `resetTestIdentity` y solo se devuelve al llamante ya autenticado. **No hay ninguna contraseña válida en el repositorio.**
+
+| Variable | Dónde |
+|---|---|
+| `E2E_TEST_SUPPORT_KEY` | Convex **dev** (`npx convex env set E2E_TEST_SUPPORT_KEY <valor>`), `.env.test.local` y GitHub Secrets. **Ausente en producción** (verificar con `npx convex env list --prod`) |
+
+**Gate de fugas** — `npm run test:e2e:secret-gate`. Las trazas de Playwright serializan los parámetros de las acciones y CI publica los artefactos 14 días, así que un `fill()` con una contraseña la dejaría como texto descargable. Los specs con secretos corren en el project `chromium-secrets` **sin trace, vídeo ni screenshots**, y el gate lo demuestra en dos fases: con la captura activada el centinela **debe** aparecer (control positivo: prueba que el escáner funciona), y con la política real **no debe** aparecer en ficheros, dentro de los `.zip` de trace ni en la salida del proceso. Corre en CI y también en local.
+
+> Una filtración de `E2E_TEST_SUPPORT_KEY` **exige rotarla de inmediato**: como el rol no autoriza nada (ver `convex/lib/authz.ts`), la identidad dedicada tiene acceso completo al CRM de dev igual que cualquier usuario.
+
 ## Despliegue (Railway)
 
 El repo incluye `railway.json` (build con Nixpacks, `npm run build` / `npm run start`). Railway detecta Node.js automáticamente a partir de `package.json`.

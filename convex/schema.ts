@@ -230,4 +230,34 @@ export default defineSchema({
     windowStartedAt: v.number(),
     lockedUntil: v.optional(v.number()),
   }).index("by_emailKey", ["emailKey"]),
+
+  // MIS-286: el ESQUEMA lo aporta este ticket aunque la LÓGICA que la llena sea
+  // de MIS-285. Motivo: convex/testSupport.ts consulta esta tabla (limpieza en
+  // resetTestIdentity, expireResetCode) y MIS-286 se mergea antes — sin el
+  // esquema aquí, el harness no compilaría. Hasta MIS-285 la tabla queda vacía.
+  passwordResetCodes: defineTable({
+    userId: v.id("users"),
+    // SHA-256 del código de 6 dígitos — nunca el código en claro. Opcional
+    // porque se BORRA al verificar: un código consumido no puede volver a
+    // emitir tickets.
+    codeHash: v.optional(v.string()),
+    expiresAt: v.number(),
+    attempts: v.number(),
+    // SHA-256 del ticket opaco que autoriza el cambio, fijado al verificar.
+    ticketHash: v.optional(v.string()),
+    ticketExpiresAt: v.optional(v.number()),
+    usedAt: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_ticketHash", ["ticketHash"]),
+
+  // MIS-286: buzón EXCLUSIVO de pruebas. Solo recibe filas de la identidad
+  // dedicada (RESET_TEST_EMAIL) y solo cuando la credencial del harness está
+  // configurada — en producción esa env var no existe, así que queda vacía por
+  // construcción. Es el único sitio donde un código vive en claro.
+  testOutbox: defineTable({
+    email: v.string(),
+    code: v.string(),
+    createdAt: v.number(),
+  }).index("by_email", ["email"]),
 });

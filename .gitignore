@@ -46,6 +46,12 @@ next-env.d.ts
 /test-results/
 /playwright-report/
 /playwright/.cache/
+
+# MIS-286: salidas efímeras del gate de fugas. El script las borra siempre,
+# pero si se interrumpe a mitad NO deben poder commitearse: los de la fase A
+# contienen el centinela a propósito.
+/test-results-gate-*/
+/gate-report*.json
 /e2e/.auth/
 
 

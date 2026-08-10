@@ -11,7 +11,8 @@
     "start": "next start",
     "lint": "eslint",
     "test:e2e": "playwright test",
-    "test:e2e:report": "playwright show-report"
+    "test:e2e:report": "playwright show-report",
+    "test:e2e:secret-gate": "node scripts/check-secret-leak.mjs"
   },
   "dependencies": {
     "convex": "^1.42.1",

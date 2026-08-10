@@ -15,10 +15,12 @@ import type * as lib_authz from "../lib/authz.js";
 import type * as lib_password from "../lib/password.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
 import type * as lib_session from "../lib/session.js";
+import type * as lib_testIdentity from "../lib/testIdentity.js";
 import type * as lib_token from "../lib/token.js";
 import type * as notes from "../notes.js";
 import type * as reminders from "../reminders.js";
 import type * as sales from "../sales.js";
+import type * as testSupport from "../testSupport.js";
 
 import type {
   ApiFromModules,
@@ -34,10 +36,12 @@ declare const fullApi: ApiFromModules<{
   "lib/password": typeof lib_password;
   "lib/rateLimit": typeof lib_rateLimit;
   "lib/session": typeof lib_session;
+  "lib/testIdentity": typeof lib_testIdentity;
   "lib/token": typeof lib_token;
   notes: typeof notes;
   reminders: typeof reminders;
   sales: typeof sales;
+  testSupport: typeof testSupport;
 }>;
 
 /**
