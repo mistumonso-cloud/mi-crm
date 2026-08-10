@@ -82,7 +82,7 @@ export default defineConfig({
     // playwright.gate.config.ts: el gate replica estos valores a propósito.
     {
       name: "chromium-secrets",
-      testMatch: ["test-support.spec.ts"],
+      testMatch: ["test-support.spec.ts", "password-reset.spec.ts", "password-reset-invariants.spec.ts"],
       use: {
         ...devices["Desktop Chrome"],
         trace: "off",

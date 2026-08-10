@@ -12,7 +12,7 @@ const GOOGLE_LOGIN_ERROR_MESSAGE =
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; reset?: string }>;
 }) {
   // Comprobación real (no la optimista de src/proxy.ts): si ya hay una sesión
   // válida, saltar directamente al home por rol. Si la cookie existe pero la
@@ -24,12 +24,15 @@ export default async function LoginPage({
     redirect(landingPathForRole(user.role));
   }
 
-  const { error } = await searchParams;
+  const { error, reset } = await searchParams;
   const googleError = error === "google";
 
   return (
     <div className="flex flex-1 items-center justify-center bg-[var(--color-bg)] px-4 py-16">
-      <LoginForm initialError={googleError ? GOOGLE_LOGIN_ERROR_MESSAGE : undefined} />
+      <LoginForm
+        initialError={googleError ? GOOGLE_LOGIN_ERROR_MESSAGE : undefined}
+        initialSuccess={reset === "ok" ? "Contraseña actualizada. Ya puedes iniciar sesión." : undefined}
+      />
     </div>
   );
 }

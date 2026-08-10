@@ -25,3 +25,17 @@ export async function hashToken(token: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
   return bytesToHex(new Uint8Array(digest));
 }
+
+// MIS-285: código numérico del flujo de recuperación de contraseña (OTP por
+// email). Rejection sampling sobre la misma fuente de entropía que
+// generateOpaqueToken — un simple `% 10**digits` sesgaría ligeramente los
+// dígitos bajos, porque 2**32 no es múltiplo exacto de 10**digits.
+export function generateNumericCode(digits = 6): string {
+  const max = 10 ** digits;
+  const limit = Math.floor(0x100000000 / max) * max;
+  let value: number;
+  do {
+    value = crypto.getRandomValues(new Uint32Array(1))[0];
+  } while (value >= limit);
+  return String(value % max).padStart(digits, "0");
+}
