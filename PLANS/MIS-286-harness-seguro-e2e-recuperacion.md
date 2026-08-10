@@ -244,6 +244,22 @@ El control primario es **no capturar**, demostrado por el gate. La rotación al 
 13. `playwright.gate.config.ts` (crear) — configuración **exclusiva del gate**, con los projects `gate-trace` y `gate-secrets` (§10.3).
 14. `PLANS/README.md` (editar) — registrar MIS-286.
 
+## Corrección tras la 6ª ronda (NO-GO: B1, falso verde de la fase B)
+
+**Hallazgo verificado contra el código**: `scripts/check-secret-leak.mjs` comprobaba `b.failedAsExpected` en la fase A pero **no en la fase B**. Si el test recogido fallaba *antes* del `fill()` (navegación caída, selector roto, arranque del navegador), `executed` seguía siendo 1, el centinela nunca llegaba al DOM, no había hits, y el gate decía "OK" **sin haber ejercitado la política de captura en absoluto**. Falso verde real, no teórico.
+
+**Corrección**: la fase B ahora exige la misma prueba que la A — `failedAsExpected` y código de salida distinto de cero — antes de aceptar un escaneo limpio como válido. Por simetría se añadió también el chequeo de código de salida a la fase A.
+
+**Evidencia de que el fix funciona** (pedida explícitamente en el alcance de la 6ª ronda): se rompió temporalmente el selector de `secret-sentinel.spec.ts` (apuntando a un campo inexistente, con timeout corto) para forzar un fallo *antes* del `fill()`, se ejecutó el gate, y **ambas fases lo rechazaron** con los mensajes nuevos:
+
+```
+❌ Gate de fugas FALLIDO:
+  - Fase A no terminó por el fallo intencional (¿error de configuración, arranque o navegador?).
+  - Fase B no alcanzó el fallo intencional tras escribir el centinela (...)
+```
+
+Código de salida del gate en ese escenario: **1** (no cero). El spec se revirtió con `git checkout` a continuación (sin rastro del cambio temporal) y el gate vuelve a pasar en verde con el spec real.
+
 ## Evidencia de la implementación (ejecutada el 2026-08-10)
 
 | Condición | Resultado |

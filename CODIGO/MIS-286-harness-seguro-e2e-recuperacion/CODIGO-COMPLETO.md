@@ -2,20 +2,18 @@
 
 > Harness seguro de pruebas e2e para recuperación de contraseña.
 > Plan: [PLANS/MIS-286-harness-seguro-e2e-recuperacion.md](../../PLANS/MIS-286-harness-seguro-e2e-recuperacion.md)
-> Rama: `mistumonso/mis-286-harness-seguro-e2e-recuperacion` · Commit: `fa51afc`
+> Rama: `mistumonso/mis-286-harness-seguro-e2e-recuperacion` · Commit: `350657b` (pendiente de commitear este fix)
 >
-> **Alcance declarado por auditoría para esta revisión: B1** — política de artefactos y evidencia ejecutable.
-> M10 y M11 quedaron resueltos en la ronda anterior y no se reabren.
+> **Alcance declarado por auditoría para esta revisión (6ª ronda): B1** — falso verde en la fase B del gate.
+> M10, M11 y los tres cerrojos de `testSupport.ts` quedaron resueltos en rondas anteriores y no se reabren.
 
-## Qué se está auditando
+## Qué cambió en esta ronda
 
-Infraestructura que permitirá verificar en CI el flujo de recuperación de contraseña (MIS-285) **sin abrir un agujero de seguridad** en el deployment de Convex de dev, que es compartido y accesible desde internet sin credencial administrativa.
+**Hallazgo verificado**: `scripts/check-secret-leak.mjs` comprobaba `failedAsExpected` en la fase A pero **no en la fase B**. Si el test recogido fallaba *antes* del `fill()` (navegación, selector, arranque del navegador), `executed` seguía siendo 1, el centinela nunca llegaba al DOM, no había hits, y el gate decía "OK" **sin haber ejercitado la política de captura**. Falso verde real.
 
-**Tres cerrojos** sobre `convex/testSupport.ts`: credencial de alta entropía comparada en tiempo constante y *fail-closed* (ausente en producción ⇒ funciones inertes), identidad dedicada (`reset@test.local`, rechaza cualquier otro email) y contraseñas efímeras (se generan en cada reseed, solo se devuelven al llamante autenticado; **ninguna contraseña válida vive en el repositorio**).
+**Corrección**: la fase B exige ahora la misma prueba que la A (`failedAsExpected` + código de salida ≠ 0) antes de aceptar un escaneo limpio. Se añadió también a la fase A por simetría.
 
-**Política de artefactos**: las trazas de Playwright serializan los parámetros de las acciones y CI las publica 14 días. Los specs con secretos corren sin trace/vídeo/captura **y** con un `test` endurecido que limpia el DOM — porque `error-context.md` se escribe siempre que un test falla, incluye el valor de los inputs en claro y **no se puede desactivar**. El gate `npm run test:e2e:secret-gate` lo demuestra en cada ejecución.
-
-> **El gate encontró una fuga real en su primera ejecución** (justo ese `error-context.md`), que es lo que motivó `secure-test.ts`. El control positivo no es teórico.
+**Evidencia de que el fix funciona** (pedida en el alcance de la 6ª ronda): se rompió temporalmente el selector del spec centinela para forzar un fallo *antes* del `fill()`, se ejecutó el gate, y **ambas fases lo rechazaron** con código de salida 1 y los mensajes nuevos. El spec se revirtió a continuación con `git checkout` (sin rastro del cambio). Detalle completo en el plan.
 
 ---
 
@@ -630,7 +628,7 @@ export default defineConfig({
 
 ## `scripts/check-secret-leak.mjs`
 
-El gate: fase de control positivo + fase de garantía, con lectura del interior de los .zip de trace y de stdout/stderr.
+El gate: fase de control positivo + fase de garantía, con lectura del interior de los .zip de trace y de stdout/stderr. v2 (6ª ronda): ambas fases exigen `failedAsExpected` + código de salida no-cero antes de aceptar un escaneo limpio — cierra el falso verde de B1.
 
 ```js
 #!/usr/bin/env node
@@ -728,6 +726,11 @@ function runPhase({ project, outputDir, reportFile }) {
       maxBuffer: 64 * 1024 * 1024,
     },
   );
+  // El fallo intencional del spec debe ser la causa de que Playwright salga
+  // con código distinto de cero. Un `status === 0` en cualquier fase es en sí
+  // mismo sospechoso: significaría que el test "pasó" en vez de fallar a
+  // propósito.
+  const exitedNonZero = res.status !== 0;
 
   let executed = 0;
   let failedAsExpected = false;
@@ -754,6 +757,7 @@ function runPhase({ project, outputDir, reportFile }) {
   return {
     executed,
     failedAsExpected,
+    exitedNonZero,
     output: `${res.stdout ?? ""}${res.stderr ?? ""}`,
     outputDir: outAbs,
   };
@@ -779,6 +783,8 @@ if (a.executed !== 1) {
   problems.push(`Fase A ejecutó ${a.executed} tests, se esperaba exactamente 1 (¿testMatch roto?).`);
 } else if (!a.failedAsExpected) {
   problems.push("Fase A no terminó por el fallo intencional (¿error de configuración, arranque o navegador?).");
+} else if (!a.exitedNonZero) {
+  problems.push("Fase A: Playwright salió con código 0, pero el spec debía fallar a propósito.");
 } else {
   const hits = findSentinelIn([a.outputDir], SENTINEL);
   if (hits.length === 0) {
@@ -801,8 +807,22 @@ const b = runPhase({
   reportFile: "gate-report-b.json",
 });
 
+// B1 (5ª ronda): NO basta con "0 tests recogidos ⇒ fallo". Si el test
+// recogido falla ANTES del fill() — navegación caída, selector roto, arranque
+// del navegador — `executed` sigue siendo 1, el centinela nunca llega al DOM,
+// no hay hits, y el gate diría "OK" sin haber ejercitado la política de
+// captura en absoluto. Falso verde. Se exige la MISMA prueba de "llegó al
+// fallo intencional" que ya tenía la fase A, más el código de salida.
 if (b.executed !== 1) {
   problems.push(`Fase B ejecutó ${b.executed} tests, se esperaba exactamente 1 (¿testMatch roto?).`);
+} else if (!b.failedAsExpected) {
+  problems.push(
+    "Fase B no alcanzó el fallo intencional tras escribir el centinela " +
+      "(¿navegación, selector o arranque del navegador fallaron antes del fill()? " +
+      "un resultado limpio en ese caso no demuestra nada).",
+  );
+} else if (!b.exitedNonZero) {
+  problems.push("Fase B: Playwright salió con código 0, pero el spec debía fallar a propósito.");
 } else {
   const dirs = [b.outputDir, path.join(ROOT, "playwright-report")];
   const hits = findSentinelIn(dirs, SENTINEL);
@@ -814,7 +834,7 @@ if (b.executed !== 1) {
     problems.push("Fase B: el secreto apareció en stdout/stderr del proceso de Playwright.");
   }
   if (hits.length === 0 && !b.output.includes(SENTINEL)) {
-    console.log("  OK — sin rastro en artefactos, traces ni salida del proceso.");
+    console.log("  OK — el fallo intencional se alcanzó y no hay rastro en artefactos, traces ni salida del proceso.");
   }
 }
 
@@ -1080,27 +1100,20 @@ index 6a26fb7..f00be65 100644
 
 ---
 
-# Evidencia de ejecución (2026-08-10)
+# Evidencia de ejecución (2026-08-10, tras el fix de la 6ª ronda)
 
-| Condición de la 5ª ronda | Resultado |
+| Comprobación | Resultado |
 |---|---|
-| Enrutado aislado de los dos projects del gate | ✅ `playwright.gate.config.ts`, `gate-trace` / `gate-secrets`, ambos con `testMatch: ["secret-sentinel.spec.ts"]` |
-| Cada fase ejecuta el centinela; **0 tests ⇒ fallo** | ✅ el script exige `executed === 1` leyendo el reporte JSON de cada fase |
-| Control positivo y negativo sobre artefactos reales, incl. ZIP | ✅ fase A: *"detectado en 1 artefacto(s); el escáner funciona"* · fase B: *"sin rastro en artefactos, traces ni salida del proceso"* |
-| `npm run test:e2e` **no** ejecuta el fallo intencional | ✅ `npx playwright test --list` → **0** ocurrencias de `secret-sentinel` (31 tests en 9 ficheros) |
-| `npm run test:e2e:secret-gate` en verde | ✅ *"Gate de fugas superado"* |
+| **Falso verde reproducido y rechazado** | ✅ selector roto a propósito → ambas fases fallan con el mensaje nuevo, exit code 1 |
+| Gate con el spec real | ✅ `Gate de fugas superado` |
+| Enrutado aislado de los dos projects del gate | ✅ `playwright.gate.config.ts`, `gate-trace` / `gate-secrets` |
+| `npm run test:e2e` no ejecuta el fallo intencional | ✅ 0 ocurrencias de `secret-sentinel` en `--list` |
 | TypeScript / ESLint | ✅ `tsc --noEmit` limpio; ESLint sin errores (1 warning preexistente en `Avatar.jsx`) |
-| Tests del harness | ✅ 4/4 en verde, en dos ejecuciones consecutivas |
+| Tests del harness, 2 ejecuciones consecutivas | ✅ 4/4 passed en ambas |
 
-## Estado de la suite completa — declarado sin edulcorar
+## Estado de la suite completa — sin edulcorar
 
-`npm run test:e2e` **NO** está en verde, ni antes ni después de este ticket:
-
-- Los **4 tests de MIS-286 pasan** en ambas ejecuciones.
-- La suite arroja **8 fallos preexistentes** en specs de Carlos y Marta (`full-flow`, `edge-cases`, `role-gating`), **ajenos a este ticket**.
-- Verificado contra `main` limpio (`git stash`): main da **7-8 fallos** con los **mismos** specs — ya estaban rotos y además son flaky entre ejecuciones.
-- Cuentas: 27 tests preexistentes (8 fallan, 19 pasan) + 4 nuevos = **23 passed / 8 failed**, exactamente lo observado.
-- **MIS-286 no introduce ninguna regresión.** La suite global seguirá roja hasta que se traten esos fallos, que son deuda preexistente y merecen ticket propio.
+`npm run test:e2e` **no** está en verde, ni antes ni después de este ticket: hay **8 fallos preexistentes** en specs de Carlos y Marta (`full-flow`, `edge-cases`, `role-gating`), verificados contra `main` limpio (mismos fallos, algo flaky entre ejecuciones). **MIS-286 no introduce ninguna regresión.** Deuda preexistente, ticket propio pendiente.
 
 ## Pendiente de cableado (no es código)
 

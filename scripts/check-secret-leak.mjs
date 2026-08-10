@@ -93,6 +93,11 @@ function runPhase({ project, outputDir, reportFile }) {
       maxBuffer: 64 * 1024 * 1024,
     },
   );
+  // El fallo intencional del spec debe ser la causa de que Playwright salga
+  // con código distinto de cero. Un `status === 0` en cualquier fase es en sí
+  // mismo sospechoso: significaría que el test "pasó" en vez de fallar a
+  // propósito.
+  const exitedNonZero = res.status !== 0;
 
   let executed = 0;
   let failedAsExpected = false;
@@ -119,6 +124,7 @@ function runPhase({ project, outputDir, reportFile }) {
   return {
     executed,
     failedAsExpected,
+    exitedNonZero,
     output: `${res.stdout ?? ""}${res.stderr ?? ""}`,
     outputDir: outAbs,
   };
@@ -144,6 +150,8 @@ if (a.executed !== 1) {
   problems.push(`Fase A ejecutó ${a.executed} tests, se esperaba exactamente 1 (¿testMatch roto?).`);
 } else if (!a.failedAsExpected) {
   problems.push("Fase A no terminó por el fallo intencional (¿error de configuración, arranque o navegador?).");
+} else if (!a.exitedNonZero) {
+  problems.push("Fase A: Playwright salió con código 0, pero el spec debía fallar a propósito.");
 } else {
   const hits = findSentinelIn([a.outputDir], SENTINEL);
   if (hits.length === 0) {
@@ -166,8 +174,22 @@ const b = runPhase({
   reportFile: "gate-report-b.json",
 });
 
+// B1 (5ª ronda): NO basta con "0 tests recogidos ⇒ fallo". Si el test
+// recogido falla ANTES del fill() — navegación caída, selector roto, arranque
+// del navegador — `executed` sigue siendo 1, el centinela nunca llega al DOM,
+// no hay hits, y el gate diría "OK" sin haber ejercitado la política de
+// captura en absoluto. Falso verde. Se exige la MISMA prueba de "llegó al
+// fallo intencional" que ya tenía la fase A, más el código de salida.
 if (b.executed !== 1) {
   problems.push(`Fase B ejecutó ${b.executed} tests, se esperaba exactamente 1 (¿testMatch roto?).`);
+} else if (!b.failedAsExpected) {
+  problems.push(
+    "Fase B no alcanzó el fallo intencional tras escribir el centinela " +
+      "(¿navegación, selector o arranque del navegador fallaron antes del fill()? " +
+      "un resultado limpio en ese caso no demuestra nada).",
+  );
+} else if (!b.exitedNonZero) {
+  problems.push("Fase B: Playwright salió con código 0, pero el spec debía fallar a propósito.");
 } else {
   const dirs = [b.outputDir, path.join(ROOT, "playwright-report")];
   const hits = findSentinelIn(dirs, SENTINEL);
@@ -179,7 +201,7 @@ if (b.executed !== 1) {
     problems.push("Fase B: el secreto apareció en stdout/stderr del proceso de Playwright.");
   }
   if (hits.length === 0 && !b.output.includes(SENTINEL)) {
-    console.log("  OK — sin rastro en artefactos, traces ni salida del proceso.");
+    console.log("  OK — el fallo intencional se alcanzó y no hay rastro en artefactos, traces ni salida del proceso.");
   }
 }
 
