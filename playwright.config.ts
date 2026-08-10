@@ -12,6 +12,12 @@ const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
 export default defineConfig({
   testDir: "./e2e",
+  // MIS-286: secret-sentinel.spec.ts FALLA A PROPÓSITO — es el spec del gate de
+  // fugas y solo debe ejecutarlo scripts/check-secret-leak.mjs vía
+  // playwright.gate.config.ts. Ningún project de aquí lo matchea, pero se
+  // excluye además explícitamente: si alguien añadiera un project con testMatch
+  // amplio, un fallo intencional rompería el e2e normal.
+  testIgnore: ["secret-sentinel.spec.ts"],
   // Todos los tests comparten el mismo deployment de Convex de dev
   // (dutiful-mole-111, el mismo que usa `npm run dev` en local) — un solo
   // worker evita carreras de datos entre specs que leen/escriben las mismas
@@ -64,6 +70,25 @@ export default defineConfig({
       name: "chromium-unauth",
       testMatch: ["google-auth.spec.ts"],
       use: { ...devices["Desktop Chrome"] },
+    },
+
+    // MIS-286: specs que manejan CONTRASEÑAS EFÍMERAS VÁLIDAS de la identidad
+    // dedicada. Sin trace, vídeo ni screenshots: las trazas serializan los
+    // parámetros de las acciones (un fill() dejaría la contraseña como texto)
+    // y CI publica los artefactos durante 14 días. Sin captura no hay artefacto
+    // donde el secreto pueda quedar. El gate `npm run test:e2e:secret-gate`
+    // demuestra que esta política funciona de verdad.
+    // Si cambias esta política, cambia también "gate-secrets" en
+    // playwright.gate.config.ts: el gate replica estos valores a propósito.
+    {
+      name: "chromium-secrets",
+      testMatch: ["test-support.spec.ts"],
+      use: {
+        ...devices["Desktop Chrome"],
+        trace: "off",
+        video: "off",
+        screenshot: "off",
+      },
     },
   ],
   webServer: {
