@@ -1,0 +1,1203 @@
+diff --git a/convex/_generated/api.d.ts b/convex/_generated/api.d.ts
+index bc8cbb5..3e3ea61 100644
+--- a/convex/_generated/api.d.ts
++++ b/convex/_generated/api.d.ts
+@@ -13,6 +13,7 @@ import type * as contacts from "../contacts.js";
+ import type * as crons from "../crons.js";
+ import type * as lib_authz from "../lib/authz.js";
+ import type * as lib_password from "../lib/password.js";
++import type * as lib_passwordPolicy from "../lib/passwordPolicy.js";
+ import type * as lib_rateLimit from "../lib/rateLimit.js";
+ import type * as lib_resend from "../lib/resend.js";
+ import type * as lib_serverKey from "../lib/serverKey.js";
+@@ -37,6 +38,7 @@ declare const fullApi: ApiFromModules<{
+   crons: typeof crons;
+   "lib/authz": typeof lib_authz;
+   "lib/password": typeof lib_password;
++  "lib/passwordPolicy": typeof lib_passwordPolicy;
+   "lib/rateLimit": typeof lib_rateLimit;
+   "lib/resend": typeof lib_resend;
+   "lib/serverKey": typeof lib_serverKey;
+diff --git a/convex/auth.ts b/convex/auth.ts
+index 6065c2e..8914b65 100644
+--- a/convex/auth.ts
++++ b/convex/auth.ts
+@@ -1,21 +1,31 @@
+ import { ConvexError, v } from "convex/values";
+-import { action, internalMutation, mutation, query } from "./_generated/server";
+-import type { MutationCtx } from "./_generated/server";
++import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
++import type { ActionCtx } from "./_generated/server";
+ import { internal } from "./_generated/api";
+-import { DUMMY_PASSWORD_HASH, verifyPassword } from "./lib/password";
++import {
++  DUMMY_PASSWORD_HASH,
++  fingerprintHash,
++  fingerprintsEqual,
++  verifyPassword,
++} from "./lib/password";
+ import { serverKeyMatches, AUTH_SERVER_KEY_ENV_VAR } from "./lib/serverKey";
+ import { hashToken } from "./lib/token";
+ import { lookupSessionUser } from "./lib/authz";
+ import { createSession } from "./lib/session";
+ import {
+-  EMAIL_RATE_LIMIT,
+-  IP_RATE_LIMIT,
++  LOGIN_EMAIL_COUNTER,
++  LOGIN_EMAIL_VETO_LIMIT,
++  LOGIN_IP_LIMIT,
++  emailVetoActive,
+   isLocked,
++  loginCounterKey,
+   normalizeEmailKey,
+   normalizeIpHint,
+   recordFailedAttempt,
+   resetAttempts,
+ } from "./lib/rateLimit";
++import { CURRENT_PASSWORD_POLICY_VERSION } from "./lib/passwordPolicy";
++import { RESET_TEST_EMAIL, TEST_SUPPORT_ENV_VAR } from "./lib/testIdentity";
+ 
+ const GENERIC_ERROR = "Email o contraseña incorrectos";
+ const LOCKED_ERROR = "Demasiados intentos, inténtalo de nuevo en unos minutos";
+@@ -40,82 +50,141 @@ const loginResultValidator = v.union(
+ );
+ 
+ // Anotación explícita del resultado — rompe la inferencia circular que provoca
+-// que loginWithPassword (action) referencie internal.auth._loginCore, del mismo
+-// módulo: con el tipo de retorno explícito, TS resuelve el tipo de la action
+-// sin inferir su cuerpo.
++// que loginWithPassword (action) y finalizeLogin (mismo módulo) se referencien:
++// con el tipo de retorno explícito, TS resuelve el tipo sin inferir el cuerpo.
+ type LoginResult =
+   | { success: true; token: string; role: "rep" | "supervisor" }
+   | { success: false; error: string };
+ 
+-// Lógica de login por password. La usa el núcleo interno `_loginCore`,
+-// invocado por la action `loginWithPassword` — el único endpoint público de
+-// login desde 1A-bis/MIS-289, que retiró el antiguo `login` (mutation sin
+-// serverKey). Es un helper, no una función registrada: corre dentro de una
+-// única transacción de mutation, con el KDF dentro — igual que hasta ahora. La
+-// reserva previa al KDF es 1B.
+-async function performLogin(
+-  ctx: MutationCtx,
+-  args: { email: string; password: string; ipHint?: string },
+-): Promise<LoginResult> {
+-  const emailKey = normalizeEmailKey(args.email);
+-  const ipKey = normalizeIpHint(args.ipHint ?? null);
++// MIS-290 (1B.2): el login se parte en reserva → KDF → finalización para acotar
++// el coste del KDF (I5) y revalidar la contraseña reservada (I7). La firma
++// pública de loginWithPassword NO cambia. Detalle en PLANS/MIS-290-plan-1B-i.md §3.
+ 
+-  if (ipKey && (await isLocked(ctx, `ip:${ipKey}`))) {
+-    return { success: false, error: LOCKED_ERROR };
+-  }
+-  if (await isLocked(ctx, emailKey)) {
+-    return { success: false, error: LOCKED_ERROR };
+-  }
++// TRANSACCIÓN 1. Consume la cuota de IP AL INTENTAR (no al fallar) y devuelve el
++// hash a comparar. Confirma ANTES del KDF: N peticiones concurrentes serializan
++// aquí y solo las primeras `LOGIN_IP_LIMIT.maxAttempts` no quedan bloqueadas.
++// Unión discriminada: cuando está bloqueada no fabrica hash ni huella.
++const reserveResultValidator = v.union(
++  v.object({ blocked: v.literal(true) }),
++  v.object({ blocked: v.literal(false), hash: v.string(), fingerprint: v.string() }),
++);
++type ReserveResult =
++  | { blocked: true }
++  | { blocked: false; hash: string; fingerprint: string };
+ 
+-  const user = await ctx.db
+-    .query("users")
+-    .withIndex("by_email", (q) => q.eq("email", emailKey))
+-    .unique();
++export const reserveLoginSlot = internalMutation({
++  args: { emailKey: v.string(), ipKey: v.union(v.string(), v.null()) },
++  returns: reserveResultValidator,
++  handler: async (ctx, args): Promise<ReserveResult> => {
++    // Capa por IP (I5): si ya está bloqueada, no se consume más.
++    if (args.ipKey && (await isLocked(ctx, `ip:${args.ipKey}`))) {
++      return { blocked: true };
++    }
++    // Veto por email — SOLO si el interruptor está activo (MIS-291 lo pondrá a
++    // "off"). Clave `<email>` con LOGIN_EMAIL_VETO_LIMIT; semántica fija (M1).
++    if (emailVetoActive() && (await isLocked(ctx, args.emailKey))) {
++      return { blocked: true };
++    }
++    // Consume la cuota de IP AL INTENTAR: es lo que acota el KDF. Los logins
++    // correctos también consumen; con 10/15 min por IP no molesta a usuarios
++    // reales, ni compartiendo NAT.
++    if (args.ipKey) {
++      await recordFailedAttempt(ctx, `ip:${args.ipKey}`, LOGIN_IP_LIMIT);
++    }
++    const user = await ctx.db
++      .query("users")
++      .withIndex("by_email", (q) => q.eq("email", args.emailKey))
++      .unique();
++    // Anti-timing: hash señuelo real si el usuario no existe → coste del KDF
++    // idéntico exista o no la cuenta.
++    const hash = user?.passwordHash ?? DUMMY_PASSWORD_HASH;
++    return { blocked: false, hash, fingerprint: await fingerprintHash(hash) };
++  },
++});
+ 
+-  // Mitigación de timing: si el usuario no existe, igual se ejecuta
+-  // verifyPassword contra un hash señuelo real, para que el coste
+-  // computacional de la petición sea equivalente exista o no la cuenta.
+-  const passwordOk = await verifyPassword(args.password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
++// Instrumentación de test del KDF (tabla propia). DOBLE CERROJO (M3): solo se
++// invoca desde la action cuando la credencial del harness está configurada Y la
++// identidad es la dedicada; aquí se re-verifica la credencial por defensa en
++// profundidad. En producción TEST_SUPPORT_ENV_VAR no existe → nunca se escribe.
++export const KDF_COUNTER_KEY = "login-kdf";
++export const bumpKdfCounter = internalMutation({
++  args: {},
++  returns: v.null(),
++  handler: async (ctx) => {
++    if (!process.env[TEST_SUPPORT_ENV_VAR]) return null;
++    const row = await ctx.db
++      .query("testKdfCounter")
++      .withIndex("by_key", (q) => q.eq("key", KDF_COUNTER_KEY))
++      .unique();
++    if (row) await ctx.db.patch(row._id, { count: row.count + 1 });
++    else await ctx.db.insert("testKdfCounter", { key: KDF_COUNTER_KEY, count: 1 });
++    return null;
++  },
++});
+ 
+-  if (!user || !passwordOk) {
+-    await recordFailedAttempt(ctx, emailKey, EMAIL_RATE_LIMIT);
+-    if (ipKey) await recordFailedAttempt(ctx, `ip:${ipKey}`, IP_RATE_LIMIT);
+-    return { success: false, error: GENERIC_ERROR };
++// PUNTO ÚNICO de entrada al KDF (I5): primero cuenta (bajo doble cerrojo), luego
++// deriva. Imposible añadir un camino al KDF que no quede contado. Corre en la
++// action, FUERA de transacción.
++async function verifyPasswordInstrumented(
++  ctx: ActionCtx,
++  password: string,
++  hash: string,
++  emailKey: string,
++): Promise<boolean> {
++  if (process.env[TEST_SUPPORT_ENV_VAR] && emailKey === RESET_TEST_EMAIL) {
++    await ctx.runMutation(internal.auth.bumpKdfCounter, {});
+   }
++  return await verifyPassword(password, hash);
++}
+ 
+-  // Solo se resetea el contador por email, NO el de la IP (`ip:${ipKey}`) —
+-  // intencional: el contador de IP agrega intentos fallidos contra cualquier
+-  // email probado desde esa IP, como defensa contra un atacante que prueba
+-  // varias cuentas desde el mismo origen. Si un login correcto reseteara
+-  // también la IP, bastaría una credencial válida para "limpiar" el contador y
+-  // seguir probando otras cuentas desde la misma IP. Falsos positivos en redes
+-  // compartidas (oficina/NAT) aceptados como coste de esta capa best-effort.
+-  await resetAttempts(ctx, emailKey);
++// TRANSACCIÓN 2. Relee, revalida la huella (I7) y decide la sesión. Contabilidad
++// UNIFORME (M2): todo resultado sin sesión registra el contador de email igual,
++// exista o no la cuenta. Los dos registros de un fallo (telemetría + veto)
++// ocurren en ESTA misma transacción.
++export const finalizeLogin = internalMutation({
++  args: { emailKey: v.string(), fingerprint: v.string(), ok: v.boolean() },
++  returns: loginResultValidator,
++  handler: async (ctx, args): Promise<LoginResult> => {
++    // Misma consulta indexada exista o no la cuenta (no recibe userId, no hace
++    // ctx.db.get(null)): cierra la diferencia de timing posterior al KDF.
++    const user = await ctx.db
++      .query("users")
++      .withIndex("by_email", (q) => q.eq("email", args.emailKey))
++      .unique();
+ 
+-  const { token } = await createSession(ctx, user._id);
++    // I7: sesión solo si la cuenta existe, la contraseña era correcta Y el hash
++    // NO cambió entre la reserva y ahora (huella coincide). Si un
++    // resetPasswordWithTicket concurrente sustituyó el hash, la huella difiere y
++    // no se crea sesión — sin esto sería una regresión de la invariante de MIS-285.
++    const success =
++      user !== null &&
++      args.ok &&
++      fingerprintsEqual(await fingerprintHash(user.passwordHash), args.fingerprint);
+ 
+-  return { success: true, token, role: user.role };
+-}
++    if (success) {
++      // Resetea AMBAS claves de email (deja un rollback del veto en estado
++      // limpio) y NUNCA la de IP: si un login correcto limpiara la IP, bastaría
++      // una cuenta propia para seguir probando otras cuentas desde la misma IP.
++      await resetAttempts(ctx, args.emailKey);
++      await resetAttempts(ctx, loginCounterKey(args.emailKey));
++      const { token } = await createSession(ctx, user._id);
++      return { success: true, token, role: user.role };
++    }
+ 
+-// Núcleo interno: no forma parte de api.*, ningún cliente externo puede
+-// invocarlo. Solo lo invoca la action loginWithPassword, tras validar serverKey.
+-// (MIS-289 retiró la mutation pública `login`, que compartía esta lógica sin
+-// exigir serverKey — esa puerta cerraba I3 para el login por password.)
+-export const _loginCore = internalMutation({
+-  args: {
+-    email: v.string(),
+-    password: v.string(),
+-    ipHint: v.optional(v.string()),
++    // Fallo (fila inexistente, contraseña incorrecta o huella obsoleta): registro
++    // IDÉNTICO (M2, no reabre enumeración). Telemetría SIEMPRE (clave propia);
++    // veto solo si el interruptor está activo (clave `<email>`). Cada clave con
++    // su config fija — nunca se reinterpreta un contador (M1).
++    await recordFailedAttempt(ctx, loginCounterKey(args.emailKey), LOGIN_EMAIL_COUNTER);
++    if (emailVetoActive()) {
++      await recordFailedAttempt(ctx, args.emailKey, LOGIN_EMAIL_VETO_LIMIT);
++    }
++    return { success: false, error: GENERIC_ERROR };
+   },
+-  returns: loginResultValidator,
+-  handler: async (ctx, args) => performLogin(ctx, args),
+ });
+ 
+-// Endpoint público NUEVO (MIS-288, 1A.5). Es una ACTION, no una mutation, ya
+-// desde 1A — así 1B podrá cambiar sus tripas (reserva de cuota antes del KDF)
+-// sin migrar de tipo ni abrir una ventana de incompatibilidad. Exige serverKey:
+-// cierra I1 para el login por password. Una llamada directa a Convex sin la
+-// clave recibe el error genérico, indistinguible de un login fallido.
++// Endpoint público (MIS-288, action; tripas sustituidas en MIS-290). Firma
++// intacta. Exige serverKey (I1). Reserva → KDF → finalización.
+ export const loginWithPassword = action({
+   args: {
+     email: v.string(),
+@@ -128,10 +197,20 @@ export const loginWithPassword = action({
+     if (!serverKeyMatches(args.serverKey, AUTH_SERVER_KEY_ENV_VAR)) {
+       return { success: false as const, error: GENERIC_ERROR };
+     }
+-    return await ctx.runMutation(internal.auth._loginCore, {
+-      email: args.email,
+-      password: args.password,
+-      ipHint: args.ipHint,
++    const emailKey = normalizeEmailKey(args.email);
++    const ipKey = normalizeIpHint(args.ipHint ?? null);
++
++    const reserve = await ctx.runMutation(internal.auth.reserveLoginSlot, { emailKey, ipKey });
++    if (reserve.blocked) {
++      return { success: false as const, error: LOCKED_ERROR };
++    }
++
++    const ok = await verifyPasswordInstrumented(ctx, args.password, reserve.hash, emailKey);
++
++    return await ctx.runMutation(internal.auth.finalizeLogin, {
++      emailKey,
++      fingerprint: reserve.fingerprint,
++      ok,
+     });
+   },
+ });
+@@ -213,6 +292,13 @@ export const loginWithGoogle = mutation({
+ // invocarla — solo con la admin key del deployment (npx convex run o el
+ // dashboard). Recibe la password YA hasheada (ver scripts/hash-password.mjs),
+ // nunca en claro.
++//
++// MIS-290 (I6): el plaintext solo vive en scripts/hash-password.mjs, que valida
++// contra la política ANTES de hashear (rechaza contraseñas débiles sin generar
++// hash). seedUser no puede revalidar el plaintext, pero LIGA el hash sembrado al
++// flujo validado escribiendo `passwordPolicyVersion` y `passwordChangedAt` EN EL
++// MISMO insert que `passwordHash` — así una cuenta sembrada no queda pendiente
++// de rotación (accountsPendingRotation no la lista).
+ export const seedUser = internalMutation({
+   args: {
+     name: v.string(),
+@@ -235,10 +321,28 @@ export const seedUser = internalMutation({
+       email: emailKey,
+       passwordHash: args.passwordHash,
+       role: args.role,
++      passwordPolicyVersion: CURRENT_PASSWORD_POLICY_VERSION,
++      passwordChangedAt: Date.now(),
+     });
+   },
+ });
+ 
++// MIS-290 (I6): gate de rotación. Devuelve las cuentas cuyo `passwordHash` se
++// fijó con una versión de política distinta de la vigente (incluye las que no
++// tienen el campo → "no rotada"). Solo id/email, NUNCA hashes: su salida puede
++// registrarse como evidencia sin filtrar secretos. Se corre con `npx convex run`
++// en producción y debe devolver `[]` antes de autorizar 1B-ii (MIS-291).
++export const accountsPendingRotation = internalQuery({
++  args: {},
++  returns: v.array(v.object({ id: v.id("users"), email: v.string() })),
++  handler: async (ctx) => {
++    const users = await ctx.db.query("users").collect();
++    return users
++      .filter((u) => u.passwordPolicyVersion !== CURRENT_PASSWORD_POLICY_VERSION)
++      .map((u) => ({ id: u._id, email: u.email }));
++  },
++});
++
+ export const cleanupExpiredSessions = internalMutation({
+   args: {},
+   returns: v.number(),
+diff --git a/convex/lib/password.ts b/convex/lib/password.ts
+index c883324..ade1e43 100644
+--- a/convex/lib/password.ts
++++ b/convex/lib/password.ts
+@@ -72,6 +72,24 @@ export async function verifyPassword(password: string, storedHash: string): Prom
+   return constantTimeEqual(actual, expected);
+ }
+ 
++// MIS-290 (I7): huella del hash almacenado. `finalizeLogin` revalida que el hash
++// no cambió entre la reserva y la finalización comparando SHA-256(hash) en vez de
++// retransmitir el hash por los argumentos de otra función (donde acabaría en
++// trazas de funciones y logs de error). Helper propio, no reutiliza hashToken
++// (que es para tokens de sesión): así el fingerprint no se acopla a ese uso.
++export async function fingerprintHash(storedHash: string): Promise<string> {
++  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(storedHash));
++  return bytesToBase64Url(new Uint8Array(digest));
++}
++
++// Compara dos huellas en tiempo constante (por consistencia con el resto del
++// módulo, aunque aquí no haya un secreto que proteger por timing). Ambas son
++// base64url de un SHA-256 (longitud fija).
++export function fingerprintsEqual(a: string, b: string): boolean {
++  const enc = new TextEncoder();
++  return constantTimeEqual(enc.encode(a), enc.encode(b));
++}
++
+ // Hash señuelo real (no un placeholder inventado a mano): generado una única vez con
+ // hashPassword(crypto.randomUUID()) usando los mismos parámetros de producción.
+ // Se usa para que el tiempo de respuesta de `login` no distinga "el email no
+diff --git a/convex/lib/rateLimit.ts b/convex/lib/rateLimit.ts
+index f251c8f..d1015a3 100644
+--- a/convex/lib/rateLimit.ts
++++ b/convex/lib/rateLimit.ts
+@@ -23,27 +23,85 @@ export function normalizeIpHint(rawXForwardedFor: string | undefined | null): st
+   return first;
+ }
+ 
+-export type RateLimitConfig = {
+-  maxAttempts: number;
+-  windowMs: number;
+-  lockDurationMs: number;
++// MIS-290 (1B.1): unión discriminada. `lock:false` es un contador de telemetría
++// que NUNCA bloquea; `lock:true` lleva su duración de bloqueo. Se evita el
++// `lockDurationMs: 0` ambiguo (¿bloqueo de 0 ms o sin bloqueo?).
++export type RateLimitConfig =
++  | { maxAttempts: number; windowMs: number; lock: true; lockDurationMs: number }
++  | { maxAttempts: number; windowMs: number; lock: false };
++
++const MIN = 60 * 1000;
++
++// --- Login (MIS-290, 1B.1) ---
++
++// Capa por IP: acota el coste del KDF (I5). Se consume AL INTENTAR en
++// reserveLoginSlot, no al fallar.
++export const LOGIN_IP_LIMIT: RateLimitConfig = {
++  maxAttempts: 10,
++  windowMs: 15 * MIN,
++  lock: true,
++  lockDurationMs: 15 * MIN,
++};
++
++// Veto por email (clave `<email>`). Comportamiento actual conservado; controlado
++// por el interruptor LOGIN_EMAIL_VETO (ver emailVetoActive). Se RETIRA en 1B-ii
++// (MIS-291) poniendo el interruptor a "off". Su semántica (5/15 → bloqueo 15) es
++// FIJA de por vida sobre esta clave: nunca se reinterpreta.
++export const LOGIN_EMAIL_VETO_LIMIT: RateLimitConfig = {
++  maxAttempts: 5,
++  windowMs: 15 * MIN,
++  lock: true,
++  lockDurationMs: 15 * MIN,
++};
++
++// Telemetría por email (clave `login-counter:<email>`, ver loginCounterKey). NO
++// veta y ningún consumidor la lee hoy: es forense, para alimentar una futura
++// alerta de "intentos de acceso". NO confundir con una defensa. Semántica FIJA
++// de por vida sobre su propia clave: nunca comparte fila con el veto (M1).
++export const LOGIN_EMAIL_COUNTER: RateLimitConfig = {
++  maxAttempts: 50,
++  windowMs: 60 * MIN,
++  lock: false,
+ };
+ 
+-// Bloqueo primario y obligatorio: 5 fallos / 15 minutos por email.
+-export const EMAIL_RATE_LIMIT: RateLimitConfig = {
++// --- Recuperación de contraseña ---
++
++export const RESET_REQUEST_LIMIT: RateLimitConfig = {
++  maxAttempts: 5,
++  windowMs: 15 * MIN,
++  lock: true,
++  lockDurationMs: 15 * MIN,
++};
++
++export const RESET_CODE_LIMIT: RateLimitConfig = {
+   maxAttempts: 5,
+-  windowMs: 15 * 60 * 1000,
+-  lockDurationMs: 15 * 60 * 1000,
++  windowMs: 15 * MIN,
++  lock: true,
++  lockDurationMs: 15 * MIN,
+ };
+ 
+-// Capa secundaria best-effort: límite más laxo agregando todos los emails
+-// probados desde una misma IP.
+-export const IP_RATE_LIMIT: RateLimitConfig = {
+-  maxAttempts: 20,
+-  windowMs: 60 * 60 * 1000,
+-  lockDurationMs: 60 * 60 * 1000,
++export const RESET_IP_LIMIT: RateLimitConfig = {
++  maxAttempts: 10,
++  windowMs: 15 * MIN,
++  lock: true,
++  lockDurationMs: 15 * MIN,
+ };
+ 
++// Única fuente de la clave de telemetría por email (M1, sugerencia del auditor):
++// login, y el harness de test, la construyen SIEMPRE por aquí para que no puedan
++// divergir por un prefijo escrito a mano.
++export function loginCounterKey(emailKey: string): string {
++  return `login-counter:${emailKey}`;
++}
++
++// Interruptor del veto por email (MIS-290 lo introduce activo por defecto; MIS-291
++// lo pondrá a "off"). FAIL-SAFE: ausente o cualquier valor distinto de "off" →
++// veto ACTIVO. Un despliegue que se olvide la variable mantiene el bloqueo, no lo
++// retira (misma dirección segura que el fail-closed de I2).
++export function emailVetoActive(): boolean {
++  return process.env.LOGIN_EMAIL_VETO !== "off";
++}
++
+ async function findAttempt(ctx: MutationCtx, emailKey: string) {
+   return await ctx.db
+     .query("loginAttempts")
+@@ -77,7 +135,8 @@ export async function recordFailedAttempt(
+ 
+   const windowExpired = now - attempt.windowStartedAt > config.windowMs;
+   const nextCount = windowExpired ? 1 : attempt.count + 1;
+-  const shouldLock = nextCount >= config.maxAttempts;
++  // `lock:false` (telemetría) nunca fija lockedUntil.
++  const shouldLock = config.lock && nextCount >= config.maxAttempts;
+ 
+   await ctx.db.patch(attempt._id, {
+     count: nextCount,
+diff --git a/convex/lib/testIdentity.ts b/convex/lib/testIdentity.ts
+index ba595f0..5a2e2b6 100644
+--- a/convex/lib/testIdentity.ts
++++ b/convex/lib/testIdentity.ts
+@@ -9,7 +9,19 @@
+ // Ya normalizado (minúsculas), tal y como lo devolvería normalizeEmailKey.
+ export const RESET_TEST_EMAIL = "reset@test.local";
+ 
++// MIS-290 (M4): SEGUNDA identidad dedicada, exclusiva para la prueba end-to-end
++// del flujo de alta (seedUser + accountsPendingRotation). Se siembra y se borra
++// dentro de la propia prueba; nunca es la identidad de login ni una cuenta real.
++export const SEED_TEST_EMAIL = "seed@test.local";
++
+ // Nombre de la env var de Convex con la credencial de alta entropía que protege
+ // el harness. En producción NO debe existir: su ausencia deja inertes todas las
+ // funciones de testSupport (fail-closed).
+ export const TEST_SUPPORT_ENV_VAR = "E2E_TEST_SUPPORT_KEY";
++
++// MIS-290 (prueba 8, I5): IP sintética dedicada a las pruebas del límite por IP.
++// TEST-NET-3 (RFC 5737): no rutable y de nadie, así que es seguro que el harness
++// limpie su clave `ip:` (a diferencia de las IP reales, compartidas). Vive aquí
++// (módulo ligero, sin dependencias de servidor) para que el spec e2e la importe
++// sin arrastrar el grafo de convex/testSupport.
++export const TEST_LOGIN_IP = "203.0.113.42";
+diff --git a/convex/passwordReset.ts b/convex/passwordReset.ts
+index cce48af..19a94a3 100644
+--- a/convex/passwordReset.ts
++++ b/convex/passwordReset.ts
+@@ -12,11 +12,13 @@ import { v } from "convex/values";
+ import { internalMutation, internalAction, mutation } from "./_generated/server";
+ import { internal } from "./_generated/api";
+ import { constantTimeEqual, hashPassword } from "./lib/password";
++import { validatePassword, CURRENT_PASSWORD_POLICY_VERSION } from "./lib/passwordPolicy";
+ import { serverKeyMatches, AUTH_SERVER_KEY_ENV_VAR } from "./lib/serverKey";
+ import { generateNumericCode, generateOpaqueToken, hashToken } from "./lib/token";
+ import {
+-  EMAIL_RATE_LIMIT,
+-  IP_RATE_LIMIT,
++  RESET_REQUEST_LIMIT,
++  RESET_CODE_LIMIT,
++  RESET_IP_LIMIT,
+   isLocked,
+   normalizeEmailKey,
+   normalizeIpHint,
+@@ -33,7 +35,6 @@ const MAX_EMAIL_LENGTH = 254;
+ const CODE_FORMAT = /^\d{6}$/;
+ const GENERIC_CODE_ERROR = "Código incorrecto o caducado";
+ const TICKET_EXPIRED_ERROR = "La sesión de recuperación caducó, vuelve a empezar";
+-const PASSWORD_POLICY_ERROR = "La contraseña debe tener entre 8 y 128 caracteres";
+ 
+ function emailWithinLimits(normalized: string): boolean {
+   return normalized.length > 0 && normalized.length <= MAX_EMAIL_LENGTH;
+@@ -70,8 +71,8 @@ export const requestPasswordResetCode = mutation({
+     // Se contabilizan SOLICITUDES (no fallos): siempre se registra, exista o
+     // no la cuenta — de lo contrario el contador delataría por sí mismo si
+     // el email existe.
+-    await recordFailedAttempt(ctx, emailKey, EMAIL_RATE_LIMIT);
+-    if (ipKey) await recordFailedAttempt(ctx, `resetip:${ipKey}`, IP_RATE_LIMIT);
++    await recordFailedAttempt(ctx, emailKey, RESET_REQUEST_LIMIT);
++    if (ipKey) await recordFailedAttempt(ctx, `resetip:${ipKey}`, RESET_IP_LIMIT);
+ 
+     await ctx.scheduler.runAfter(0, internal.passwordReset.deliverResetCode, {
+       email: args.email,
+@@ -194,8 +195,8 @@ export const verifyResetCode = mutation({
+     }
+ 
+     const fail = async () => {
+-      await recordFailedAttempt(ctx, rateLimitKey, EMAIL_RATE_LIMIT);
+-      if (ipKey) await recordFailedAttempt(ctx, `resetip:${ipKey}`, IP_RATE_LIMIT);
++      await recordFailedAttempt(ctx, rateLimitKey, RESET_CODE_LIMIT);
++      if (ipKey) await recordFailedAttempt(ctx, `resetip:${ipKey}`, RESET_IP_LIMIT);
+       return { ok: false as const, error: GENERIC_CODE_ERROR };
+     };
+ 
+@@ -256,8 +257,11 @@ export const resetPasswordWithTicket = mutation({
+       return { ok: false as const, error: TICKET_EXPIRED_ERROR };
+     }
+ 
+-    if (args.newPassword.length < 8 || args.newPassword.length > 128) {
+-      return { ok: false as const, error: PASSWORD_POLICY_ERROR };
++    // MIS-290 (I6): política de contraseñas (longitud + corpus de comunes) en el
++    // punto de fijación, ANTES de hashear. Rechaza débiles con el error de política.
++    const policy = validatePassword(args.newPassword);
++    if (!policy.ok) {
++      return { ok: false as const, error: policy.error };
+     }
+ 
+     const ticketHash = await hashToken(args.ticket);
+@@ -270,7 +274,13 @@ export const resetPasswordWithTicket = mutation({
+       return { ok: false as const, error: TICKET_EXPIRED_ERROR };
+     }
+ 
+-    await ctx.db.patch(row.userId, { passwordHash: await hashPassword(args.newPassword) });
++    // MIS-290 (I6): el marcador de política se escribe EN EL MISMO patch que el
++    // hash (atomicidad por la transacción): una cuenta rotada nunca queda sin versión.
++    await ctx.db.patch(row.userId, {
++      passwordHash: await hashPassword(args.newPassword),
++      passwordPolicyVersion: CURRENT_PASSWORD_POLICY_VERSION,
++      passwordChangedAt: Date.now(),
++    });
+     await ctx.db.patch(row._id, { usedAt: Date.now() });
+ 
+     for (const session of await ctx.db
+diff --git a/convex/schema.ts b/convex/schema.ts
+index 1b891b8..d7550f5 100644
+--- a/convex/schema.ts
++++ b/convex/schema.ts
+@@ -211,6 +211,16 @@ export default defineSchema({
+     // iteraciones y salt embebidos para poder migrar sin romper logins existentes.
+     passwordHash: v.string(),
+     role: v.union(v.literal("rep"), v.literal("supervisor")),
++    // MIS-290 (1B.3, I6): versión de la política de contraseñas con la que se
++    // fijó el hash ACTUAL. `v.optional` a propósito: la AUSENCIA del campo es la
++    // señal "esta cuenta no ha rotado" (no hace falta migrar). Se escribe SIEMPRE
++    // en el mismo patch/insert que `passwordHash`, nunca por separado, y solo
++    // tras validatePassword. El gate accountsPendingRotation compara este valor
++    // contra CURRENT_PASSWORD_POLICY_VERSION.
++    passwordPolicyVersion: v.optional(v.number()),
++    // epoch ms del último cambio de contraseña. Telemetría (no lo consume nada
++    // hoy). Se escribe junto a passwordHash.
++    passwordChangedAt: v.optional(v.number()),
+   }).index("by_email", ["email"]),
+ 
+   sessions: defineTable({
+@@ -260,4 +270,15 @@ export default defineSchema({
+     code: v.string(),
+     createdAt: v.number(),
+   }).index("by_email", ["email"]),
++
++  // MIS-290 (I5): instrumentación EXCLUSIVA de pruebas. Cuenta cuántas veces se
++  // ejecuta el KDF, para verificar que la reserva por IP acota las derivaciones
++  // (prueba 8). Tabla propia (NO dentro de testOutbox, que contaminaría
++  // getLastResetCode). Se incrementa solo con doble cerrojo: la credencial del
++  // harness configurada (en prod no existe → tabla vacía) Y el emailKey de la
++  // identidad dedicada. Una fila por `key`.
++  testKdfCounter: defineTable({
++    key: v.string(),
++    count: v.number(),
++  }).index("by_key", ["key"]),
+ });
+diff --git a/convex/testSupport.ts b/convex/testSupport.ts
+index b935ea9..3c7584d 100644
+--- a/convex/testSupport.ts
++++ b/convex/testSupport.ts
+@@ -23,13 +23,21 @@
+ // harness no pueda manipular las cuentas de Carlos y Marta.
+ 
+ import { v } from "convex/values";
+-import { internalMutation, mutation, query } from "./_generated/server";
++import { action, internalMutation, mutation, query } from "./_generated/server";
+ import type { MutationCtx, QueryCtx } from "./_generated/server";
++import { internal } from "./_generated/api";
++import { KDF_COUNTER_KEY } from "./auth";
+ import { hashPassword } from "./lib/password";
+ import { assertServerKey } from "./lib/serverKey";
+ import { generateOpaqueToken } from "./lib/token";
+-import { normalizeEmailKey, resetAttempts } from "./lib/rateLimit";
+-import { RESET_TEST_EMAIL, TEST_SUPPORT_ENV_VAR } from "./lib/testIdentity";
++import { loginCounterKey, normalizeEmailKey, resetAttempts } from "./lib/rateLimit";
++import { validatePassword, CURRENT_PASSWORD_POLICY_VERSION } from "./lib/passwordPolicy";
++import {
++  RESET_TEST_EMAIL,
++  SEED_TEST_EMAIL,
++  TEST_LOGIN_IP,
++  TEST_SUPPORT_ENV_VAR,
++} from "./lib/testIdentity";
+ 
+ const FORBIDDEN_IDENTITY = "Identidad no permitida";
+ 
+@@ -57,14 +65,17 @@ async function findTestUser(ctx: QueryCtx | MutationCtx) {
+ }
+ 
+ // Claves de rate limit que pertenecen EXCLUSIVAMENTE a la identidad dedicada.
+-// Enumeración explícita a propósito: nunca se borra por prefijo, y nunca se
+-// tocan las claves `ip:` / `resetip:` porque son COMPARTIDAS entre usuarios y
+-// limpiarlas debilitaría el rate limiting real del deployment.
++// Enumeración explícita a propósito: nunca se borra por prefijo. No se tocan las
++// claves `ip:`/`resetip:` de IPs REALES (compartidas), pero SÍ la IP sintética
++// TEST_LOGIN_IP (de nadie, ver arriba) — sin limpiarla, un bloqueo de IP heredado
++// de una ejecución previa daría un falso verde en la prueba 8 (M3).
+ function rateLimitKeysForTestIdentity(): string[] {
+   return [
+-    RESET_TEST_EMAIL, // login
++    RESET_TEST_EMAIL, // login — veto por email (MIS-290)
++    loginCounterKey(RESET_TEST_EMAIL), // login — telemetría por email (MIS-290, M1: limpiar AMBAS)
+     `reset:${RESET_TEST_EMAIL}`, // solicitudes de código
+     `resetcode:${RESET_TEST_EMAIL}`, // intentos de código
++    `ip:${TEST_LOGIN_IP}`, // capa por IP de la prueba 8 (IP sintética, segura de limpiar)
+   ];
+ }
+ 
+@@ -81,16 +92,29 @@ export const resetTestIdentity = mutation({
+     // Contraseña EFÍMERA: 32 bytes nuevos en cada llamada. Se devuelve en claro
+     // solo aquí, al llamante ya autenticado por serverKey; en BD queda hasheada.
+     const password = generateOpaqueToken();
++    // MIS-290 (I6): pasa por la MISMA política que los demás puntos de fijación,
++    // aunque 32 bytes aleatorios nunca chocan con el corpus — así no existe un
++    // camino que la esquive. Si alguna vez fallara (imposible salvo bug), se corta.
++    const policy = validatePassword(password);
++    if (!policy.ok) {
++      throw new Error("La contraseña de test generada no pasó la política (imposible salvo bug)");
++    }
+     const passwordHash = await hashPassword(password);
++    // El marcador de política se escribe junto al hash (mismo patch/insert).
++    const policyFields = {
++      passwordPolicyVersion: CURRENT_PASSWORD_POLICY_VERSION,
++      passwordChangedAt: Date.now(),
++    };
+ 
+     const existing = await findTestUser(ctx);
+     const userId = existing
+-      ? (await ctx.db.patch(existing._id, { passwordHash }), existing._id)
++      ? (await ctx.db.patch(existing._id, { passwordHash, ...policyFields }), existing._id)
+       : await ctx.db.insert("users", {
+           name: "Reset E2E",
+           email: RESET_TEST_EMAIL,
+           passwordHash,
+           role: "rep",
++          ...policyFields,
+         });
+ 
+     // Estado inicial determinista: sin códigos, sin sesiones, sin outbox y sin
+@@ -116,6 +140,13 @@ export const resetTestIdentity = mutation({
+     for (const key of rateLimitKeysForTestIdentity()) {
+       await resetAttempts(ctx, key);
+     }
++    // MIS-290 (prueba 8): contador de KDF a cero — solo la clave KDF_COUNTER_KEY
++    // por su índice (no un scan de toda la tabla).
++    const kdfRow = await ctx.db
++      .query("testKdfCounter")
++      .withIndex("by_key", (q) => q.eq("key", KDF_COUNTER_KEY))
++      .unique();
++    if (kdfRow) await ctx.db.delete(kdfRow._id);
+ 
+     return { password };
+   },
+@@ -193,6 +224,139 @@ export const countSessionsFor = query({
+   },
+ });
+ 
++// MIS-290 (prueba 8, I5): lee el contador de derivaciones del KDF. Mismos tres
++// cerrojos del harness. La clave es la misma que usa verifyPasswordInstrumented.
++export const getKdfCount = query({
++  args: { serverKey: v.string(), email: v.string() },
++  returns: v.number(),
++  handler: async (ctx, args) => {
++    assertTestKey(args.serverKey);
++    assertDedicatedIdentity(args.email);
++    const row = await ctx.db
++      .query("testKdfCounter")
++      .withIndex("by_key", (q) => q.eq("key", KDF_COUNTER_KEY))
++      .unique();
++    return row?.count ?? 0;
++  },
++});
++
++// MIS-290 (I6): versión de política del hash actual de la identidad dedicada —
++// para verificar que los puntos de fijación escriben el marcador junto al hash.
++export const getPolicyVersion = query({
++  args: { serverKey: v.string(), email: v.string() },
++  returns: v.union(v.number(), v.null()),
++  handler: async (ctx, args) => {
++    assertTestKey(args.serverKey);
++    assertDedicatedIdentity(args.email);
++    const user = await findTestUser(ctx);
++    return user?.passwordPolicyVersion ?? null;
++  },
++});
++
++// MIS-290 (prueba 9, I7): wrappers para provocar la carrera "login en vuelo" de
++// forma DETERMINISTA. Inertes sin la credencial del harness (assertTestKey,
++// fail-closed) y restringidos a la identidad dedicada. Invocan las funciones
++// internas REALES reserveLoginSlot/finalizeLogin (son actions porque una mutation
++// no puede runMutation). La prueba: reservar (huella del hash viejo) → cambiar la
++// contraseña por recuperación → finalizar con la huella vieja → NO crea sesión.
++export const testReserveLoginSlot = action({
++  args: { serverKey: v.string(), email: v.string() },
++  returns: v.union(
++    v.object({ blocked: v.literal(true) }),
++    v.object({ blocked: v.literal(false), fingerprint: v.string() }),
++  ),
++  handler: async (
++    ctx,
++    args,
++  ): Promise<{ blocked: true } | { blocked: false; fingerprint: string }> => {
++    assertTestKey(args.serverKey);
++    const emailKey = assertDedicatedIdentity(args.email);
++    // ipKey null: la prueba de I7 no ejercita la capa por IP.
++    const r = await ctx.runMutation(internal.auth.reserveLoginSlot, { emailKey, ipKey: null });
++    return r.blocked ? { blocked: true } : { blocked: false, fingerprint: r.fingerprint };
++  },
++});
++
++export const testFinalizeLogin = action({
++  args: { serverKey: v.string(), email: v.string(), fingerprint: v.string(), ok: v.boolean() },
++  returns: v.object({ sessionCreated: v.boolean() }),
++  handler: async (ctx, args): Promise<{ sessionCreated: boolean }> => {
++    assertTestKey(args.serverKey);
++    const emailKey = assertDedicatedIdentity(args.email);
++    const r = await ctx.runMutation(internal.auth.finalizeLogin, {
++      emailKey,
++      fingerprint: args.fingerprint,
++      ok: args.ok,
++    });
++    return { sessionCreated: r.success };
++  },
++});
++
++// Borra la fila de la identidad dedicada — caso "usuario eliminado entre reserva
++// y finalización" de la prueba 9. Mutation (borra directamente).
++export const testDeleteIdentity = mutation({
++  args: { serverKey: v.string(), email: v.string() },
++  returns: v.null(),
++  handler: async (ctx, args) => {
++    assertTestKey(args.serverKey);
++    assertDedicatedIdentity(args.email);
++    const user = await findTestUser(ctx);
++    if (user) await ctx.db.delete(user._id);
++    return null;
++  },
++});
++
++// MIS-290 (M4): limpia la identidad de seed (seedUser lanza si ya existe). Solo
++// toca SEED_TEST_EMAIL; la llama testSeedFlow antes y después.
++export const deleteSeedUser = internalMutation({
++  args: {},
++  returns: v.null(),
++  handler: async (ctx) => {
++    const u = await ctx.db
++      .query("users")
++      .withIndex("by_email", (q) => q.eq("email", SEED_TEST_EMAIL))
++      .unique();
++    if (u) await ctx.db.delete(u._id);
++    return null;
++  },
++});
++
++// MIS-290 (M4, flujo de alta end-to-end): ejercita los puntos de fijación REALES
++// `auth.seedUser` y `auth.accountsPendingRotation`. Siembra la identidad de seed
++// con un hash validado y comprueba que la cuenta recién sembrada NO queda
++// pendiente de rotación (seedUser escribió `passwordPolicyVersion = CURRENT` en
++// el mismo insert que el hash). Inerte sin la credencial del harness; limpia
++// antes y después. El rechazo de contraseñas débiles del script se prueba aparte
++// (spawn de scripts/hash-password.mjs en el spec).
++export const testSeedFlow = action({
++  args: { serverKey: v.string() },
++  returns: v.object({ inPendingRotation: v.boolean() }),
++  handler: async (ctx, args): Promise<{ inPendingRotation: boolean }> => {
++    assertTestKey(args.serverKey);
++    await ctx.runMutation(internal.testSupport.deleteSeedUser, {});
++    const password = generateOpaqueToken();
++    const policy = validatePassword(password);
++    if (!policy.ok) {
++      throw new Error("La password de seed generada no pasó la política (imposible salvo bug)");
++    }
++    const passwordHash = await hashPassword(password);
++    // try/finally: si algo falla tras sembrar, la identidad de seed se borra
++    // igualmente y no queda huérfana hasta la siguiente ejecución.
++    try {
++      await ctx.runMutation(internal.auth.seedUser, {
++        name: "Seed E2E",
++        email: SEED_TEST_EMAIL,
++        passwordHash,
++        role: "rep",
++      });
++      const pending = await ctx.runQuery(internal.auth.accountsPendingRotation, {});
++      return { inPendingRotation: pending.some((p) => p.email === SEED_TEST_EMAIL) };
++    } finally {
++      await ctx.runMutation(internal.testSupport.deleteSeedUser, {});
++    }
++  },
++});
++
+ // internalMutation: NO forma parte de `api.*`, ningún cliente externo puede
+ // invocarla — por eso es la única función del módulo que no recibe serverKey.
+ // La llama el envío de MIS-285. Dos salvaguardas propias, por si un futuro call
+diff --git a/e2e/helpers/test-support.ts b/e2e/helpers/test-support.ts
+index 30dd03e..c782ae1 100644
+--- a/e2e/helpers/test-support.ts
++++ b/e2e/helpers/test-support.ts
+@@ -5,7 +5,7 @@
+ // aparecer en una traza ni en un screenshot.
+ 
+ import { convexClient, api } from "./convex-client";
+-import { RESET_TEST_EMAIL } from "../../convex/lib/testIdentity";
++import { RESET_TEST_EMAIL, TEST_LOGIN_IP } from "../../convex/lib/testIdentity";
+ 
+ function testSupportKey(): string {
+   const key = process.env.E2E_TEST_SUPPORT_KEY;
+@@ -81,4 +81,70 @@ export async function loginSucceeds(password: string): Promise<boolean> {
+   return result.success;
+ }
+ 
+-export { RESET_TEST_EMAIL };
++// MIS-290 (prueba 8, I5): login que devuelve el resultado completo y permite fijar
++// la IP — para ejercitar la capa por IP con la IP sintética TEST_LOGIN_IP.
++export async function loginResult(
++  password: string,
++  ipHint?: string,
++): Promise<{ success: boolean }> {
++  return await convexClient().action(api.auth.loginWithPassword, {
++    email: RESET_TEST_EMAIL,
++    password,
++    serverKey: authServerKey(),
++    ...(ipHint ? { ipHint } : {}),
++  });
++}
++
++// MIS-290 (prueba 8): nº de derivaciones del KDF desde el último reseed.
++export async function getKdfCount(): Promise<number> {
++  return await convexClient().query(api.testSupport.getKdfCount, {
++    serverKey: testSupportKey(),
++    email: RESET_TEST_EMAIL,
++  });
++}
++
++// MIS-290 (prueba 9, I7): wrappers de reserva/finalización de login.
++export async function reserveLoginSlot(): Promise<
++  { blocked: true } | { blocked: false; fingerprint: string }
++> {
++  return await convexClient().action(api.testSupport.testReserveLoginSlot, {
++    serverKey: testSupportKey(),
++    email: RESET_TEST_EMAIL,
++  });
++}
++
++export async function finalizeLogin(fingerprint: string, ok: boolean): Promise<boolean> {
++  const r = await convexClient().action(api.testSupport.testFinalizeLogin, {
++    serverKey: testSupportKey(),
++    email: RESET_TEST_EMAIL,
++    fingerprint,
++    ok,
++  });
++  return r.sessionCreated;
++}
++
++export async function deleteTestIdentity(): Promise<void> {
++  await convexClient().mutation(api.testSupport.testDeleteIdentity, {
++    serverKey: testSupportKey(),
++    email: RESET_TEST_EMAIL,
++  });
++}
++
++// MIS-290 (M4): ejercita el flujo de alta real (seedUser + accountsPendingRotation).
++// Devuelve si la cuenta recién sembrada quedó pendiente de rotación (debe ser false).
++export async function seedFlowInPendingRotation(): Promise<boolean> {
++  const r = await convexClient().action(api.testSupport.testSeedFlow, {
++    serverKey: testSupportKey(),
++  });
++  return r.inPendingRotation;
++}
++
++// MIS-290 (I6): versión de política del hash actual (null si no hay identidad).
++export async function getPolicyVersion(): Promise<number | null> {
++  return await convexClient().query(api.testSupport.getPolicyVersion, {
++    serverKey: testSupportKey(),
++    email: RESET_TEST_EMAIL,
++  });
++}
++
++export { RESET_TEST_EMAIL, TEST_LOGIN_IP };
+diff --git a/e2e/password-reset-invariants.spec.ts b/e2e/password-reset-invariants.spec.ts
+index f9e4715..bd423a7 100644
+--- a/e2e/password-reset-invariants.spec.ts
++++ b/e2e/password-reset-invariants.spec.ts
+@@ -3,18 +3,25 @@
+ // que password-reset.spec.ts. Corre en "chromium-secrets" (MIS-286): la
+ // contraseña efímera de la identidad dedicada circula por aquí.
+ import { randomBytes } from "node:crypto";
++import { spawnSync } from "node:child_process";
+ import { test, expect } from "./helpers/secure-test";
+ import { convexClient, api } from "./helpers/convex-client";
+ import {
+   RESET_TEST_EMAIL,
+   authServerKey,
+   countSessionsFor,
++  deleteTestIdentity,
+   expireResetCode,
++  finalizeLogin,
+   getLastResetCode,
++  getPolicyVersion,
+   loginSucceeds,
++  reserveLoginSlot,
+   resetTestIdentity,
++  seedFlowInPendingRotation,
+ } from "./helpers/test-support";
+ import { generateNumericCode } from "../convex/lib/token";
++import { validatePassword, CURRENT_PASSWORD_POLICY_VERSION } from "../convex/lib/passwordPolicy";
+ 
+ function freshPassword(): string {
+   return randomBytes(24).toString("base64url");
+@@ -366,4 +373,129 @@ test.describe("recuperación de contraseña — invariantes de seguridad (MIS-28
+     });
+     expect(good.ok).toBe(true);
+   });
++
++  // MIS-290 (prueba 9, I7): una contraseña sustituida en vuelo no crea sesión.
++  // Se orquesta con los wrappers de harness (reserva/finalización), que exponen la
++  // ventana entre leer el hash y crear la sesión — imposible de forzar de forma
++  // determinista solo con el endpoint público.
++  test("I7: un login reservado con el hash viejo no crea sesión tras cambiar la contraseña", async () => {
++    await resetTestIdentity();
++
++    // 1. Reserva: captura la huella del hash ACTUAL.
++    const reserve = await reserveLoginSlot();
++    expect(reserve.blocked).toBe(false);
++    if (reserve.blocked) throw new Error("unreachable");
++
++    // 2. Cambia la contraseña por el flujo real de recuperación → nuevo hash.
++    const code = await requestAndGetCode();
++    const client = convexClient();
++    const verified = await client.mutation(api.passwordReset.verifyResetCode, {
++      email: RESET_TEST_EMAIL,
++      code,
++      serverKey: authServerKey(),
++    });
++    expect(verified.ok).toBe(true);
++    if (!verified.ok) throw new Error("unreachable");
++    const changed = await client.mutation(api.passwordReset.resetPasswordWithTicket, {
++      ticket: verified.ticket,
++      newPassword: freshPassword(),
++      serverKey: authServerKey(),
++    });
++    expect(changed.ok).toBe(true);
++
++    // 3. Finalizar con la huella VIEJA y ok:true → la huella ya no coincide → NO
++    // crea sesión. Sin esta revalidación sería una regresión de MIS-285.
++    expect(await finalizeLogin(reserve.fingerprint, true)).toBe(false);
++  });
++
++  test("I7: un login reservado no crea sesión si la cuenta se borra antes de finalizar", async () => {
++    await resetTestIdentity();
++    const reserve = await reserveLoginSlot();
++    expect(reserve.blocked).toBe(false);
++    if (reserve.blocked) throw new Error("unreachable");
++
++    await deleteTestIdentity();
++
++    // La relectura por by_email no encuentra la cuenta → sin sesión.
++    expect(await finalizeLogin(reserve.fingerprint, true)).toBe(false);
++  });
++
++  // MIS-290 (I6): la política se aplica en el punto de fijación. Una contraseña
++  // del corpus se rechaza SIN consumir el ticket (el check va antes); una fuerte
++  // se acepta y deja escrito el marcador de versión junto al hash.
++  test("resetPasswordWithTicket rechaza una contraseña común y acepta una fuerte con marcador", async () => {
++    await resetTestIdentity();
++    const code = await requestAndGetCode();
++    const client = convexClient();
++    const verified = await client.mutation(api.passwordReset.verifyResetCode, {
++      email: RESET_TEST_EMAIL,
++      code,
++      serverKey: authServerKey(),
++    });
++    expect(verified.ok).toBe(true);
++    if (!verified.ok) throw new Error("unreachable");
++
++    const weak = await client.mutation(api.passwordReset.resetPasswordWithTicket, {
++      ticket: verified.ticket,
++      newPassword: "password",
++      serverKey: authServerKey(),
++    });
++    expect(weak.ok).toBe(false);
++
++    // El ticket NO se consumió con el rechazo de política: sirve para la fuerte.
++    const strong = await client.mutation(api.passwordReset.resetPasswordWithTicket, {
++      ticket: verified.ticket,
++      newPassword: freshPassword(),
++      serverKey: authServerKey(),
++    });
++    expect(strong.ok).toBe(true);
++    expect(await getPolicyVersion()).toBe(CURRENT_PASSWORD_POLICY_VERSION);
++  });
++
++  // MIS-290 (I6): resetTestIdentity es un punto de fijación real y escribe el
++  // marcador de política junto al hash.
++  test("fijar la contraseña por reseed deja escrito el marcador de política", async () => {
++    await resetTestIdentity();
++    expect(await getPolicyVersion()).toBe(CURRENT_PASSWORD_POLICY_VERSION);
++  });
++
++  // MIS-290 (I6 / M6): la lógica de la política (unidad). Es la misma que aplican
++  // resetPasswordWithTicket, resetTestIdentity y scripts/hash-password.mjs.
++  test("la política rechaza comunes, cortas y de espacios, y acepta una fuerte", () => {
++    expect(validatePassword("password").ok).toBe(false); // del corpus
++    expect(validatePassword("Password1").ok).toBe(false); // normaliza a "password"
++    expect(validatePassword("1234567").ok).toBe(false); // longitud < 8
++    expect(validatePassword("        ").ok).toBe(false); // M6: 8 espacios (contenido efectivo vacío)
++    expect(validatePassword("  abc  ").ok).toBe(false); // M6: contenido efectivo < 8
++    expect(validatePassword(freshPassword()).ok).toBe(true); // 32 bytes aleatorios
++  });
++
++  // MIS-290 (M4): el punto de fijación de ALTA. Ejercita el script REAL
++  // scripts/hash-password.mjs (rechazo de débiles y de espacios ANTES de hashear).
++  test("hash-password.mjs rechaza débiles/espacios y acepta una fuerte", () => {
++    const run = (password: string) =>
++      spawnSync("node", ["scripts/hash-password.mjs"], {
++        input: `${password}\n`,
++        encoding: "utf8",
++        cwd: process.cwd(),
++      });
++
++    const weak = run("password");
++    expect(weak.status).toBe(1);
++    expect(weak.stderr).toMatch(/no cumple la política/i);
++
++    const spaces = run("        ");
++    expect(spaces.status).toBe(1); // M6
++
++    const strong = run("Zx9-tR2k-Qm7w-Lp4n");
++    expect(strong.status).toBe(0);
++    expect(strong.stdout).toMatch(/pbkdf2_sha256\$/);
++  });
++
++  // MIS-290 (M4): el OTRO extremo del alta. Ejercita seedUser + accountsPendingRotation
++  // reales: una cuenta sembrada con un hash validado NO queda pendiente de rotación
++  // (seedUser escribió la versión en el mismo insert que el hash).
++  test("alta vía seedUser: la cuenta sembrada no queda pendiente de rotación", async () => {
++    expect(await seedFlowInPendingRotation()).toBe(false);
++  });
+ });
+diff --git a/e2e/test-support.spec.ts b/e2e/test-support.spec.ts
+index d4b825b..58deae4 100644
+--- a/e2e/test-support.spec.ts
++++ b/e2e/test-support.spec.ts
+@@ -14,9 +14,12 @@ import { test, expect } from "./helpers/secure-test";
+ import { convexClient, api } from "./helpers/convex-client";
+ import {
+   RESET_TEST_EMAIL,
++  TEST_LOGIN_IP,
+   authServerKey,
+   countSessionsFor,
++  getKdfCount,
+   getLastResetCode,
++  loginResult,
+   loginSucceeds,
+   resetTestIdentity,
+ } from "./helpers/test-support";
+@@ -154,4 +157,28 @@ test.describe("harness seguro (MIS-286)", () => {
+     });
+     expect(ok.success).toBe(true);
+   });
++
++  // MIS-290 (prueba 8, I5): la reserva de cuota por IP acota el KDF. Desde estado
++  // limpio (el reseed limpia también la clave ip: sintética y el contador de KDF),
++  // 11 logins CONCURRENTES con la contraseña CORRECTA y la misma IP sintética →
++  // exactamente 10 crean sesión y 1 se rechaza (cuota de IP 10/15 min), y el KDF
++  // corre EXACTAMENTE 10 veces (la 11.ª queda bloqueada en la reserva, ANTES de
++  // derivar). Contraseña correcta a propósito: 11 incorrectas "se rechazan" todas
++  // y no probarían cuál fue por cuota. La instrumentación del KDF solo existe en
++  // dev (doble cerrojo); en producción no cuenta nada.
++  test("la cuota por IP acota el KDF: 11 concurrentes correctas → 10 sesiones, 10 derivaciones", async () => {
++    const password = await resetTestIdentity();
++
++    const results = await Promise.all(
++      Array.from({ length: 11 }, () => loginResult(password, TEST_LOGIN_IP)),
++    );
++    const ok = results.filter((r) => r.success).length;
++
++    expect(ok).toBe(10);
++    expect(results.length - ok).toBe(1);
++    // El KDF corrió exactamente 10 veces: es la prueba de I5 (coste acotado).
++    expect(await getKdfCount()).toBe(10);
++    // Y hay 10 sesiones: los 10 permitidos entraron de verdad.
++    expect(await countSessionsFor()).toBe(10);
++  });
+ });
+diff --git a/scripts/hash-password.mjs b/scripts/hash-password.mjs
+index 9d9b666..e70fe89 100644
+--- a/scripts/hash-password.mjs
++++ b/scripts/hash-password.mjs
+@@ -11,6 +11,9 @@
+ 
+ import { createInterface } from "node:readline";
+ import { pbkdf2Sync, randomBytes } from "node:crypto";
++import { readFileSync } from "node:fs";
++import { fileURLToPath } from "node:url";
++import { dirname, join } from "node:path";
+ 
+ const ALGORITHM = "pbkdf2_sha256";
+ const VERSION = "v1";
+@@ -18,6 +21,29 @@ const ITERATIONS = 600_000;
+ const SALT_LENGTH_BYTES = 16;
+ const KEY_LENGTH_BYTES = 32;
+ 
++// MIS-290 (I6): política de contraseñas en el punto de fijación de alta. DEBE
++// coincidir con convex/lib/passwordPolicy.ts. El corpus se lee del MISMO JSON
++// versionado que usa Convex (data compartida). `normalizePassword` se DUPLICA
++// aquí a propósito (este script es .mjs y no puede importar el .ts), documentada
++// para mantenerse en sync — mismo criterio que los parámetros del KDF de arriba.
++const MIN_PASSWORD_LENGTH = 8;
++const MAX_PASSWORD_LENGTH = 128;
++const __dir = dirname(fileURLToPath(import.meta.url));
++const CORPUS = new Set(
++  JSON.parse(readFileSync(join(__dir, "../convex/lib/passwordCorpus.json"), "utf8")),
++);
++function normalizePassword(p) {
++  const base = p.trim().toLowerCase();
++  const stripped = base.replace(/[0-9]+$/, "");
++  return stripped === "" ? base : stripped;
++}
++function isWeakPassword(p) {
++  // Longitud mínima sobre el contenido efectivo (tras trim): rechaza solo-espacios
++  // y relleno de espacios (M6). Debe coincidir con validatePassword en el .ts.
++  if (p.trim().length < MIN_PASSWORD_LENGTH || p.length > MAX_PASSWORD_LENGTH) return true;
++  return CORPUS.has(normalizePassword(p));
++}
++
+ function readHiddenInput(promptText) {
+   return new Promise((resolve) => {
+     const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+@@ -48,6 +74,17 @@ if (!password) {
+   process.exit(1);
+ }
+ 
++// MIS-290 (I6): rechazar contraseñas débiles ANTES de generar el hash, para que
++// seedUser (que solo recibe el hash) no siembre nunca una cuenta con una
++// contraseña que no cumple la política.
++if (isWeakPassword(password)) {
++  console.error(
++    "\nLa contraseña no cumple la política: mínimo 8 caracteres y no puede ser una " +
++      "contraseña común. No se ha generado ningún hash.",
++  );
++  process.exit(1);
++}
++
+ const salt = randomBytes(SALT_LENGTH_BYTES);
+ const hash = pbkdf2Sync(password, salt, ITERATIONS, KEY_LENGTH_BYTES, "sha256");
+ const encoded = `${ALGORITHM}$${VERSION}$i=${ITERATIONS}$${salt.toString("base64url")}$${hash.toString("base64url")}`;
