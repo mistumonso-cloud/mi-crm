@@ -1,0 +1,335 @@
+diff --git a/convex/auth.ts b/convex/auth.ts
+index 19e585e..6065c2e 100644
+--- a/convex/auth.ts
++++ b/convex/auth.ts
+@@ -47,11 +47,12 @@ type LoginResult =
+   | { success: true; token: string; role: "rep" | "supervisor" }
+   | { success: false; error: string };
+ 
+-// Lógica de login por password, compartida por el endpoint público ANTIGUO
+-// (`login`, en retirada en 1A-bis/MIS-289) y el núcleo interno nuevo
+-// (`_loginCore`, invocado por la action `loginWithPassword`). Es un helper, no
+-// una función registrada: corre dentro de una única transacción de mutation,
+-// con el KDF dentro — igual que hasta ahora. La reserva previa al KDF es 1B.
++// Lógica de login por password. La usa el núcleo interno `_loginCore`,
++// invocado por la action `loginWithPassword` — el único endpoint público de
++// login desde 1A-bis/MIS-289, que retiró el antiguo `login` (mutation sin
++// serverKey). Es un helper, no una función registrada: corre dentro de una
++// única transacción de mutation, con el KDF dentro — igual que hasta ahora. La
++// reserva previa al KDF es 1B.
+ async function performLogin(
+   ctx: MutationCtx,
+   args: { email: string; password: string; ipHint?: string },
+@@ -96,21 +97,10 @@ async function performLogin(
+   return { success: true, token, role: user.role };
+ }
+ 
+-// Endpoint público ANTIGUO. Intacto (sin serverKey) durante la ventana de
+-// convivencia para no romper al frontend viejo. Lo retira 1A-bis (MIS-289),
+-// que es donde se cierra I3 para el login por password.
+-export const login = mutation({
+-  args: {
+-    email: v.string(),
+-    password: v.string(),
+-    ipHint: v.optional(v.string()),
+-  },
+-  returns: loginResultValidator,
+-  handler: async (ctx, args) => performLogin(ctx, args),
+-});
+-
+ // Núcleo interno: no forma parte de api.*, ningún cliente externo puede
+ // invocarlo. Solo lo invoca la action loginWithPassword, tras validar serverKey.
++// (MIS-289 retiró la mutation pública `login`, que compartía esta lógica sin
++// exigir serverKey — esa puerta cerraba I3 para el login por password.)
+ export const _loginCore = internalMutation({
+   args: {
+     email: v.string(),
+diff --git a/convex/passwordReset.ts b/convex/passwordReset.ts
+index 42e64fa..cce48af 100644
+--- a/convex/passwordReset.ts
++++ b/convex/passwordReset.ts
+@@ -43,16 +43,14 @@ function emailWithinLimits(normalized: string): boolean {
+ // `users` ni espera a Resend — el tiempo de respuesta no debe delatar si el
+ // email existe.
+ export const requestPasswordResetCode = mutation({
+-  args: { email: v.string(), ipHint: v.optional(v.string()), serverKey: v.optional(v.string()) },
++  args: { email: v.string(), ipHint: v.optional(v.string()), serverKey: v.string() },
+   returns: v.object({ ok: v.literal(true) }),
+   handler: async (ctx, args) => {
+-    // MIS-288 (1A.5) — expand/contract: en 1A el serverKey es OPCIONAL y solo
+-    // se valida si viene (el frontend ya lo envía); si no viene, se acepta el
+-    // camino legacy para no romper al frontend viejo durante la ventana de
+-    // despliegue. 1A-bis (MIS-289) lo hará obligatorio y cerrará el hueco. Un
+-    // serverKey PRESENTE pero incorrecto responde {ok:true} sin programar nada:
++    // I3 (MIS-289): serverKey obligatorio. Toda llamada sin clave válida se
++    // rechaza aquí, como PRIMERA sentencia, antes de tocar el rate limit o
++    // programar trabajo. serverKey incorrecto responde {ok:true} sin hacer nada:
+     // mismo criterio anti-enumeración (no revela nada, no hace trabajo).
+-    if (args.serverKey !== undefined && !serverKeyMatches(args.serverKey, AUTH_SERVER_KEY_ENV_VAR)) {
++    if (!serverKeyMatches(args.serverKey, AUTH_SERVER_KEY_ENV_VAR)) {
+       return { ok: true as const };
+     }
+ 
+@@ -161,15 +159,15 @@ export const createResetCode = internalMutation({
+ // 4. Mutation pública: verifica el código y, si coincide, emite un ticket
+ // opaco de un solo uso que autoriza el cambio de contraseña.
+ export const verifyResetCode = mutation({
+-  args: { email: v.string(), code: v.string(), ipHint: v.optional(v.string()), serverKey: v.optional(v.string()) },
++  args: { email: v.string(), code: v.string(), ipHint: v.optional(v.string()), serverKey: v.string() },
+   returns: v.union(
+     v.object({ ok: v.literal(true), ticket: v.string() }),
+     v.object({ ok: v.literal(false), error: v.string() }),
+   ),
+   handler: async (ctx, args) => {
+-    // MIS-288 (1A.5) — expand/contract: serverKey opcional en 1A, obligatorio
+-    // en 1A-bis. Presente-pero-incorrecto → error genérico (indistinguible).
+-    if (args.serverKey !== undefined && !serverKeyMatches(args.serverKey, AUTH_SERVER_KEY_ENV_VAR)) {
++    // I3 (MIS-289): serverKey obligatorio, comprobado como primera sentencia.
++    // Clave inválida → error genérico (indistinguible de un código incorrecto).
++    if (!serverKeyMatches(args.serverKey, AUTH_SERVER_KEY_ENV_VAR)) {
+       return { ok: false as const, error: GENERIC_CODE_ERROR };
+     }
+ 
+@@ -246,15 +244,15 @@ export const verifyResetCode = mutation({
+ // 5. Mutation pública: cambia la contraseña e invalida TODAS las sesiones del
+ // usuario, atómicamente en la misma mutation.
+ export const resetPasswordWithTicket = mutation({
+-  args: { ticket: v.string(), newPassword: v.string(), serverKey: v.optional(v.string()) },
++  args: { ticket: v.string(), newPassword: v.string(), serverKey: v.string() },
+   returns: v.union(
+     v.object({ ok: v.literal(true) }),
+     v.object({ ok: v.literal(false), error: v.string() }),
+   ),
+   handler: async (ctx, args) => {
+-    // MIS-288 (1A.5) — expand/contract: serverKey opcional en 1A, obligatorio
+-    // en 1A-bis. Presente-pero-incorrecto → error genérico del flujo.
+-    if (args.serverKey !== undefined && !serverKeyMatches(args.serverKey, AUTH_SERVER_KEY_ENV_VAR)) {
++    // I3 (MIS-289): serverKey obligatorio, comprobado como primera sentencia.
++    // Clave inválida → error genérico del flujo (indistinguible).
++    if (!serverKeyMatches(args.serverKey, AUTH_SERVER_KEY_ENV_VAR)) {
+       return { ok: false as const, error: TICKET_EXPIRED_ERROR };
+     }
+ 
+diff --git a/e2e/helpers/test-support.ts b/e2e/helpers/test-support.ts
+index 5d651e1..30dd03e 100644
+--- a/e2e/helpers/test-support.ts
++++ b/e2e/helpers/test-support.ts
+@@ -22,9 +22,10 @@ function testSupportKey(): string {
+ // MIS-288: secreto de servidor de autenticación, para las llamadas directas a
+ // las funciones de auth desde los e2e (loginWithPassword y el flujo de
+ // recuperación). Mismo patrón que testSupportKey(): se lee en el proceso de
+-// Node de Playwright, nunca llega al navegador. En 1A el serverKey es opcional
+-// en las funciones de recuperación (expand); enviarlo aquí ejercita el mismo
+-// camino que usa el frontend en producción.
++// Node de Playwright, nunca llega al navegador. Desde 1A-bis (MIS-289) el
++// serverKey es OBLIGATORIO en las funciones de recuperación (I3 cerrada), así
++// que enviarlo aquí no es solo fiel al frontend: es la única forma de que las
++// llamadas directas pasen la validación.
+ export function authServerKey(): string {
+   const key = process.env.AUTH_SERVER_KEY;
+   if (!key) {
+diff --git a/e2e/password-reset-invariants.spec.ts b/e2e/password-reset-invariants.spec.ts
+index 7df12a6..f9e4715 100644
+--- a/e2e/password-reset-invariants.spec.ts
++++ b/e2e/password-reset-invariants.spec.ts
+@@ -37,7 +37,10 @@ function wrongCode(realCode: string): string {
+ // debe exigir un valor distinto del anterior, no solo "no nulo".
+ async function requestAndGetCode(previousCode: string | null = null): Promise<string> {
+   const client = convexClient();
+-  await client.mutation(api.passwordReset.requestPasswordResetCode, { email: RESET_TEST_EMAIL });
++  await client.mutation(api.passwordReset.requestPasswordResetCode, {
++    email: RESET_TEST_EMAIL,
++    serverKey: authServerKey(),
++  });
+ 
+   await expect
+     .poll(
+@@ -77,6 +80,7 @@ test.describe("recuperación de contraseña — invariantes de seguridad (MIS-28
+     const result = await client.mutation(api.passwordReset.verifyResetCode, {
+       email: RESET_TEST_EMAIL,
+       code: wrongCode(realCode),
++      serverKey: authServerKey(),
+     });
+ 
+     expect(result.ok).toBe(false);
+@@ -91,6 +95,7 @@ test.describe("recuperación de contraseña — invariantes de seguridad (MIS-28
+       const result = await client.mutation(api.passwordReset.verifyResetCode, {
+         email: RESET_TEST_EMAIL,
+         code: wrongCode(realCode),
++        serverKey: authServerKey(),
+       });
+       expect(result.ok).toBe(false);
+     }
+@@ -101,6 +106,7 @@ test.describe("recuperación de contraseña — invariantes de seguridad (MIS-28
+     const finalAttempt = await client.mutation(api.passwordReset.verifyResetCode, {
+       email: RESET_TEST_EMAIL,
+       code: realCode,
++      serverKey: authServerKey(),
+     });
+     expect(finalAttempt.ok).toBe(false);
+   });
+@@ -116,6 +122,7 @@ test.describe("recuperación de contraseña — invariantes de seguridad (MIS-28
+     const result = await client.mutation(api.passwordReset.verifyResetCode, {
+       email: RESET_TEST_EMAIL,
+       code: realCode,
++      serverKey: authServerKey(),
+     });
+     expect(result.ok).toBe(false);
+   });
+@@ -128,6 +135,7 @@ test.describe("recuperación de contraseña — invariantes de seguridad (MIS-28
+     const verified = await client.mutation(api.passwordReset.verifyResetCode, {
+       email: RESET_TEST_EMAIL,
+       code: realCode,
++      serverKey: authServerKey(),
+     });
+     expect(verified.ok).toBe(true);
+     if (!verified.ok) throw new Error("unreachable");
+@@ -135,12 +143,14 @@ test.describe("recuperación de contraseña — invariantes de seguridad (MIS-28
+     const firstChange = await client.mutation(api.passwordReset.resetPasswordWithTicket, {
+       ticket: verified.ticket,
+       newPassword: freshPassword(),
++      serverKey: authServerKey(),
+     });
+     expect(firstChange.ok).toBe(true);
+ 
+     const secondChange = await client.mutation(api.passwordReset.resetPasswordWithTicket, {
+       ticket: verified.ticket,
+       newPassword: freshPassword(),
++      serverKey: authServerKey(),
+     });
+     expect(secondChange.ok).toBe(false);
+   });
+@@ -157,6 +167,7 @@ test.describe("recuperación de contraseña — invariantes de seguridad (MIS-28
+       const result = await client.mutation(api.passwordReset.verifyResetCode, {
+         email: RESET_TEST_EMAIL,
+         code: wrongCode(staleCode),
++        serverKey: authServerKey(),
+       });
+       expect(result.ok).toBe(false);
+     }
+@@ -165,6 +176,7 @@ test.describe("recuperación de contraseña — invariantes de seguridad (MIS-28
+     const result = await client.mutation(api.passwordReset.verifyResetCode, {
+       email: RESET_TEST_EMAIL,
+       code: freshCode,
++      serverKey: authServerKey(),
+     });
+     expect(result.ok).toBe(true);
+   });
+@@ -181,6 +193,7 @@ test.describe("recuperación de contraseña — invariantes de seguridad (MIS-28
+       const result = await client.mutation(api.passwordReset.verifyResetCode, {
+         email: RESET_TEST_EMAIL,
+         code: malformed,
++        serverKey: authServerKey(),
+       });
+       expect(result.ok).toBe(false);
+     }
+@@ -194,6 +207,7 @@ test.describe("recuperación de contraseña — invariantes de seguridad (MIS-28
+     const oversizedEmail = `${"a".repeat(250)}@test.local`;
+     const result = await client.mutation(api.passwordReset.requestPasswordResetCode, {
+       email: oversizedEmail,
++      serverKey: authServerKey(),
+     });
+     expect(result).toEqual({ ok: true });
+   });
+@@ -209,6 +223,7 @@ test.describe("recuperación de contraseña — invariantes de seguridad (MIS-28
+       const result = await client.mutation(api.passwordReset.verifyResetCode, {
+         email: badEmail,
+         code: "123456",
++        serverKey: authServerKey(),
+       });
+       expect(result.ok).toBe(false);
+     }
+@@ -224,6 +239,7 @@ test.describe("recuperación de contraseña — invariantes de seguridad (MIS-28
+     const verified = await client.mutation(api.passwordReset.verifyResetCode, {
+       email: RESET_TEST_EMAIL,
+       code: realCode,
++      serverKey: authServerKey(),
+     });
+     expect(verified.ok).toBe(true);
+     if (!verified.ok) throw new Error("unreachable");
+@@ -231,17 +247,19 @@ test.describe("recuperación de contraseña — invariantes de seguridad (MIS-28
+     const changed = await client.mutation(api.passwordReset.resetPasswordWithTicket, {
+       ticket: verified.ticket,
+       newPassword: freshPassword(),
++      serverKey: authServerKey(),
+     });
+     expect(changed.ok).toBe(true);
+ 
+     expect(await countSessionsFor()).toBe(0);
+   });
+ 
+-  // MIS-288 (I3): las funciones de recuperación rechazan un serverKey inválido
+-  // SIN efecto lateral. Una llamada directa a Convex con la clave mala no
+-  // entrega código, ni consume un código válido, ni consume un ticket válido.
+-  // Los controles positivos usan la clave BUENA (authServerKey), así que estos
+-  // tests siguen valiendo cuando 1A-bis haga el serverKey obligatorio.
++  // I3 (MIS-288/289): las funciones de recuperación rechazan un serverKey
++  // inválido SIN efecto lateral. Una llamada directa a Convex con la clave mala
++  // no entrega código, ni consume un código válido, ni consume un ticket válido.
++  // Desde 1A-bis (MIS-289) el serverKey es obligatorio: `BAD_KEY` es un string
++  // válido para el validador, así que sigue ejercitando el rechazo por clave
++  // (no por argumento ausente); los controles positivos usan la clave BUENA.
+   const BAD_KEY = "clave-incorrecta";
+ 
+   test("requestPasswordResetCode con serverKey inválido no entrega código", async () => {
+diff --git a/e2e/test-support.spec.ts b/e2e/test-support.spec.ts
+index bbc61d0..d4b825b 100644
+--- a/e2e/test-support.spec.ts
++++ b/e2e/test-support.spec.ts
+@@ -9,10 +9,12 @@
+ // que limpia los valores del DOM antes de que Playwright genere error-context.md.
+ // Aquí ningún secreto llega al navegador (todo va por ConvexHttpClient), pero la
+ // regla se aplica por defecto para que una edición futura no reabra el agujero.
++import { makeFunctionReference } from "convex/server";
+ import { test, expect } from "./helpers/secure-test";
+ import { convexClient, api } from "./helpers/convex-client";
+ import {
+   RESET_TEST_EMAIL,
++  authServerKey,
+   countSessionsFor,
+   getLastResetCode,
+   loginSucceeds,
+@@ -113,4 +115,43 @@ test.describe("harness seguro (MIS-286)", () => {
+     // La cuenta NO quedó bloqueada: el login legítimo sigue entrando.
+     expect(await loginSucceeds(password)).toBe(true);
+   });
++
++  // MIS-289 (prueba 7b): la mutation pública ANTIGUA `auth.login` está RETIRADA
++  // — aquí es donde se cierra I3 para el login por password. Se invoca por
++  // referencia dinámica por nombre (NO `api.auth.login`, que ya no existe en la
++  // API generada y no compilaría) con argumentos VÁLIDOS: si la función siguiera
++  // publicada, unos args válidos NO darían error (devolverían token). El rechazo
++  // prueba la retirada, y debe ser por "función inexistente", NO por validación
++  // de argumentos (que significaría que la función sigue ahí).
++  test("auth.login está retirada: se rechaza por función inexistente, y loginWithPassword sigue viva", async () => {
++    const password = await resetTestIdentity();
++    const client = convexClient();
++
++    const legacyLogin = makeFunctionReference<"mutation">("auth:login");
++    let message = "";
++    try {
++      await client.mutation(legacyLogin, { email: RESET_TEST_EMAIL, password });
++      throw new Error("auth.login RESPONDIÓ — no está retirada");
++    } catch (err) {
++      message = err instanceof Error ? err.message : String(err);
++    }
++    // Semántica "función inexistente", no "argumento inválido": con args válidos,
++    // una función aún publicada habría pasado la validación. El patrón se calibró
++    // contra el deployment real —`Could not find public function for 'auth:login'.`—
++    // y se ancla a "public function" + "auth:login" para que un "not found"
++    // genérico de otra causa no satisfaga la prueba. Se afirma sobre el TEXTO, no
++    // sobre una clase, porque el cliente puede degradar a Error genérico.
++    expect(message, `mensaje inesperado al llamar a auth:login: ${message}`).toMatch(
++      /could not find public function[^]*auth:login/i,
++    );
++    expect(message).not.toMatch(/ArgumentValidationError|required field|Validator error/i);
++
++    // Control positivo: el endpoint NUEVO sigue vivo (no "inexistente").
++    const ok = await client.action(api.auth.loginWithPassword, {
++      email: RESET_TEST_EMAIL,
++      password,
++      serverKey: authServerKey(),
++    });
++    expect(ok.success).toBe(true);
++  });
+ });
