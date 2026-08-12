@@ -79,9 +79,9 @@ Redirect URIs a registrar en Google Cloud Console (Authorized redirect URIs) —
 | Entorno | Redirect URI |
 |---|---|
 | Dev | `http://localhost:3000/api/auth/google/callback` |
-| Producción | `https://mi-crm-production-b627.up.railway.app/api/auth/google/callback` |
+| Producción | `https://mistu-monso.com/api/auth/google/callback` |
 
-**Producción queda fuera de alcance de MIS-260**: el deployment de Convex de producción está pendiente de un fix aparte ya conocido (deploy manual olvidado varias veces) — la redirect URI de prod puede registrarse ya en Google Console (config estática, no cuesta nada tenerla lista), pero el código y los datos de producción no se tocan en este ticket.
+**Producción usa el dominio final `https://mistu-monso.com`** (MIS-263/264): ese es el valor de `GOOGLE_OAUTH_REDIRECT_URI` en el entorno de Railway y el redirect registrado en Google Console. El callback antiguo del dominio de Railway (`*.up.railway.app`) ya **no** se usa y puede retirarse de Google Console; además el acceso directo al origen de Railway queda bloqueado por el perímetro (MIS-288).
 
 ### Recuperación de contraseña por código (MIS-285)
 
