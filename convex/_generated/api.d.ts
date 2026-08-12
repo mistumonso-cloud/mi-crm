@@ -15,6 +15,7 @@ import type * as lib_authz from "../lib/authz.js";
 import type * as lib_password from "../lib/password.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
 import type * as lib_resend from "../lib/resend.js";
+import type * as lib_serverKey from "../lib/serverKey.js";
 import type * as lib_session from "../lib/session.js";
 import type * as lib_testIdentity from "../lib/testIdentity.js";
 import type * as lib_token from "../lib/token.js";
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   "lib/password": typeof lib_password;
   "lib/rateLimit": typeof lib_rateLimit;
   "lib/resend": typeof lib_resend;
+  "lib/serverKey": typeof lib_serverKey;
   "lib/session": typeof lib_session;
   "lib/testIdentity": typeof lib_testIdentity;
   "lib/token": typeof lib_token;
