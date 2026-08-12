@@ -13,6 +13,7 @@ import type * as contacts from "../contacts.js";
 import type * as crons from "../crons.js";
 import type * as lib_authz from "../lib/authz.js";
 import type * as lib_password from "../lib/password.js";
+import type * as lib_passwordPolicy from "../lib/passwordPolicy.js";
 import type * as lib_rateLimit from "../lib/rateLimit.js";
 import type * as lib_resend from "../lib/resend.js";
 import type * as lib_serverKey from "../lib/serverKey.js";
@@ -37,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   "lib/authz": typeof lib_authz;
   "lib/password": typeof lib_password;
+  "lib/passwordPolicy": typeof lib_passwordPolicy;
   "lib/rateLimit": typeof lib_rateLimit;
   "lib/resend": typeof lib_resend;
   "lib/serverKey": typeof lib_serverKey;
