@@ -44,16 +44,46 @@ para I4 de la "agotar IP + entrar desde otra" del plan maestro.
 
 ## Ejecución
 
-Un solo comando desde la raíz del repo, en `main` con `scripts/login-verify/` presente.
-Los secretos entran por **STDIN, 2 líneas** (contraseña de `carlos@test.local` +
-`AUTH_SERVER_KEY`), nunca por argv; `AUTH_SERVER_KEY` se lee en caliente de Convex prod y
-no se imprime; la contraseña se toma de un fichero `600` del scratchpad, destruido al
-terminar.
+Desde la raíz del repo, en `main` con `scripts/login-verify/` presente. Los secretos
+entran por **STDIN, 2 líneas** (contraseña de `carlos@test.local` + `AUTH_SERVER_KEY`).
+Manejo de secretos, reproducible y auto-limpiante:
+
+- `SCRATCH` = directorio de scratchpad de sesión (`umask 077`). La contraseña se coloca
+  **aparte** en `"$SCRATCH/carlos_pw"` (fichero regular, **`chmod 600`**, sin salto final);
+  el runbook **valida** que existe, es regular y es `600` antes de usarlo.
+- `set +x` explícito: nunca trazar valores expandidos.
+- `AUTH_SERVER_KEY` se lee en caliente de Convex prod a la variable `KEY`, **nunca a disco**.
+- La contraseña y `KEY` se pasan al ejecutor **por STDIN** con `printf` (builtin de bash →
+  no hay proceso externo cuyo `argv`/`/proc` los exponga; con `set +x` tampoco se imprimen).
+  El único `argv` de proceso externo es el de `node`, que solo lleva los flags.
+- `trap cleanup EXIT` (solo EXIT, para **no interferir** con la recuperación de señales del
+  propio ejecutor) hace `shred` del fichero y `unset` de `PW`/`KEY`, en éxito y en error.
 
 ```sh
-# AUTH_SERVER_KEY de prod (no se imprime); contraseña desde fichero 600 del scratchpad
+set +x                                    # nunca trazar secretos
+umask 077
+: "${SCRATCH:?define SCRATCH al scratchpad de sesión}"
+PW_FILE="$SCRATCH/carlos_pw"              # contraseña colocada aquí aparte, sin salto final
+[ -f "$PW_FILE" ] && [ "$(stat -c '%a' "$PW_FILE")" = 600 ] || { echo "PW_FILE ausente o no 600"; exit 1; }
+cleanup() { shred -u "$PW_FILE" 2>/dev/null || rm -f "$PW_FILE"; unset PW KEY; }
+trap cleanup EXIT
+
+PW="$(cat "$PW_FILE")"
 KEY="$(npx convex env get AUTH_SERVER_KEY --prod)"
-printf '%s\n%s\n' "$CARLOS_PW" "$KEY" | node scripts/login-verify/index.mjs --prod --confirm prod
+[ -n "$PW" ] && [ -n "$KEY" ] || { echo "faltan secretos"; exit 1; }
+
+# Evidencia inicial (ausencia = veto activo), por operación ESTRUCTURADA:
+npx convex env list --names-only --prod | grep -qx LOGIN_EMAIL_VETO \
+  && echo "inicial: LOGIN_EMAIL_VETO presente" || echo "inicial: LOGIN_EMAIL_VETO ausente (veto activo)"
+
+# Ejecutar; report (sin secretos) a fichero y CÓDIGO capturado de la MISMA ejecución:
+printf '%s\n%s\n' "$PW" "$KEY" | node scripts/login-verify/index.mjs --prod --confirm prod \
+  | tee "$SCRATCH/mis291-report.json"
+code=${PIPESTATUS[1]}
+echo "exit=$code commit=$(git rev-parse --short HEAD) deployment=greedy-tapir-20 ts=$(date -u +%FT%TZ)"
+
+# Estado final:
+npx convex env get LOGIN_EMAIL_VETO --prod
 ```
 
 El ejecutor, en una sola pasada (todo verificado y auditado en MIS-295):
@@ -67,14 +97,20 @@ El ejecutor, en una sola pasada (todo verificado y auditado en MIS-295):
 6. **Estado final:** `env set off` (+ verifica) + login correcto. Deja `LOGIN_EMAIL_VETO=off`.
 
 Con recuperación única ante excepción/señal (`recoveryPromise`), que garantiza `off` como
-estado final. **Salida:** `{ ok: true, report: [...] }` por stdout (sin secretos ni token),
-**código 0** si todas las pruebas pasan.
+estado final **ante errores y señales recuperables** (SIGKILL, corte eléctrico y pérdida
+persistente de red quedan documentados como límites no recuperables en MIS-295; mitigación
+manual: el rollback de abajo). **Salida:** `{ ok: true, report: [...] }` por stdout (sin
+secretos ni token), **código 0** si todas las pruebas pasan.
 
 ## Evidencia (sin secretos)
 
-Se captura, antes y después: `npx convex env get LOGIN_EMAIL_VETO --prod` (o su ausencia),
-el **`report` JSON** del ejecutor (pasos y clasificación `locked`/`success`) y el **código
-de salida**. Nunca valores de `AUTH_SERVER_KEY`, `ORIGIN_SHARED_SECRET`, contraseñas ni tokens.
+Se captura, antes y después: el estado del interruptor (`env list --names-only` para la
+ausencia inicial; `env get LOGIN_EMAIL_VETO --prod` para el valor final), el **`report`
+JSON** del ejecutor (pasos y clasificación `locked`/`success`) y el **código de salida de
+esa misma ejecución**. Junto al report se registra el **sello de ejecución**:
+`commit` de `main` (`git rev-parse --short HEAD`), `deployment` (`greedy-tapir-20`) y
+`timestamp` UTC, para vincular la evidencia a la corrida exacta. Nunca valores de
+`AUTH_SERVER_KEY`, `ORIGIN_SHARED_SECRET`, contraseñas ni tokens.
 
 | Paso | Acción | Esperado | Resultado |
 |------|--------|----------|-----------|
