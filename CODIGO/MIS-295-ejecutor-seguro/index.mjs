@@ -28,7 +28,6 @@ import {
   parseArgs,
   resolveTarget,
   AbortError,
-  SequenceError,
 } from "./core.mjs";
 
 // --- Lectura de secretos por STDIN (2 líneas exactas) ------------------------
@@ -163,8 +162,8 @@ async function main() {
     }
     disarm();
     printErr(err);
-    // Prueba fallida u otro error tras recuperación correcta → 1.
-    finish(err instanceof SequenceError ? 1 : 1);
+    // Prueba fallida (SequenceError) u otro error, ya con recuperación correcta → 1.
+    finish(1);
   }
 }
 
