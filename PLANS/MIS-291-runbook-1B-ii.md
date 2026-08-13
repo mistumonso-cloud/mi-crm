@@ -55,7 +55,9 @@ Manejo de secretos, reproducible y auto-limpiante:
 - `AUTH_SERVER_KEY` se lee en caliente de Convex prod a la variable `KEY`, **nunca a disco**.
 - La contraseña y `KEY` se pasan al ejecutor **por STDIN** con `printf` (builtin de bash →
   no hay proceso externo cuyo `argv`/`/proc` los exponga; con `set +x` tampoco se imprimen).
-  El único `argv` de proceso externo es el de `node`, que solo lleva los flags.
+  La propiedad garantizada es que **ningún secreto aparece en los argumentos de ningún
+  proceso**: se ejecutan también `npx`, `stat`, `grep`, `tee`, `shred`, `git` y `date`, pero
+  ninguno recibe secretos por `argv` (los flags de `node` no son secretos).
 - Todo corre en una **subshell acotada** `( … )` con `trap cleanup EXIT` armado antes de la
   primera validación: al cerrar el paréntesis se ejecuta `shred` del fichero y `unset PW KEY`,
   en éxito y en error, sin depender de que salga la shell interactiva y sin interferir con la
@@ -74,33 +76,40 @@ pegar línea a línea en una shell persistente.**
   umask 077
   : "${SCRATCH:?define SCRATCH al scratchpad de sesión}"
   PW_FILE="$SCRATCH/carlos_pw"              # contraseña colocada aquí aparte, sin salto final
+  REPORT="$SCRATCH/mis291-report.json"
   cleanup() { shred -u "$PW_FILE" 2>/dev/null || rm -f "$PW_FILE"; unset PW KEY; }
   trap cleanup EXIT                          # armado ANTES de la primera validación/salida
 
   [ -f "$PW_FILE" ] && [ "$(stat -c '%a' "$PW_FILE")" = 600 ] || { echo "PW_FILE ausente o no 600"; exit 1; }
   PW="$(<"$PW_FILE")"                        # lectura builtin de bash (sin proceso externo)
-  KEY="$(npx convex env get AUTH_SERVER_KEY --prod)"
+  KEY="$(npx convex env get AUTH_SERVER_KEY --prod)" || { echo "no se pudo leer AUTH_SERVER_KEY"; exit 1; }
   [ -n "$PW" ] && [ -n "$KEY" ] || { echo "faltan secretos"; exit 1; }
+  COMMIT="$(git rev-parse --short HEAD)" || { echo "git rev-parse falló"; exit 1; }
 
-  # Evidencia inicial FAIL-CLOSED: un fallo de CLI NO se clasifica como ausencia.
+  # Evidencia inicial FAIL-CLOSED: fallo de CLI NO se clasifica como ausencia; y el veto
+  # DEBE estar activo (ausente, o presente con valor ≠ off).
   names="$(npx convex env list --names-only --prod)" \
     || { echo "env list falló: estado inicial indeterminado — abortar"; exit 1; }
   if grep -qx LOGIN_EMAIL_VETO <<<"$names"; then
-    echo "inicial: LOGIN_EMAIL_VETO presente; valor=$(npx convex env get LOGIN_EMAIL_VETO --prod)"
+    init="$(npx convex env get LOGIN_EMAIL_VETO --prod)" || { echo "env get inicial falló — abortar"; exit 1; }
+    echo "inicial: LOGIN_EMAIL_VETO presente; valor=$init"
+    [ "$init" != off ] || { echo "el veto ya está off: precondición inválida"; exit 1; }
   else
     echo "inicial: LOGIN_EMAIL_VETO ausente (veto activo)"
   fi
 
-  # Ejecutar; report (sin secretos) a fichero y CÓDIGO capturado de la MISMA ejecución:
-  printf '%s\n%s\n' "$PW" "$KEY" | node scripts/login-verify/index.mjs --prod --confirm prod \
-    | tee "$SCRATCH/mis291-report.json"
-  code=${PIPESTATUS[1]}
-  echo "exit=$code commit=$(git rev-parse --short HEAD) deployment=greedy-tapir-20 ts=$(date -u +%FT%TZ)"
-  # La evidencia posterior SOLO es válida si el ejecutor devolvió 0:
-  [ "$code" -eq 0 ] || { echo "ejecutor NO devolvió 0: evidencia posterior no válida"; exit "$code"; }
+  # Ejecutar; exigir éxito de Node Y de tee (PIPESTATUS capturado en UNA sola sentencia):
+  printf '%s\n%s\n' "$PW" "$KEY" | node scripts/login-verify/index.mjs --prod --confirm prod | tee "$REPORT"
+  st=("${PIPESTATUS[@]}")                    # [0]=printf [1]=node [2]=tee
+  [ "${st[1]}" -eq 0 ] || { echo "ejecutor NO devolvió 0 (code=${st[1]})"; exit "${st[1]}"; }
+  { [ "${st[2]}" -eq 0 ] && [ -s "$REPORT" ]; } || { echo "no se pudo guardar el report"; exit 1; }
 
-  # Estado final:
-  echo "final: LOGIN_EMAIL_VETO=$(npx convex env get LOGIN_EMAIL_VETO --prod)"
+  # Postcondición OBLIGATORIA: estado final EXACTAMENTE off, con código verificado.
+  final="$(npx convex env get LOGIN_EMAIL_VETO --prod)" || { echo "env get final falló — abortar"; exit 1; }
+  [ "$final" = off ] || { echo "postcondición fallida: LOGIN_EMAIL_VETO=$final (esperado off)"; exit 1; }
+
+  # Solo tras verificar Node + tee + report + postcondición off: sello de éxito.
+  echo "OK final: LOGIN_EMAIL_VETO=off commit=$COMMIT deployment=greedy-tapir-20 ts=$(date -u +%FT%TZ)"
 )
 ```
 
@@ -133,7 +142,7 @@ esa misma ejecución**. Junto al report se registra el **sello de ejecución**:
 | Paso | Acción | Esperado | Resultado |
 |------|--------|----------|-----------|
 | Gate | `accountsPendingRotation()` prod | `[]` | ✅ `[]` |
-| Antes | `env list --names-only` (ausencia = activo) | ausente (activo) | _pendiente_ |
+| Antes | `env list --names-only` (+ `env get` si presente) | ausente, o valor ≠`off` (veto activo) | _pendiente_ |
 | Ejecutor | `report` prueba 11 ANTES | `locked` | _pendiente_ |
 | Ejecutor | `report` prueba 11 DESPUÉS | `success` | _pendiente_ |
 | Ejecutor | `report` prueba 12 ROLLBACK | `locked` | _pendiente_ |
