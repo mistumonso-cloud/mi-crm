@@ -258,13 +258,14 @@ export async function runVetoSequence(deps, target, cfg, runner) {
 
 // Estado final por modo (M4). prod/MIS-291: dejar off (la secuencia ya terminó en
 // off). preview desechable: restaurar EXACTAMENTE el estado inicial capturado.
-export async function finalState(deps, target, mode, initial) {
+// La escritura pasa por runner.runStep para quedar registrada en inFlight (M3): así
+// una señal durante la restauración hace que la recuperación la espere y off gane.
+export async function finalState(deps, target, mode, initial, runner) {
   if (mode !== "preview") return; // prod: off es el estado deseado; no-op.
-  if (!initial.present) {
-    await removeVeto(deps, target); // estaba ausente ⇒ quitar la variable
-  } else {
-    await setVeto(deps, target, initial.value); // reponer el valor explícito
-  }
+  const op = !initial.present
+    ? () => removeVeto(deps, target) // estaba ausente ⇒ quitar la variable
+    : () => setVeto(deps, target, initial.value); // reponer el valor explícito
+  await runner.runStep(op);
 }
 
 // Recuperación segura: deja off, lo VERIFICA, hace un login de limpieza y cierra
@@ -283,9 +284,17 @@ export async function safeRecover(deps, target, cfg) {
 // parseArgs es puro; resolveTarget solo usa el adaptador `cli` inyectado. Ambos
 // viven aquí (no en index) para poder testear B1 sin ejecutar el entrypoint.
 export function parseArgs(argv) {
-  const opts = { selector: null, name: null, confirm: null, mode: "prod", email: DEFAULT_EMAIL };
+  const opts = { selector: null, name: null, confirm: null, mode: null, email: null };
+  const seen = new Set();
+  const once = (flag) => {
+    if (seen.has(flag)) throw new AbortError(`opción duplicada: ${flag}`);
+    seen.add(flag);
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
+    if (a === "--prod" || a === "--deployment") {
+      if (opts.selector) throw new AbortError("selector de destino duplicado: usa solo uno de --prod/--deployment");
+    }
     if (a === "--prod") {
       opts.selector = ["--prod"];
       opts.name = "prod";
@@ -295,20 +304,37 @@ export function parseArgs(argv) {
       opts.selector = ["--deployment", name];
       opts.name = name;
     } else if (a === "--confirm") {
+      once("--confirm");
       opts.confirm = argv[++i] ?? null;
     } else if (a === "--mode") {
-      opts.mode = argv[++i] ?? "prod";
+      once("--mode");
+      opts.mode = argv[++i] ?? null;
     } else if (a === "--email") {
-      opts.email = argv[++i] ?? DEFAULT_EMAIL;
+      once("--email");
+      opts.email = argv[++i] ?? null;
     } else {
       throw new AbortError(`argumento no reconocido: ${a}`);
     }
   }
   if (!opts.selector) throw new AbortError("falta el destino: usa --prod o --deployment <name>");
-  if (opts.mode !== "prod" && opts.mode !== "preview") {
-    throw new AbortError("--mode debe ser 'prod' o 'preview'");
+  const mode = opts.mode ?? "prod";
+  if (mode !== "prod" && mode !== "preview") throw new AbortError("--mode debe ser 'prod' o 'preview'");
+  // M7: --prod es SIEMPRE producción; preview exige un deployment nombrado y desechable.
+  if (opts.selector[0] === "--prod" && mode === "preview") {
+    throw new AbortError("--prod no admite --mode preview: usa --deployment <name> para preview");
   }
-  return opts;
+  // M7: el override de --email solo se permite en preview desechable; en prod se fija
+  // la cuenta de test para no poder dirigir la operación contra una cuenta arbitraria.
+  if (opts.email !== null && mode !== "preview") {
+    throw new AbortError("--email solo se permite con --mode preview");
+  }
+  return {
+    selector: opts.selector,
+    name: opts.name,
+    confirm: opts.confirm,
+    mode,
+    email: opts.email ?? DEFAULT_EMAIL,
+  };
 }
 
 // La URL HTTP se obtiene con el MISMO selector que usa el CLI (CONVEX_CLOUD_URL del
@@ -324,7 +350,9 @@ export async function resolveTarget(cli, opts) {
     name: opts.name,
     url: r.stdout.trim(),
     mode: opts.mode,
-    requireConfirm: opts.mode === "prod",
+    // M7: confirmación SIEMPRE obligatoria (prod y preview), ligada al nombre del
+    // selector. El nombre sale del selector, nunca de parsear la URL.
+    requireConfirm: true,
     confirmToken: opts.name,
   };
 }

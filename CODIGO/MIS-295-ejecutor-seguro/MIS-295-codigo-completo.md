@@ -280,13 +280,14 @@ export async function runVetoSequence(deps, target, cfg, runner) {
 
 // Estado final por modo (M4). prod/MIS-291: dejar off (la secuencia ya terminó en
 // off). preview desechable: restaurar EXACTAMENTE el estado inicial capturado.
-export async function finalState(deps, target, mode, initial) {
+// La escritura pasa por runner.runStep para quedar registrada en inFlight (M3): así
+// una señal durante la restauración hace que la recuperación la espere y off gane.
+export async function finalState(deps, target, mode, initial, runner) {
   if (mode !== "preview") return; // prod: off es el estado deseado; no-op.
-  if (!initial.present) {
-    await removeVeto(deps, target); // estaba ausente ⇒ quitar la variable
-  } else {
-    await setVeto(deps, target, initial.value); // reponer el valor explícito
-  }
+  const op = !initial.present
+    ? () => removeVeto(deps, target) // estaba ausente ⇒ quitar la variable
+    : () => setVeto(deps, target, initial.value); // reponer el valor explícito
+  await runner.runStep(op);
 }
 
 // Recuperación segura: deja off, lo VERIFICA, hace un login de limpieza y cierra
@@ -305,9 +306,17 @@ export async function safeRecover(deps, target, cfg) {
 // parseArgs es puro; resolveTarget solo usa el adaptador `cli` inyectado. Ambos
 // viven aquí (no en index) para poder testear B1 sin ejecutar el entrypoint.
 export function parseArgs(argv) {
-  const opts = { selector: null, name: null, confirm: null, mode: "prod", email: DEFAULT_EMAIL };
+  const opts = { selector: null, name: null, confirm: null, mode: null, email: null };
+  const seen = new Set();
+  const once = (flag) => {
+    if (seen.has(flag)) throw new AbortError(`opción duplicada: ${flag}`);
+    seen.add(flag);
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
+    if (a === "--prod" || a === "--deployment") {
+      if (opts.selector) throw new AbortError("selector de destino duplicado: usa solo uno de --prod/--deployment");
+    }
     if (a === "--prod") {
       opts.selector = ["--prod"];
       opts.name = "prod";
@@ -317,20 +326,37 @@ export function parseArgs(argv) {
       opts.selector = ["--deployment", name];
       opts.name = name;
     } else if (a === "--confirm") {
+      once("--confirm");
       opts.confirm = argv[++i] ?? null;
     } else if (a === "--mode") {
-      opts.mode = argv[++i] ?? "prod";
+      once("--mode");
+      opts.mode = argv[++i] ?? null;
     } else if (a === "--email") {
-      opts.email = argv[++i] ?? DEFAULT_EMAIL;
+      once("--email");
+      opts.email = argv[++i] ?? null;
     } else {
       throw new AbortError(`argumento no reconocido: ${a}`);
     }
   }
   if (!opts.selector) throw new AbortError("falta el destino: usa --prod o --deployment <name>");
-  if (opts.mode !== "prod" && opts.mode !== "preview") {
-    throw new AbortError("--mode debe ser 'prod' o 'preview'");
+  const mode = opts.mode ?? "prod";
+  if (mode !== "prod" && mode !== "preview") throw new AbortError("--mode debe ser 'prod' o 'preview'");
+  // M7: --prod es SIEMPRE producción; preview exige un deployment nombrado y desechable.
+  if (opts.selector[0] === "--prod" && mode === "preview") {
+    throw new AbortError("--prod no admite --mode preview: usa --deployment <name> para preview");
   }
-  return opts;
+  // M7: el override de --email solo se permite en preview desechable; en prod se fija
+  // la cuenta de test para no poder dirigir la operación contra una cuenta arbitraria.
+  if (opts.email !== null && mode !== "preview") {
+    throw new AbortError("--email solo se permite con --mode preview");
+  }
+  return {
+    selector: opts.selector,
+    name: opts.name,
+    confirm: opts.confirm,
+    mode,
+    email: opts.email ?? DEFAULT_EMAIL,
+  };
 }
 
 // La URL HTTP se obtiene con el MISMO selector que usa el CLI (CONVEX_CLOUD_URL del
@@ -346,7 +372,9 @@ export async function resolveTarget(cli, opts) {
     name: opts.name,
     url: r.stdout.trim(),
     mode: opts.mode,
-    requireConfirm: opts.mode === "prod",
+    // M7: confirmación SIEMPRE obligatoria (prod y preview), ligada al nombre del
+    // selector. El nombre sale del selector, nunca de parsear la URL.
+    requireConfirm: true,
     confirmToken: opts.name,
   };
 }
@@ -441,88 +469,83 @@ function makeConvexAdapters(url) {
 }
 
 async function main() {
-  const opts = parseArgs(process.argv.slice(2));
-  const secrets = await readSecrets();
-  const sanitize = makeSanitizer([secrets.password, secrets.serverKey]);
-
-  const cli = makeCli();
-  const target = await resolveTarget(cli, opts);
-  const convex = makeConvexAdapters(target.url);
-
-  const cfg = {
-    email: opts.email,
-    password: secrets.password,
-    serverKey: secrets.serverKey,
-    confirm: opts.confirm,
-  };
-  const log = (m) => process.stderr.write(sanitize(m) + "\n");
-  const deps = { login: convex.login, logout: convex.logout, cli, log };
-  const runner = makeRunner();
-
-  // Cierre único (evita que señal y flujo normal salgan dos veces).
+  // Cierre único con VACIADO de buffers: process.exit inmediato tras un write puede
+  // truncar la evidencia canalizada, así que salimos en el callback de escritura.
   let exiting = false;
-  const finish = (code) => {
-    if (exiting) return;
+  const guard = () => {
+    if (exiting) return false;
     exiting = true;
-    process.exit(code);
+    return true;
   };
-  const printErr = (e) => process.stderr.write(sanitize(e && e.message ? e.message : String(e)) + "\n");
+  const hardExit = (code) => {
+    if (guard()) process.exit(code);
+  };
+  const exitAfter = (stream, str, code) => {
+    if (guard()) stream.write(str, () => process.exit(code));
+  };
 
-  // Handlers de señal: abortan, recuperan UNA vez y salen con semántica de interrupción.
+  // sanitize arranca como identidad hasta conocer los secretos; se reemplaza en cuanto
+  // se leen. Los errores previos a esa lectura no contienen valores de secretos.
+  let sanitize = (s) => String(s);
+  const errText = (e) => sanitize(e && e.message ? e.message : String(e)) + "\n";
+
+  // --- Arranque FAIL-CLOSED (M8): parseo, secretos, resolución y preflight. Nada
+  // de esto muta el deployment; cualquier fallo aquí es un aborto seguro → código 2.
+  let target, deps, cfg, runner, initial;
+  try {
+    const opts = parseArgs(process.argv.slice(2));
+    const secrets = await readSecrets();
+    sanitize = makeSanitizer([secrets.password, secrets.serverKey]);
+    const cli = makeCli();
+    target = await resolveTarget(cli, opts);
+    const convex = makeConvexAdapters(target.url);
+    cfg = { email: opts.email, password: secrets.password, serverKey: secrets.serverKey, confirm: opts.confirm };
+    const log = (m) => process.stderr.write(sanitize(m) + "\n");
+    deps = { login: convex.login, logout: convex.logout, cli, log };
+    runner = makeRunner();
+    ({ initial } = await preflight(deps, target, cfg));
+  } catch (startErr) {
+    exitAfter(process.stderr, errText(startErr), 2); // sin efectos en el deployment
+    return;
+  }
+
+  // --- Handlers de señal: abortan, recuperan UNA vez y salen 130/143 (o 3 si falla).
   const onSignal = (code) => async () => {
     runner.abort();
     try {
       await runner.recoverOnce(() => safeRecover(deps, target, cfg));
-      finish(code); // 130 (SIGINT) / 143 (SIGTERM): recuperación OK
+      hardExit(code); // 130 (SIGINT) / 143 (SIGTERM): recuperación OK
     } catch (rerr) {
-      printErr(rerr);
-      finish(3); // recuperación fallida: exige intervención
+      exitAfter(process.stderr, errText(rerr), 3); // recuperación fallida
     }
   };
   const sigint = onSignal(130);
   const sigterm = onSignal(143);
-  const arm = () => {
-    process.on("SIGINT", sigint);
-    process.on("SIGTERM", sigterm);
-  };
+  process.on("SIGINT", sigint);
+  process.on("SIGTERM", sigterm);
   const disarm = () => {
     process.removeListener("SIGINT", sigint);
     process.removeListener("SIGTERM", sigterm);
   };
 
-  // Preflight: sin efectos. Un abort aquí no ha tocado nada → código 2.
-  let initial;
-  try {
-    ({ initial } = await preflight(deps, target, cfg));
-  } catch (pre) {
-    printErr(pre);
-    finish(2);
-    return;
-  }
-
-  // A partir de aquí puede haber bloqueos: armamos recuperación ANTES del 1er fallo.
-  arm();
   try {
     const report = await runVetoSequence(deps, target, cfg, runner);
-    await finalState(deps, target, target.mode, initial);
+    await finalState(deps, target, target.mode, initial, runner);
+    if (runner.isAborted()) return; // una señal llegó durante finalState: su handler cierra.
     disarm(); // retira handlers antes de la salida normal (evita recuperación tardía)
-    process.stdout.write(JSON.stringify({ ok: true, report }, null, 2) + "\n");
-    finish(0);
+    exitAfter(process.stdout, JSON.stringify({ ok: true, report }, null, 2) + "\n", 0);
   } catch (err) {
-    // Si el aborto vino de una señal, el handler es dueño del cierre.
-    if (runner.isAborted()) return;
+    if (runner.isAborted()) return; // el handler de señal es dueño del cierre.
     try {
       await runner.recoverOnce(() => safeRecover(deps, target, cfg));
     } catch (rerr) {
-      printErr(rerr);
       disarm();
-      finish(3);
+      exitAfter(process.stderr, errText(rerr), 3);
       return;
     }
     disarm();
-    printErr(err);
     // Prueba fallida (SequenceError) u otro error, ya con recuperación correcta → 1.
-    finish(1);
+    exitAfter(process.stderr, errText(err), 1);
   }
 }
 
@@ -552,6 +575,9 @@ if (invokedDirectly) {
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 
 import {
   LOCKED_ERROR,
@@ -662,8 +688,18 @@ async function runFullOk(f) {
   const { initial } = await preflight(f.deps, f.target, f.cfg);
   const runner = makeRunner();
   const report = await runVetoSequence(f.deps, f.target, f.cfg, runner);
-  await finalState(f.deps, f.target, "prod", initial);
+  await finalState(f.deps, f.target, "prod", initial, runner);
   return report;
+}
+
+const INDEX_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), "index.mjs");
+function runCli(args, stdin) {
+  return new Promise((resolve) => {
+    const child = execFile(process.execPath, [INDEX_PATH, ...args], () => {});
+    child.on("close", (code) => resolve(code));
+    if (stdin !== undefined) child.stdin.write(stdin);
+    child.stdin.end();
+  });
 }
 
 // --- classifyLogin -----------------------------------------------------------
@@ -689,11 +725,13 @@ test("readVetoState distingue ausente/off/valor/indeterminado", async () => {
   assert.equal((await readVetoState(bad.deps, bad.target)).indeterminate, true);
 });
 
-test("M5: nunca solicita el valor de una variable ajena", async () => {
+test("M5: usa --names-only y nunca solicita el valor de una variable ajena", async () => {
   const f = makeFake({ veto: "activo" });
   await runFullOk(f);
   assert.equal(f.st.otherSecretRequested, false);
   assert.ok(!f.st.cliCalls.some((c) => c.includes("get OTRA_CLAVE")));
+  // La presencia se detecta con --names-only, no listando valores.
+  assert.ok(f.st.cliCalls.some((c) => c.includes("env list --names-only")));
 });
 
 // --- preflight fail-closed (B1/M1/M2) ----------------------------------------
@@ -748,7 +786,7 @@ test("secuencia completa: todas las aserciones OK y veto final off", async () =>
   const report = await runVetoSequence(f.deps, f.target, f.cfg, runner);
   assert.ok(report.every((r) => r.ok), JSON.stringify(report));
   assert.equal(vetoActive(await readVetoState(f.deps, f.target)), false);
-  await finalState(f.deps, f.target, "prod", initial);
+  await finalState(f.deps, f.target, "prod", initial, runner);
   assert.equal(f.st.veto, "off");
 });
 
@@ -846,22 +884,50 @@ test("safeRecover lanza RecoveryError si el veto no queda en off", async () => {
 // --- finalState por modo (M4) ------------------------------------------------
 test("M4: preview con veto inicialmente ausente → env remove", async () => {
   const f = makeFake({ veto: "off" }); // la secuencia lo dejó en off
-  await finalState(f.deps, f.target, "preview", { present: false, value: null });
+  await finalState(f.deps, f.target, "preview", { present: false, value: null }, makeRunner());
   assert.equal(f.st.removed, true);
   assert.equal(f.st.veto, undefined);
 });
 
 test("M4: preview con valor explícito → lo repone", async () => {
   const f = makeFake({ veto: "off" });
-  await finalState(f.deps, f.target, "preview", { present: true, value: "activo" });
+  await finalState(f.deps, f.target, "preview", { present: true, value: "activo" }, makeRunner());
   assert.equal(f.st.veto, "activo");
 });
 
 test("M4: prod → finalState no toca nada (deja off)", async () => {
   const f = makeFake({ veto: "off" });
-  await finalState(f.deps, f.target, "prod", { present: true, value: "activo" });
+  await finalState(f.deps, f.target, "prod", { present: true, value: "activo" }, makeRunner());
   assert.equal(f.st.veto, "off");
   assert.equal(f.st.setCalls.length, 0);
+});
+
+test("M3: finalState pasa por runStep; una señal durante la restauración → off gana", async () => {
+  const f = makeFake({ veto: "off" });
+  const order = [];
+  let release;
+  const gate = new Promise((r) => (release = r));
+  // cli que retrasa la escritura de finalState (set/remove) para forzar la carrera.
+  const slow = {
+    ...f.deps,
+    cli: async (args) => {
+      if (args[0] === "env" && (args[1] === "set" || args[1] === "remove")) {
+        await gate;
+        order.push("finalState-write");
+      }
+      return f.deps.cli(args);
+    },
+  };
+  const runner = makeRunner();
+  const fp = finalState(slow, f.target, "preview", { present: true, value: "activo" }, runner);
+  // Señal a mitad de la escritura de finalState: si NO estuviera en runStep, la
+  // recuperación no la esperaría y el orden se invertiría.
+  runner.abort();
+  const rec = runner.recoverOnce(async () => order.push("recover-off"));
+  release();
+  await fp;
+  await rec;
+  assert.deepEqual(order, ["finalState-write", "recover-off"]);
 });
 
 // --- Autoridad única de deployment (B1) --------------------------------------
@@ -874,6 +940,17 @@ test("parseArgs: --prod y --deployment", () => {
   assert.equal(b.name, "greedy-tapir-20");
   assert.equal(b.mode, "preview");
   assert.throws(() => parseArgs([]), AbortError);
+});
+
+test("M7: matriz selector/modo/email/duplicados", () => {
+  assert.throws(() => parseArgs(["--prod", "--mode", "preview"]), AbortError); // --prod no admite preview
+  assert.throws(() => parseArgs(["--prod", "--email", "x@y.z"]), AbortError); // --email solo en preview
+  assert.throws(() => parseArgs(["--deployment", "d", "--email", "x@y.z"]), AbortError); // modo prod por defecto
+  const ok = parseArgs(["--deployment", "prev-1", "--mode", "preview", "--email", "x@y.z"]);
+  assert.equal(ok.email, "x@y.z"); // --email permitido en preview con --deployment
+  assert.equal(parseArgs(["--prod"]).email, "carlos@test.local"); // email fijado en prod
+  assert.throws(() => parseArgs(["--prod", "--deployment", "d"]), AbortError); // selector duplicado
+  assert.throws(() => parseArgs(["--prod", "--confirm", "a", "--confirm", "b"]), AbortError); // opción duplicada
 });
 
 test("B1: resolveTarget deriva la URL del MISMO selector, sin URL suelta", async () => {
@@ -892,15 +969,32 @@ test("B1: resolveTarget deriva la URL del MISMO selector, sin URL suelta", async
   assert.deepEqual(calls[0], ["env", "get", "CONVEX_CLOUD_URL", "--deployment", "greedy-tapir-20"]);
   // No hay parámetro para inyectar una URL ajena: la firma es (cli, opts).
   assert.equal(resolveTarget.length, 2);
+  // M7: confirmación SIEMPRE obligatoria, ligada al nombre del selector.
+  assert.equal(t.requireConfirm, true);
+  assert.equal(t.confirmToken, "greedy-tapir-20");
 });
 
 // --- Saneo de secretos -------------------------------------------------------
-test("makeSanitizer redacta contraseña y serverKey en cualquier salida", () => {
-  const s = makeSanitizer(["P@ss-w0rd", "SRV-KEY-123"]);
-  const out = s("error: usó P@ss-w0rd con SRV-KEY-123 al llamar");
+test("makeSanitizer redacta contraseña, serverKey y token en cualquier salida", () => {
+  const s = makeSanitizer(["P@ss-w0rd", "SRV-KEY-123", "TOKEN-SENTINEL-xyz"]);
+  const out = s("error: usó P@ss-w0rd con SRV-KEY-123 y TOKEN-SENTINEL-xyz al llamar");
   assert.ok(!out.includes("P@ss-w0rd"));
   assert.ok(!out.includes("SRV-KEY-123"));
+  assert.ok(!out.includes("TOKEN-SENTINEL-xyz"));
   assert.ok(out.includes("***"));
+});
+
+// --- Códigos de salida del arranque fail-closed (M8), vía subproceso real ------
+test("M8: argumentos inválidos → código 2 (sin efectos)", async () => {
+  assert.equal(await runCli(["--bogus"]), 2);
+});
+
+test("M8: --prod --mode preview → código 2", async () => {
+  assert.equal(await runCli(["--prod", "--mode", "preview", "--confirm", "prod"]), 2);
+});
+
+test("M8: stdin inválido (una sola línea) → código 2", async () => {
+  assert.equal(await runCli(["--prod", "--confirm", "prod"], "una-sola-linea\n"), 2);
 });
 ````
 
@@ -940,7 +1034,7 @@ printf '%s\n%s\n' "$PASSWORD" "$AUTH_SERVER_KEY" | \
 
 # Deployment preview desechable (integración), restaura el estado inicial
 printf '%s\n%s\n' "$PASSWORD" "$AUTH_SERVER_KEY" | \
-  node scripts/login-verify/index.mjs --deployment <name> --mode preview
+  node scripts/login-verify/index.mjs --deployment <name> --mode preview --confirm <name>
 ```
 
 ### Argumentos
@@ -948,13 +1042,16 @@ printf '%s\n%s\n' "$PASSWORD" "$AUTH_SERVER_KEY" | \
 - `--prod` | `--deployment <name>` — **destino único**. La URL HTTP se deriva del
   MISMO selector (`convex env get CONVEX_CLOUD_URL <selector>`): HTTP y CLI no pueden
   apuntar a deployments distintos.
-- `--confirm <token>` — obligatorio en modo prod. Debe igualar el nombre del selector:
-  `--confirm prod` con `--prod`, o `--confirm <name>` con `--deployment <name>`.
-  (Con `--prod` el token es literalmente `prod`; el selector no contiene el nombre
-  físico del deployment.)
+- `--confirm <token>` — **obligatorio siempre** (prod y preview). Debe igualar el nombre
+  del selector: `--confirm prod` con `--prod`, o `--confirm <name>` con `--deployment <name>`.
+  (Con `--prod` el token es literalmente `prod`; el selector no contiene el nombre físico
+  del deployment.)
 - `--mode prod|preview` — por defecto `prod`. `prod` deja `LOGIN_EMAIL_VETO=off` (estado
-  deseado de MIS-291). `preview` restaura exactamente el estado inicial.
-- `--email <email>` — por defecto `carlos@test.local`.
+  deseado de MIS-291). `preview` restaura exactamente el estado inicial. **`--prod` NO admite
+  `--mode preview`**: preview exige un `--deployment <name>` desechable.
+- `--email <email>` — **solo se permite en `--mode preview`**; en prod queda fijado a
+  `carlos@test.local` para no poder dirigir la operación contra una cuenta arbitraria.
+- No se admiten selectores ni opciones **duplicados**.
 
 ## Códigos de salida
 
@@ -962,8 +1059,8 @@ printf '%s\n%s\n' "$PASSWORD" "$AUTH_SERVER_KEY" | \
 |--------|-------------|
 | `0`    | Todas las pruebas OK; estado final correcto. |
 | `1`    | Alguna prueba (11/12) falló; recuperación aplicada. |
-| `2`    | Preflight abortó (gate, veto ya off, login base, confirmación…): **sin efecto**. |
-| `3`    | Recuperación fallida: **exige intervención manual** (`convex env set LOGIN_EMAIL_VETO off`). |
+| `2`    | **Aborto de arranque fail-closed, SIN efectos**: argumentos/stdin inválidos, no se pudo resolver el deployment, gate ≠ `[]`, veto ya off, falta confirmación, o login base fallido. |
+| `3`    | Recuperación fallida: **exige intervención manual** (`convex env set LOGIN_EMAIL_VETO off <selector>`). |
 | `130`/`143` | Interrumpido por SIGINT/SIGTERM; recuperación aplicada (veto en off). |
 
 ## Propiedades de seguridad
@@ -989,4 +1086,7 @@ printf '%s\n%s\n' "$PASSWORD" "$AUTH_SERVER_KEY" | \
 - En **modo preview**, una excepción durante la secuencia deja el veto en `off` (vía
   `safeRecover`) en lugar de restaurar el estado inicial de `finalState`. Aceptable por ser un
   deployment desechable.
+- **`logout` es best-effort:** cerrar la sesión creada por un login correcto no invalida la
+  prueba si falla (la sesión caduca sola); nunca se imprime el token. El preflight **no**
+  aborta por un fallo de `logout` del login base (sí por un login base sin éxito).
 ````

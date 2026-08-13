@@ -82,88 +82,83 @@ function makeConvexAdapters(url) {
 }
 
 async function main() {
-  const opts = parseArgs(process.argv.slice(2));
-  const secrets = await readSecrets();
-  const sanitize = makeSanitizer([secrets.password, secrets.serverKey]);
-
-  const cli = makeCli();
-  const target = await resolveTarget(cli, opts);
-  const convex = makeConvexAdapters(target.url);
-
-  const cfg = {
-    email: opts.email,
-    password: secrets.password,
-    serverKey: secrets.serverKey,
-    confirm: opts.confirm,
-  };
-  const log = (m) => process.stderr.write(sanitize(m) + "\n");
-  const deps = { login: convex.login, logout: convex.logout, cli, log };
-  const runner = makeRunner();
-
-  // Cierre único (evita que señal y flujo normal salgan dos veces).
+  // Cierre único con VACIADO de buffers: process.exit inmediato tras un write puede
+  // truncar la evidencia canalizada, así que salimos en el callback de escritura.
   let exiting = false;
-  const finish = (code) => {
-    if (exiting) return;
+  const guard = () => {
+    if (exiting) return false;
     exiting = true;
-    process.exit(code);
+    return true;
   };
-  const printErr = (e) => process.stderr.write(sanitize(e && e.message ? e.message : String(e)) + "\n");
+  const hardExit = (code) => {
+    if (guard()) process.exit(code);
+  };
+  const exitAfter = (stream, str, code) => {
+    if (guard()) stream.write(str, () => process.exit(code));
+  };
 
-  // Handlers de señal: abortan, recuperan UNA vez y salen con semántica de interrupción.
+  // sanitize arranca como identidad hasta conocer los secretos; se reemplaza en cuanto
+  // se leen. Los errores previos a esa lectura no contienen valores de secretos.
+  let sanitize = (s) => String(s);
+  const errText = (e) => sanitize(e && e.message ? e.message : String(e)) + "\n";
+
+  // --- Arranque FAIL-CLOSED (M8): parseo, secretos, resolución y preflight. Nada
+  // de esto muta el deployment; cualquier fallo aquí es un aborto seguro → código 2.
+  let target, deps, cfg, runner, initial;
+  try {
+    const opts = parseArgs(process.argv.slice(2));
+    const secrets = await readSecrets();
+    sanitize = makeSanitizer([secrets.password, secrets.serverKey]);
+    const cli = makeCli();
+    target = await resolveTarget(cli, opts);
+    const convex = makeConvexAdapters(target.url);
+    cfg = { email: opts.email, password: secrets.password, serverKey: secrets.serverKey, confirm: opts.confirm };
+    const log = (m) => process.stderr.write(sanitize(m) + "\n");
+    deps = { login: convex.login, logout: convex.logout, cli, log };
+    runner = makeRunner();
+    ({ initial } = await preflight(deps, target, cfg));
+  } catch (startErr) {
+    exitAfter(process.stderr, errText(startErr), 2); // sin efectos en el deployment
+    return;
+  }
+
+  // --- Handlers de señal: abortan, recuperan UNA vez y salen 130/143 (o 3 si falla).
   const onSignal = (code) => async () => {
     runner.abort();
     try {
       await runner.recoverOnce(() => safeRecover(deps, target, cfg));
-      finish(code); // 130 (SIGINT) / 143 (SIGTERM): recuperación OK
+      hardExit(code); // 130 (SIGINT) / 143 (SIGTERM): recuperación OK
     } catch (rerr) {
-      printErr(rerr);
-      finish(3); // recuperación fallida: exige intervención
+      exitAfter(process.stderr, errText(rerr), 3); // recuperación fallida
     }
   };
   const sigint = onSignal(130);
   const sigterm = onSignal(143);
-  const arm = () => {
-    process.on("SIGINT", sigint);
-    process.on("SIGTERM", sigterm);
-  };
+  process.on("SIGINT", sigint);
+  process.on("SIGTERM", sigterm);
   const disarm = () => {
     process.removeListener("SIGINT", sigint);
     process.removeListener("SIGTERM", sigterm);
   };
 
-  // Preflight: sin efectos. Un abort aquí no ha tocado nada → código 2.
-  let initial;
-  try {
-    ({ initial } = await preflight(deps, target, cfg));
-  } catch (pre) {
-    printErr(pre);
-    finish(2);
-    return;
-  }
-
-  // A partir de aquí puede haber bloqueos: armamos recuperación ANTES del 1er fallo.
-  arm();
   try {
     const report = await runVetoSequence(deps, target, cfg, runner);
-    await finalState(deps, target, target.mode, initial);
+    await finalState(deps, target, target.mode, initial, runner);
+    if (runner.isAborted()) return; // una señal llegó durante finalState: su handler cierra.
     disarm(); // retira handlers antes de la salida normal (evita recuperación tardía)
-    process.stdout.write(JSON.stringify({ ok: true, report }, null, 2) + "\n");
-    finish(0);
+    exitAfter(process.stdout, JSON.stringify({ ok: true, report }, null, 2) + "\n", 0);
   } catch (err) {
-    // Si el aborto vino de una señal, el handler es dueño del cierre.
-    if (runner.isAborted()) return;
+    if (runner.isAborted()) return; // el handler de señal es dueño del cierre.
     try {
       await runner.recoverOnce(() => safeRecover(deps, target, cfg));
     } catch (rerr) {
-      printErr(rerr);
       disarm();
-      finish(3);
+      exitAfter(process.stderr, errText(rerr), 3);
       return;
     }
     disarm();
-    printErr(err);
     // Prueba fallida (SequenceError) u otro error, ya con recuperación correcta → 1.
-    finish(1);
+    exitAfter(process.stderr, errText(err), 1);
   }
 }
 

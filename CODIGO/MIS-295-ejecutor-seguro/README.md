@@ -29,7 +29,7 @@ printf '%s\n%s\n' "$PASSWORD" "$AUTH_SERVER_KEY" | \
 
 # Deployment preview desechable (integración), restaura el estado inicial
 printf '%s\n%s\n' "$PASSWORD" "$AUTH_SERVER_KEY" | \
-  node scripts/login-verify/index.mjs --deployment <name> --mode preview
+  node scripts/login-verify/index.mjs --deployment <name> --mode preview --confirm <name>
 ```
 
 ### Argumentos
@@ -37,13 +37,16 @@ printf '%s\n%s\n' "$PASSWORD" "$AUTH_SERVER_KEY" | \
 - `--prod` | `--deployment <name>` — **destino único**. La URL HTTP se deriva del
   MISMO selector (`convex env get CONVEX_CLOUD_URL <selector>`): HTTP y CLI no pueden
   apuntar a deployments distintos.
-- `--confirm <token>` — obligatorio en modo prod. Debe igualar el nombre del selector:
-  `--confirm prod` con `--prod`, o `--confirm <name>` con `--deployment <name>`.
-  (Con `--prod` el token es literalmente `prod`; el selector no contiene el nombre
-  físico del deployment.)
+- `--confirm <token>` — **obligatorio siempre** (prod y preview). Debe igualar el nombre
+  del selector: `--confirm prod` con `--prod`, o `--confirm <name>` con `--deployment <name>`.
+  (Con `--prod` el token es literalmente `prod`; el selector no contiene el nombre físico
+  del deployment.)
 - `--mode prod|preview` — por defecto `prod`. `prod` deja `LOGIN_EMAIL_VETO=off` (estado
-  deseado de MIS-291). `preview` restaura exactamente el estado inicial.
-- `--email <email>` — por defecto `carlos@test.local`.
+  deseado de MIS-291). `preview` restaura exactamente el estado inicial. **`--prod` NO admite
+  `--mode preview`**: preview exige un `--deployment <name>` desechable.
+- `--email <email>` — **solo se permite en `--mode preview`**; en prod queda fijado a
+  `carlos@test.local` para no poder dirigir la operación contra una cuenta arbitraria.
+- No se admiten selectores ni opciones **duplicados**.
 
 ## Códigos de salida
 
@@ -51,8 +54,8 @@ printf '%s\n%s\n' "$PASSWORD" "$AUTH_SERVER_KEY" | \
 |--------|-------------|
 | `0`    | Todas las pruebas OK; estado final correcto. |
 | `1`    | Alguna prueba (11/12) falló; recuperación aplicada. |
-| `2`    | Preflight abortó (gate, veto ya off, login base, confirmación…): **sin efecto**. |
-| `3`    | Recuperación fallida: **exige intervención manual** (`convex env set LOGIN_EMAIL_VETO off`). |
+| `2`    | **Aborto de arranque fail-closed, SIN efectos**: argumentos/stdin inválidos, no se pudo resolver el deployment, gate ≠ `[]`, veto ya off, falta confirmación, o login base fallido. |
+| `3`    | Recuperación fallida: **exige intervención manual** (`convex env set LOGIN_EMAIL_VETO off <selector>`). |
 | `130`/`143` | Interrumpido por SIGINT/SIGTERM; recuperación aplicada (veto en off). |
 
 ## Propiedades de seguridad
@@ -78,3 +81,6 @@ printf '%s\n%s\n' "$PASSWORD" "$AUTH_SERVER_KEY" | \
 - En **modo preview**, una excepción durante la secuencia deja el veto en `off` (vía
   `safeRecover`) en lugar de restaurar el estado inicial de `finalState`. Aceptable por ser un
   deployment desechable.
+- **`logout` es best-effort:** cerrar la sesión creada por un login correcto no invalida la
+  prueba si falla (la sesión caduca sola); nunca se imprime el token. El preflight **no**
+  aborta por un fallo de `logout` del login base (sí por un login base sin éxito).

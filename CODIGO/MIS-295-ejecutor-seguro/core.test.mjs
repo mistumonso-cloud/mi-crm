@@ -6,6 +6,9 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 
 import {
   LOCKED_ERROR,
@@ -116,8 +119,18 @@ async function runFullOk(f) {
   const { initial } = await preflight(f.deps, f.target, f.cfg);
   const runner = makeRunner();
   const report = await runVetoSequence(f.deps, f.target, f.cfg, runner);
-  await finalState(f.deps, f.target, "prod", initial);
+  await finalState(f.deps, f.target, "prod", initial, runner);
   return report;
+}
+
+const INDEX_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), "index.mjs");
+function runCli(args, stdin) {
+  return new Promise((resolve) => {
+    const child = execFile(process.execPath, [INDEX_PATH, ...args], () => {});
+    child.on("close", (code) => resolve(code));
+    if (stdin !== undefined) child.stdin.write(stdin);
+    child.stdin.end();
+  });
 }
 
 // --- classifyLogin -----------------------------------------------------------
@@ -143,11 +156,13 @@ test("readVetoState distingue ausente/off/valor/indeterminado", async () => {
   assert.equal((await readVetoState(bad.deps, bad.target)).indeterminate, true);
 });
 
-test("M5: nunca solicita el valor de una variable ajena", async () => {
+test("M5: usa --names-only y nunca solicita el valor de una variable ajena", async () => {
   const f = makeFake({ veto: "activo" });
   await runFullOk(f);
   assert.equal(f.st.otherSecretRequested, false);
   assert.ok(!f.st.cliCalls.some((c) => c.includes("get OTRA_CLAVE")));
+  // La presencia se detecta con --names-only, no listando valores.
+  assert.ok(f.st.cliCalls.some((c) => c.includes("env list --names-only")));
 });
 
 // --- preflight fail-closed (B1/M1/M2) ----------------------------------------
@@ -202,7 +217,7 @@ test("secuencia completa: todas las aserciones OK y veto final off", async () =>
   const report = await runVetoSequence(f.deps, f.target, f.cfg, runner);
   assert.ok(report.every((r) => r.ok), JSON.stringify(report));
   assert.equal(vetoActive(await readVetoState(f.deps, f.target)), false);
-  await finalState(f.deps, f.target, "prod", initial);
+  await finalState(f.deps, f.target, "prod", initial, runner);
   assert.equal(f.st.veto, "off");
 });
 
@@ -300,22 +315,50 @@ test("safeRecover lanza RecoveryError si el veto no queda en off", async () => {
 // --- finalState por modo (M4) ------------------------------------------------
 test("M4: preview con veto inicialmente ausente → env remove", async () => {
   const f = makeFake({ veto: "off" }); // la secuencia lo dejó en off
-  await finalState(f.deps, f.target, "preview", { present: false, value: null });
+  await finalState(f.deps, f.target, "preview", { present: false, value: null }, makeRunner());
   assert.equal(f.st.removed, true);
   assert.equal(f.st.veto, undefined);
 });
 
 test("M4: preview con valor explícito → lo repone", async () => {
   const f = makeFake({ veto: "off" });
-  await finalState(f.deps, f.target, "preview", { present: true, value: "activo" });
+  await finalState(f.deps, f.target, "preview", { present: true, value: "activo" }, makeRunner());
   assert.equal(f.st.veto, "activo");
 });
 
 test("M4: prod → finalState no toca nada (deja off)", async () => {
   const f = makeFake({ veto: "off" });
-  await finalState(f.deps, f.target, "prod", { present: true, value: "activo" });
+  await finalState(f.deps, f.target, "prod", { present: true, value: "activo" }, makeRunner());
   assert.equal(f.st.veto, "off");
   assert.equal(f.st.setCalls.length, 0);
+});
+
+test("M3: finalState pasa por runStep; una señal durante la restauración → off gana", async () => {
+  const f = makeFake({ veto: "off" });
+  const order = [];
+  let release;
+  const gate = new Promise((r) => (release = r));
+  // cli que retrasa la escritura de finalState (set/remove) para forzar la carrera.
+  const slow = {
+    ...f.deps,
+    cli: async (args) => {
+      if (args[0] === "env" && (args[1] === "set" || args[1] === "remove")) {
+        await gate;
+        order.push("finalState-write");
+      }
+      return f.deps.cli(args);
+    },
+  };
+  const runner = makeRunner();
+  const fp = finalState(slow, f.target, "preview", { present: true, value: "activo" }, runner);
+  // Señal a mitad de la escritura de finalState: si NO estuviera en runStep, la
+  // recuperación no la esperaría y el orden se invertiría.
+  runner.abort();
+  const rec = runner.recoverOnce(async () => order.push("recover-off"));
+  release();
+  await fp;
+  await rec;
+  assert.deepEqual(order, ["finalState-write", "recover-off"]);
 });
 
 // --- Autoridad única de deployment (B1) --------------------------------------
@@ -328,6 +371,17 @@ test("parseArgs: --prod y --deployment", () => {
   assert.equal(b.name, "greedy-tapir-20");
   assert.equal(b.mode, "preview");
   assert.throws(() => parseArgs([]), AbortError);
+});
+
+test("M7: matriz selector/modo/email/duplicados", () => {
+  assert.throws(() => parseArgs(["--prod", "--mode", "preview"]), AbortError); // --prod no admite preview
+  assert.throws(() => parseArgs(["--prod", "--email", "x@y.z"]), AbortError); // --email solo en preview
+  assert.throws(() => parseArgs(["--deployment", "d", "--email", "x@y.z"]), AbortError); // modo prod por defecto
+  const ok = parseArgs(["--deployment", "prev-1", "--mode", "preview", "--email", "x@y.z"]);
+  assert.equal(ok.email, "x@y.z"); // --email permitido en preview con --deployment
+  assert.equal(parseArgs(["--prod"]).email, "carlos@test.local"); // email fijado en prod
+  assert.throws(() => parseArgs(["--prod", "--deployment", "d"]), AbortError); // selector duplicado
+  assert.throws(() => parseArgs(["--prod", "--confirm", "a", "--confirm", "b"]), AbortError); // opción duplicada
 });
 
 test("B1: resolveTarget deriva la URL del MISMO selector, sin URL suelta", async () => {
@@ -346,13 +400,30 @@ test("B1: resolveTarget deriva la URL del MISMO selector, sin URL suelta", async
   assert.deepEqual(calls[0], ["env", "get", "CONVEX_CLOUD_URL", "--deployment", "greedy-tapir-20"]);
   // No hay parámetro para inyectar una URL ajena: la firma es (cli, opts).
   assert.equal(resolveTarget.length, 2);
+  // M7: confirmación SIEMPRE obligatoria, ligada al nombre del selector.
+  assert.equal(t.requireConfirm, true);
+  assert.equal(t.confirmToken, "greedy-tapir-20");
 });
 
 // --- Saneo de secretos -------------------------------------------------------
-test("makeSanitizer redacta contraseña y serverKey en cualquier salida", () => {
-  const s = makeSanitizer(["P@ss-w0rd", "SRV-KEY-123"]);
-  const out = s("error: usó P@ss-w0rd con SRV-KEY-123 al llamar");
+test("makeSanitizer redacta contraseña, serverKey y token en cualquier salida", () => {
+  const s = makeSanitizer(["P@ss-w0rd", "SRV-KEY-123", "TOKEN-SENTINEL-xyz"]);
+  const out = s("error: usó P@ss-w0rd con SRV-KEY-123 y TOKEN-SENTINEL-xyz al llamar");
   assert.ok(!out.includes("P@ss-w0rd"));
   assert.ok(!out.includes("SRV-KEY-123"));
+  assert.ok(!out.includes("TOKEN-SENTINEL-xyz"));
   assert.ok(out.includes("***"));
+});
+
+// --- Códigos de salida del arranque fail-closed (M8), vía subproceso real ------
+test("M8: argumentos inválidos → código 2 (sin efectos)", async () => {
+  assert.equal(await runCli(["--bogus"]), 2);
+});
+
+test("M8: --prod --mode preview → código 2", async () => {
+  assert.equal(await runCli(["--prod", "--mode", "preview", "--confirm", "prod"]), 2);
+});
+
+test("M8: stdin inválido (una sola línea) → código 2", async () => {
+  assert.equal(await runCli(["--prod", "--confirm", "prod"], "una-sola-linea\n"), 2);
 });
