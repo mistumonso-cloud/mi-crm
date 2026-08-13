@@ -1,143 +1,111 @@
 # MIS-291 — Runbook Fase 1B-ii: retirar el veto por email (cierra I4 / A2)
 
-> **⏸ APARCADO — bloqueado por MIS-295.** La verificación de las pruebas 11-12 se
-> delega a un **ejecutor seguro** (MIS-295: sin secretos en argv, llamadas por
-> HTTP con cuerpo, Convex simulable, tests). Este runbook se **finalizará** cuando
-> MIS-295 esté aprobado; entonces MIS-291 se limita a: consumir ese ejecutor,
-> aplicar `env set LOGIN_EMAIL_VETO off` y registrar evidencia. No ejecutar nada
-> de aquí contra producción hasta entonces.
+> **LISTO PARA EJECUTAR.** La verificación (pruebas 11-12) y el cambio de estado los
+> realiza el **ejecutor seguro de MIS-295** (`scripts/login-verify/`), ya mergeado en
+> `main` (PR #54). MIS-291 se limita a: correr ese ejecutor contra prod, capturar su
+> evidencia y confirmar el estado final. **Ticket operativo, sin despliegue de código
+> de producto.** Diseño: plan maestro `PLANS/PLAN-CORRECCION-SEGURIDAD-LOGIN-2026-08-10.md` §1B.4.
 >
-> **Ticket operativo, sin despliegue de código de producto.** El único cambio en
-> prod es `LOGIN_EMAIL_VETO=off`. Diseño aprobado en el plan maestro
-> `PLANS/PLAN-CORRECCION-SEGURIDAD-LOGIN-2026-08-10.md` §1B.4.
->
-> **Historial de auditoría:**
-> - Ronda 1 → NO-GO (M1: la prueba 12 reutilizaba una fila de bloqueo que el login
->   de éxito del paso 3 ya había borrado). Resuelto en el diseño de la secuencia.
-> - Ronda 2 → NO-GO (M2: un aborto entre el paso 1 y el 2 dejaba la cuenta
->   bloqueada). Resuelto conceptualmente moviendo la recuperación al mecanismo de
->   salida.
-> - Ronda 3 → NO-GO. El orquestador bash introducía B1 (gate no fail-closed antes
->   del trap), **B2 (secretos en argv, sin arreglo con `convex run`)**, M3
->   (cleanup sin verificar), M4 (aserción de bloqueo con texto irreal), M5 (dep
->   `jq`). Decisión (recomendación §8 del auditor): **dividir** — el ejecutor
->   seguro pasa a **MIS-295**, y MIS-291 queda a la espera de consumirlo.
+> **Historial:** el intento previo de automatizar 11-12 con bash + `npx convex run` fue
+> NO-GO (B2: secretos en argv, sin arreglo con `convex run`). Se dividió: el ejecutor
+> seguro pasó a **MIS-295** (plan GO ronda 4; código GO ronda 2; mergeado 2026-08-13).
+> Este runbook lo consume.
 
 ## Contexto
 
-Con I1/I2 (MIS-288), I3 (MIS-289) e I5/I6/I7 (MIS-290) ya vivos en producción,
-queda **retirar el veto por email** del login. Ese veto (5 fallos por `<email>` →
-bloqueo de 15 min) es la invariante **I4/A2**: hoy es un vector de **DoS
-dirigido** — un atacante puede dejar fuera a un usuario legítimo fallando 5 veces
-contra su email. Con la cuota por IP (I5) ya acotando el coste del KDF, el veto
-por email no aporta defensa y sí un riesgo, así que se retira.
+Con I1/I2 (MIS-288), I3 (MIS-289) e I5/I6/I7 (MIS-290) ya vivos en producción, queda
+**retirar el veto por email**. Ese veto (5 fallos por `<email>` → bloqueo 15 min) es la
+invariante **I4/A2**: hoy es un vector de **DoS dirigido** (dejar fuera a un usuario
+legítimo fallando 5 veces contra su email). Con la cuota por IP (I5) acotando el KDF, el
+veto por email no aporta defensa y sí riesgo. El interruptor es **fail-safe**:
+`LOGIN_EMAIL_VETO` ausente o ≠`off` → veto **ACTIVO**; retirarlo = ponerlo a `off`.
 
-El interruptor es **fail-safe**: `LOGIN_EMAIL_VETO` ausente o con cualquier valor
-distinto de `off` → veto **ACTIVO**. Misma dirección segura que el fail-closed de
-I2. Retirarlo = ponerlo a `off`.
+## Gate de entrada (en orden)
 
-## Gate de entrada (en orden, definido en el ticket)
-
-1. MIS-290 desplegado y verificado en prod — ✅ (`greedy-tapir-20`, PR #53, 2026-08-12).
-2. Todas las cuentas con contraseña rotadas — ✅.
-3. `accountsPendingRotation()` en **prod** = `[]` — ✅ verificado
-   (`npx convex run auth:accountsPendingRotation --prod` → `[]`).
-4. Sólo entonces: `LOGIN_EMAIL_VETO=off`.
+1. MIS-290 desplegado y verificado en prod — ✅ (`greedy-tapir-20`, PR #53).
+2. Cuentas con contraseña rotadas — ✅.
+3. `accountsPendingRotation()` en **prod** = `[]` — ✅ (`npx convex run auth:accountsPendingRotation --prod` → `[]`).
+   El propio ejecutor lo revalida en su preflight fail-closed (aborta sin efectos si ≠`[]`).
+4. Sólo entonces se corre el ejecutor (que aplica `LOGIN_EMAIL_VETO=off`).
 
 ## Cómo funciona el interruptor (para leer la evidencia)
 
 `convex/lib/rateLimit.ts:101` — `emailVetoActive()` = `process.env.LOGIN_EMAIL_VETO !== "off"`.
-Se consulta en dos puntos de `convex/auth.ts`:
+Con veto **on**: `reserveLoginSlot:85` corta ANTES del KDF si `<email>` está bloqueada
+(`LOCKED_ERROR`), y `finalizeLogin:179` registra el fallo (5/15 → bloqueo). Con veto
+**off**: ninguno actúa; solo quedan la cuota por IP (I5) y la telemetría
+`login-counter:<email>` (que no bloquea). Constantes (`auth.ts:30-31`): bloqueo =
+`"Demasiados intentos, inténtalo de nuevo en unos minutos"` (`LOCKED_ERROR`); genérico =
+`"Email o contraseña incorrectos"` (`GENERIC_ERROR`).
 
-- `reserveLoginSlot:85` — con veto **on**, si la clave `<email>` está bloqueada,
-  corta ANTES del KDF y devuelve `LOCKED_ERROR`.
-- `finalizeLogin:179` — con veto **on**, un fallo registra la clave `<email>`
-  (5/15 → bloqueo). Con veto **off**, ninguno de los dos actúa: sólo quedan la
-  cuota por IP (I5) y el contador de telemetría `login-counter:<email>`, que
-  nunca bloquea.
+**Sustitución deliberada de la prueba 11:** el ejecutor llama al login **sin `ipHint`**,
+lo que aísla la clave de email de la cuota por IP (`auth.ts:201`) — variante equivalente
+para I4 de la "agotar IP + entrar desde otra" del plan maestro.
 
-Constantes de error (`convex/auth.ts:30-31`): bloqueo = `"Demasiados intentos,
-inténtalo de nuevo en unos minutos"` (`LOCKED_ERROR`); genérico = `"Email o
-contraseña incorrectos"` (`GENERIC_ERROR`).
+## Ejecución
 
-**Efecto colateral clave:** un login **correcto** ejecuta `resetAttempts` sobre
-**ambas** claves de email (`finalizeLogin:164-169`) → **borra la fila de
-bloqueo**. Por eso cada estado bloqueado se (re)genera con 5 fallos justo antes de
-comprobarlo, y nunca se reutiliza al otro lado de un login correcto.
+Un solo comando desde la raíz del repo, en `main` con `scripts/login-verify/` presente.
+Los secretos entran por **STDIN, 2 líneas** (contraseña de `carlos@test.local` +
+`AUTH_SERVER_KEY`), nunca por argv; `AUTH_SERVER_KEY` se lee en caliente de Convex prod y
+no se imprime; la contraseña se toma de un fichero `600` del scratchpad, destruido al
+terminar.
 
-Detalle de las pruebas: **omitir `ipHint`** hace `ipKey=null` (`auth.ts:201`), así
-`reserveLoginSlot` no consume ni consulta la cuota por IP → se aísla la clave de
-email.
+```sh
+# AUTH_SERVER_KEY de prod (no se imprime); contraseña desde fichero 600 del scratchpad
+KEY="$(npx convex env get AUTH_SERVER_KEY --prod)"
+printf '%s\n%s\n' "$CARLOS_PW" "$KEY" | node scripts/login-verify/index.mjs --prod --confirm prod
+```
 
-### Sustitución deliberada de la prueba 11 del plan maestro
+El ejecutor, en una sola pasada (todo verificado y auditado en MIS-295):
 
-El plan maestro §1B.4 describe la prueba 11 como "agotar una IP y entrar desde
-otra IP". Aquí se sustituye por la variante **sin `ipHint`**: aísla exactamente la
-clave de email, que es la palanca que MIS-291 retira. Equivalente para I4; la
-cuota por IP (I5) ya se verificó en MIS-290.
+1. **Preflight fail-closed:** gate `accountsPendingRotation()`==`[]`, veto inicial **activo**,
+   y un **login base correcto** (credenciales + canal). Si algo falla → **código 2, sin efectos**.
+2. **Prueba 11 ANTES:** 5 fallos + correcto → `locked`.
+3. `env set LOGIN_EMAIL_VETO off` (+ verifica `off`).
+4. **Prueba 11 DESPUÉS:** correcto → `success`.
+5. **Prueba 12 rollback:** `env set` activo + **regenera** bloqueo (5 fallos) + correcto → `locked`.
+6. **Estado final:** `env set off` (+ verifica) + login correcto. Deja `LOGIN_EMAIL_VETO=off`.
 
-## Secuencia (a ejecutar con el ejecutor de MIS-295)
+Con recuperación única ante excepción/señal (`recoveryPromise`), que garantiza `off` como
+estado final. **Salida:** `{ ok: true, report: [...] }` por stdout (sin secretos ni token),
+**código 0** si todas las pruebas pasan.
 
-Descripción conceptual, agnóstica de implementación; la ejecuta el ejecutor
-aprobado de MIS-295 con preflight fail-closed, recuperación verificada y sin
-secretos en argv.
+## Evidencia (sin secretos)
 
-**0. Estado inicial** — `env get` → ausente ⇒ veto **ACTIVO** (si fuese `off`,
-abortar). Login correcto de línea base ⇒ `success:true`.
-
-**1. Prueba 11 · ANTES** — sin `ipHint`, veto on: 5 fallos bloquean `<email>`; el
-6.º con la contraseña correcta → `error: LOCKED_ERROR` ⇒ I4/A2 vivo hoy.
-
-**2. Aplicar el cambio** — `env set LOGIN_EMAIL_VETO off` + `env get` → `off`.
-
-**3. Prueba 11 · DESPUÉS** — login correcto → `success:true` (la fila de bloqueo
-sigue viva pero ya no se consulta ⇒ veto retirado; este éxito borra las claves).
-
-**4. Prueba 12 · rollback** — `env set` veto activo + `env get`; **regenerar** el
-bloqueo con 5 fallos; login correcto → `error: LOCKED_ERROR` ⇒ reactivar restaura
-el bloqueo sin redeploy.
-
-**5. Estado final** — `env set off` + `env get` → `off`; login correcto →
-`success:true` (claves limpias). El estado final correcto de MIS-291 es siempre
-`LOGIN_EMAIL_VETO=off`; el ejecutor lo garantiza ante aborto.
-
-## Criterio de cierre
-
-- MIS-295 aprobado y disponible.
-- Gate antes: `accountsPendingRotation()` prod = `[]` ✅.
-- `env get LOGIN_EMAIL_VETO` = `off` al final.
-- Pruebas 11 (antes: LOCKED / después: éxito) y 12 (rollback regenerado: LOCKED)
-  pasadas por el ejecutor.
-- Evidencia sin valores de secretos.
-- Ticket de follow-up B7 creado y enlazado.
-
-## Rollback definitivo
-
-Volver a poner el veto: `env set LOGIN_EMAIL_VETO <≠off>` (o `env remove`).
-Inmediato, sin revert de código ni redeploy.
-
-## Deuda enviada a follow-up (B7)
-
-Retirado el veto por email, un **bloqueo por IP** sigue devolviendo `LOCKED_ERROR`
-(`convex/auth.ts:203`), lo que contradice la afirmación del plan maestro de
-unificar ese error con el genérico. Es **deuda preexistente, no agravada por
-MIS-291**, y **no impide cerrar I4/A2** (el oráculo por cuenta desaparece con el
-veto; el residuo es por IP). Queda **fuera del alcance de MIS-291** → **ticket de
-código propio** (unificar `LOCKED_ERROR` de IP con `GENERIC_ERROR`), a crear y
-enlazar antes de cerrar MIS-291.
-
-## Evidencia
-
-_(Se rellena cuando MIS-295 esté listo y se ejecute — sólo estados de env var y
-`success`/`error`.)_
+Se captura, antes y después: `npx convex env get LOGIN_EMAIL_VETO --prod` (o su ausencia),
+el **`report` JSON** del ejecutor (pasos y clasificación `locked`/`success`) y el **código
+de salida**. Nunca valores de `AUTH_SERVER_KEY`, `ORIGIN_SHARED_SECRET`, contraseñas ni tokens.
 
 | Paso | Acción | Esperado | Resultado |
 |------|--------|----------|-----------|
 | Gate | `accountsPendingRotation()` prod | `[]` | ✅ `[]` |
-| 0 | `env get` inicial | ausente (activo) | _pendiente_ |
-| 0 | login correcto (línea base) | `success:true` | _pendiente_ |
-| 1 | 5× pw incorrecta + 1× correcta (veto on) | `LOCKED_ERROR` | _pendiente_ |
-| 2 | `env set off` + `env get` | `off` | _pendiente_ |
-| 3 | login correcto (veto off) | `success:true` | _pendiente_ |
-| 4 | `env set` activo + `env get` + 5× incorrecta + 1× correcta | `LOCKED_ERROR` | _pendiente_ |
-| 5 | `env set off` + `env get` + login correcto | `off` / `success:true` | _pendiente_ |
+| Antes | `env get LOGIN_EMAIL_VETO` inicial | ausente (activo) | _pendiente_ |
+| Ejecutor | `report` prueba 11 ANTES | `locked` | _pendiente_ |
+| Ejecutor | `report` prueba 11 DESPUÉS | `success` | _pendiente_ |
+| Ejecutor | `report` prueba 12 ROLLBACK | `locked` | _pendiente_ |
+| Ejecutor | `report` FINAL + código de salida | `success` / `0` | _pendiente_ |
+| Después | `env get LOGIN_EMAIL_VETO` | `off` | _pendiente_ |
+
+## Criterio de cierre
+
+- Gate `accountsPendingRotation()` prod = `[]` ✅.
+- Ejecutor con **código 0** y `report` con 11-ANTES=`locked`, 11-DESPUÉS=`success`,
+  12-ROLLBACK=`locked`, FINAL=`success`.
+- `env get LOGIN_EMAIL_VETO --prod` = `off` al final.
+- Evidencia sin valores de secretos.
+- **Follow-up B7 creado y enlazado** (ver abajo).
+- PR doc-only (este runbook + evidencia) mergeado y enlazado en la issue.
+
+## Rollback
+
+Volver a poner el veto: `npx convex env set LOGIN_EMAIL_VETO <≠off> --prod` (o `env remove`).
+Inmediato, sin revert de código ni redeploy. (La prueba 12 lo demuestra en vivo.)
+
+## Deuda enviada a follow-up (B7)
+
+Retirado el veto por email, un **bloqueo por IP** sigue devolviendo `LOCKED_ERROR`
+(`convex/auth.ts:203`), lo que contradice la unificación con el genérico que afirma el plan
+maestro. Es **deuda preexistente, no agravada por MIS-291**, y **no impide cerrar I4/A2**
+(el oráculo por cuenta desaparece con el veto; el residuo es por IP). Queda **fuera del
+alcance de MIS-291** → **ticket de código propio** (unificar `LOCKED_ERROR` de IP con
+`GENERIC_ERROR`), a crear y enlazar **antes de cerrar** MIS-291.
