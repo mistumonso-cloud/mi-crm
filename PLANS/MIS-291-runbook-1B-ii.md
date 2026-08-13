@@ -153,12 +153,17 @@ esa misma ejecución**. Junto al report se registra el **sello de ejecución**:
 | Paso | Acción | Esperado | Resultado |
 |------|--------|----------|-----------|
 | Gate | `accountsPendingRotation()` prod | `[]` | ✅ `[]` |
-| Antes | `env list --names-only` (+ `env get` si presente) | ausente, o valor ≠`off` (veto activo) | _pendiente_ |
-| Ejecutor | `report` prueba 11 ANTES | `locked` | _pendiente_ |
-| Ejecutor | `report` prueba 11 DESPUÉS | `success` | _pendiente_ |
-| Ejecutor | `report` prueba 12 ROLLBACK | `locked` | _pendiente_ |
-| Ejecutor | `report` FINAL + código de salida | `success` / `0` | _pendiente_ |
-| Después | `env get LOGIN_EMAIL_VETO` | `off` | _pendiente_ |
+| Antes | `env list --names-only` (+ `env get` si presente) | ausente, o valor ≠`off` (veto activo) | ✅ **ausente** (veto activo) |
+| Ejecutor | `report` prueba 11 ANTES | `locked` | ✅ `locked` |
+| Ejecutor | `report` prueba 11 DESPUÉS | `success` | ✅ `success` |
+| Ejecutor | `report` prueba 12 ROLLBACK | `locked` | ✅ `locked` |
+| Ejecutor | `report` FINAL + código de salida | `success` / `0` | ✅ `success` / **exit 0** |
+| Después | `env get LOGIN_EMAIL_VETO` | `off` | ✅ **`off`** |
+
+**Ejecutado en producción 2026-08-13.** Sello: `commit=2655786 deployment=greedy-tapir-20 ts=2026-08-13T10:49:36Z`.
+`{ ok: true, report: [...] }` completo, subshell **exit 0**, postcondición `LOGIN_EMAIL_VETO=off`
+verificada. Sin secretos en la evidencia; fichero de contraseña destruido (`shred`) por el `trap`.
+**I4/A2 cerrado:** el veto por email está retirado y la prueba 12 demostró el rollback en vivo.
 
 ## Criterio de cierre
 
@@ -167,7 +172,7 @@ esa misma ejecución**. Junto al report se registra el **sello de ejecución**:
   12-ROLLBACK=`locked`, FINAL=`success`.
 - `env get LOGIN_EMAIL_VETO --prod` = `off` al final.
 - Evidencia sin valores de secretos.
-- **Follow-up B7 creado y enlazado** (ver abajo).
+- **Follow-up B7 creado y enlazado** (MIS-296) — ✅.
 - PR doc-only (este runbook + evidencia) mergeado y enlazado en la issue.
 
 ## Rollback
@@ -182,4 +187,4 @@ Retirado el veto por email, un **bloqueo por IP** sigue devolviendo `LOCKED_ERRO
 maestro. Es **deuda preexistente, no agravada por MIS-291**, y **no impide cerrar I4/A2**
 (el oráculo por cuenta desaparece con el veto; el residuo es por IP). Queda **fuera del
 alcance de MIS-291** → **ticket de código propio** (unificar `LOCKED_ERROR` de IP con
-`GENERIC_ERROR`), a crear y enlazar **antes de cerrar** MIS-291.
+`GENERIC_ERROR`). **Creado: MIS-296** (relacionado con MIS-291).
