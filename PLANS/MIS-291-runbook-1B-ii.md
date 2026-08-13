@@ -44,8 +44,10 @@ para I4 de la "agotar IP + entrar desde otra" del plan maestro.
 
 ## Ejecución
 
-Desde la raíz del repo, en `main` con `scripts/login-verify/` presente. Los secretos
-entran por **STDIN, 2 líneas** (contraseña de `carlos@test.local` + `AUTH_SERVER_KEY`).
+Desde la raíz del repo, con `scripts/login-verify/` **idéntico a `origin/main`** (el runbook
+lo verifica con `git diff --quiet`, así funciona igual desde `main` o desde la rama de MIS-291
+rebaseada sobre `main`). Los secretos entran por **STDIN, 2 líneas** (contraseña de
+`carlos@test.local` + `AUTH_SERVER_KEY`).
 Manejo de secretos, reproducible y auto-limpiante:
 
 - `SCRATCH` = directorio de scratchpad de sesión (`umask 077`). La contraseña se coloca
@@ -77,16 +79,22 @@ pegar línea a línea en una shell persistente.**
   : "${SCRATCH:?define SCRATCH al scratchpad de sesión}"
   PW_FILE="$SCRATCH/carlos_pw"              # contraseña colocada aquí aparte, sin salto final
   REPORT="$SCRATCH/mis291-report.json"
+  SEAL="$SCRATCH/mis291-seal.txt"
   cleanup() { shred -u "$PW_FILE" 2>/dev/null || rm -f "$PW_FILE"; unset PW KEY; }
   trap cleanup EXIT                          # armado ANTES de la primera validación/salida
+
+  # Precondición: ejecutar el ejecutor AUDITADO (idéntico a origin/main), sea cual sea la rama.
+  git fetch -q origin main || { echo "no se pudo fetch origin/main"; exit 1; }
+  git diff --quiet origin/main -- scripts/login-verify \
+    || { echo "scripts/login-verify difiere de origin/main — abortar"; exit 1; }
+  MAIN_COMMIT="$(git rev-parse --short origin/main)" || { echo "git rev-parse falló"; exit 1; }
 
   [ -f "$PW_FILE" ] && [ "$(stat -c '%a' "$PW_FILE")" = 600 ] || { echo "PW_FILE ausente o no 600"; exit 1; }
   PW="$(<"$PW_FILE")"                        # lectura builtin de bash (sin proceso externo)
   KEY="$(npx convex env get AUTH_SERVER_KEY --prod)" || { echo "no se pudo leer AUTH_SERVER_KEY"; exit 1; }
   [ -n "$PW" ] && [ -n "$KEY" ] || { echo "faltan secretos"; exit 1; }
-  COMMIT="$(git rev-parse --short HEAD)" || { echo "git rev-parse falló"; exit 1; }
 
-  # Evidencia inicial FAIL-CLOSED: fallo de CLI NO se clasifica como ausencia; y el veto
+  # Evidencia inicial FAIL-CLOSED: distingue ausencia (grep=1) de error (grep>=2); el veto
   # DEBE estar activo (ausente, o presente con valor ≠ off).
   names="$(npx convex env list --names-only --prod)" \
     || { echo "env list falló: estado inicial indeterminado — abortar"; exit 1; }
@@ -95,12 +103,14 @@ pegar línea a línea en una shell persistente.**
     echo "inicial: LOGIN_EMAIL_VETO presente; valor=$init"
     [ "$init" != off ] || { echo "el veto ya está off: precondición inválida"; exit 1; }
   else
+    gc=$?; [ "$gc" -eq 1 ] || { echo "grep error ($gc) al leer nombres — abortar"; exit 1; }
     echo "inicial: LOGIN_EMAIL_VETO ausente (veto activo)"
   fi
 
-  # Ejecutar; exigir éxito de Node Y de tee (PIPESTATUS capturado en UNA sola sentencia):
+  # Ejecutar; exigir éxito de printf, Node Y tee (PIPESTATUS capturado en UNA sola sentencia):
   printf '%s\n%s\n' "$PW" "$KEY" | node scripts/login-verify/index.mjs --prod --confirm prod | tee "$REPORT"
   st=("${PIPESTATUS[@]}")                    # [0]=printf [1]=node [2]=tee
+  [ "${st[0]}" -eq 0 ] || { echo "printf falló"; exit 1; }
   [ "${st[1]}" -eq 0 ] || { echo "ejecutor NO devolvió 0 (code=${st[1]})"; exit "${st[1]}"; }
   { [ "${st[2]}" -eq 0 ] && [ -s "$REPORT" ]; } || { echo "no se pudo guardar el report"; exit 1; }
 
@@ -108,8 +118,9 @@ pegar línea a línea en una shell persistente.**
   final="$(npx convex env get LOGIN_EMAIL_VETO --prod)" || { echo "env get final falló — abortar"; exit 1; }
   [ "$final" = off ] || { echo "postcondición fallida: LOGIN_EMAIL_VETO=$final (esperado off)"; exit 1; }
 
-  # Solo tras verificar Node + tee + report + postcondición off: sello de éxito.
-  echo "OK final: LOGIN_EMAIL_VETO=off commit=$COMMIT deployment=greedy-tapir-20 ts=$(date -u +%FT%TZ)"
+  ts="$(date -u +%FT%TZ)" || { echo "date falló"; exit 1; }
+  # Solo tras verificar ejecutor+tee+report+postcondición off: sello de éxito, a terminal Y fichero.
+  printf 'OK final: LOGIN_EMAIL_VETO=off commit=%s deployment=greedy-tapir-20 ts=%s\n' "$MAIN_COMMIT" "$ts" | tee "$SEAL"
 )
 ```
 
