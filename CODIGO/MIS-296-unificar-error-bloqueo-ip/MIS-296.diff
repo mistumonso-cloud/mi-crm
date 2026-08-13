@@ -1,0 +1,96 @@
+diff --git a/convex/auth.ts b/convex/auth.ts
+index 385e1a8..ac07283 100644
+--- a/convex/auth.ts
++++ b/convex/auth.ts
+@@ -29,7 +29,9 @@ import { CURRENT_PASSWORD_POLICY_VERSION } from "./lib/passwordPolicy";
+ import { RESET_TEST_EMAIL, TEST_SUPPORT_ENV_VAR } from "./lib/testIdentity";
+ 
+ const GENERIC_ERROR = "Email o contraseña incorrectos";
+-const LOCKED_ERROR = "Demasiados intentos, inténtalo de nuevo en unos minutos";
++// MIS-296 (B7): `LOCKED_ERROR` retirado. La respuesta del login NO distingue un
++// bloqueo (por IP) de unas credenciales incorrectas — ambos devuelven
++// GENERIC_ERROR. El motivo real del bloqueo queda solo en el log del servidor.
+ 
+ // MIS-260: mensaje único para CUALQUIER fallo del flujo de Google (state
+ // inválido, error/cancelación de Google, email no verificado, serverKey
+@@ -66,11 +68,13 @@ type LoginResult =
+ // aquí y solo las primeras `LOGIN_IP_LIMIT.maxAttempts` no quedan bloqueadas.
+ // Unión discriminada: cuando está bloqueada no fabrica hash ni huella.
+ const reserveResultValidator = v.union(
+-  v.object({ blocked: v.literal(true) }),
++  // MIS-296 (B7): `reason` es SOLO para el log del servidor (motivo real del
++  // bloqueo). No sale nunca al cliente: loginWithPassword responde genérico.
++  v.object({ blocked: v.literal(true), reason: v.union(v.literal("ip"), v.literal("email")) }),
+   v.object({ blocked: v.literal(false), hash: v.string(), fingerprint: v.string() }),
+ );
+ type ReserveResult =
+-  | { blocked: true }
++  | { blocked: true; reason: "ip" | "email" }
+   | { blocked: false; hash: string; fingerprint: string };
+ 
+ export const reserveLoginSlot = internalMutation({
+@@ -79,12 +83,12 @@ export const reserveLoginSlot = internalMutation({
+   handler: async (ctx, args): Promise<ReserveResult> => {
+     // Capa por IP (I5): si ya está bloqueada, no se consume más.
+     if (args.ipKey && (await isLocked(ctx, `ip:${args.ipKey}`))) {
+-      return { blocked: true };
++      return { blocked: true, reason: "ip" };
+     }
+     // Veto por email — SOLO si el interruptor está activo (MIS-291 lo pondrá a
+     // "off"). Clave `<email>` con LOGIN_EMAIL_VETO_LIMIT; semántica fija (M1).
+     if (emailVetoActive() && (await isLocked(ctx, args.emailKey))) {
+-      return { blocked: true };
++      return { blocked: true, reason: "email" };
+     }
+     // Consume la cuota de IP AL INTENTAR: es lo que acota el KDF. Los logins
+     // correctos también consumen; con 10/15 min por IP no molesta a usuarios
+@@ -211,7 +215,11 @@ export const loginWithPassword = action({
+ 
+     const reserve = await ctx.runMutation(internal.auth.reserveLoginSlot, { emailKey, ipKey });
+     if (reserve.blocked) {
+-      return { success: false as const, error: LOCKED_ERROR };
++      // B7 (MIS-296): la RESPUESTA no distingue un bloqueo de unas credenciales
++      // incorrectas (anti-enumeración/anti-oráculo). El motivo real queda solo en
++      // el log del servidor — solo la capa, sin IP, email, contraseña ni token.
++      console.warn(`[login] rechazo por bloqueo de rate limit (capa=${reserve.reason})`);
++      return { success: false as const, error: GENERIC_ERROR };
+     }
+ 
+     const ok = await verifyPasswordInstrumented(ctx, args.password, reserve.hash, emailKey);
+diff --git a/e2e/helpers/test-support.ts b/e2e/helpers/test-support.ts
+index 6cee50d..964b79e 100644
+--- a/e2e/helpers/test-support.ts
++++ b/e2e/helpers/test-support.ts
+@@ -87,7 +87,7 @@ export async function loginSucceeds(password: string): Promise<boolean> {
+ export async function loginResult(
+   password: string,
+   ipHint?: string,
+-): Promise<{ success: boolean }> {
++): Promise<{ success: true } | { success: false; error: string }> {
+   return await convexClient().action(api.auth.loginWithPassword, {
+     email: RESET_TEST_EMAIL,
+     password,
+diff --git a/e2e/test-support.spec.ts b/e2e/test-support.spec.ts
+index 58deae4..05e194c 100644
+--- a/e2e/test-support.spec.ts
++++ b/e2e/test-support.spec.ts
+@@ -176,6 +176,19 @@ test.describe("harness seguro (MIS-286)", () => {
+ 
+     expect(ok).toBe(10);
+     expect(results.length - ok).toBe(1);
++    // MIS-296 (B7): el ÚNICO rechazo (bloqueo por IP) responde con el error
++    // GENÉRICO, indistinguible de credenciales incorrectas — nunca el antiguo
++    // LOCKED_ERROR ("Demasiados intentos…").
++    const rejected = results.filter(
++      (r): r is { success: false; error: string } => !r.success,
++    );
++    expect(rejected).toHaveLength(1);
++    expect(rejected[0].error).toBe("Email o contraseña incorrectos");
++    expect(
++      results.some(
++        (r) => !r.success && r.error === "Demasiados intentos, inténtalo de nuevo en unos minutos",
++      ),
++    ).toBe(false);
+     // El KDF corrió exactamente 10 veces: es la prueba de I5 (coste acotado).
+     expect(await getKdfCount()).toBe(10);
+     // Y hay 10 sesiones: los 10 permitidos entraron de verdad.
