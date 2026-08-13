@@ -56,34 +56,52 @@ Manejo de secretos, reproducible y auto-limpiante:
 - La contraseña y `KEY` se pasan al ejecutor **por STDIN** con `printf` (builtin de bash →
   no hay proceso externo cuyo `argv`/`/proc` los exponga; con `set +x` tampoco se imprimen).
   El único `argv` de proceso externo es el de `node`, que solo lleva los flags.
-- `trap cleanup EXIT` (solo EXIT, para **no interferir** con la recuperación de señales del
-  propio ejecutor) hace `shred` del fichero y `unset` de `PW`/`KEY`, en éxito y en error.
+- Todo corre en una **subshell acotada** `( … )` con `trap cleanup EXIT` armado antes de la
+  primera validación: al cerrar el paréntesis se ejecuta `shred` del fichero y `unset PW KEY`,
+  en éxito y en error, sin depender de que salga la shell interactiva y sin interferir con la
+  recuperación de señales del propio ejecutor. `PW` se lee con el builtin `"$(<"$PW_FILE")"`
+  (sin proceso externo). **Nota:** `shred` es borrado **best-effort** — en SSD, CoW o con
+  snapshots no garantiza borrado físico; la mitigación real es no persistir la contraseña más
+  de lo imprescindible (fichero efímero en scratchpad de sesión).
+
+Se ejecuta como **una única subshell Bash acotada** `( … )`: el `EXIT` —y por tanto la
+limpieza— ocurre al cerrar el paréntesis, con el `trap` armado **antes** de cualquier
+posible salida, y `PW`/`KEY` son locales a la subshell (no quedan en la shell padre). **No
+pegar línea a línea en una shell persistente.**
 
 ```sh
-set +x                                    # nunca trazar secretos
-umask 077
-: "${SCRATCH:?define SCRATCH al scratchpad de sesión}"
-PW_FILE="$SCRATCH/carlos_pw"              # contraseña colocada aquí aparte, sin salto final
-[ -f "$PW_FILE" ] && [ "$(stat -c '%a' "$PW_FILE")" = 600 ] || { echo "PW_FILE ausente o no 600"; exit 1; }
-cleanup() { shred -u "$PW_FILE" 2>/dev/null || rm -f "$PW_FILE"; unset PW KEY; }
-trap cleanup EXIT
+( set +x                                    # nunca trazar secretos
+  umask 077
+  : "${SCRATCH:?define SCRATCH al scratchpad de sesión}"
+  PW_FILE="$SCRATCH/carlos_pw"              # contraseña colocada aquí aparte, sin salto final
+  cleanup() { shred -u "$PW_FILE" 2>/dev/null || rm -f "$PW_FILE"; unset PW KEY; }
+  trap cleanup EXIT                          # armado ANTES de la primera validación/salida
 
-PW="$(cat "$PW_FILE")"
-KEY="$(npx convex env get AUTH_SERVER_KEY --prod)"
-[ -n "$PW" ] && [ -n "$KEY" ] || { echo "faltan secretos"; exit 1; }
+  [ -f "$PW_FILE" ] && [ "$(stat -c '%a' "$PW_FILE")" = 600 ] || { echo "PW_FILE ausente o no 600"; exit 1; }
+  PW="$(<"$PW_FILE")"                        # lectura builtin de bash (sin proceso externo)
+  KEY="$(npx convex env get AUTH_SERVER_KEY --prod)"
+  [ -n "$PW" ] && [ -n "$KEY" ] || { echo "faltan secretos"; exit 1; }
 
-# Evidencia inicial (ausencia = veto activo), por operación ESTRUCTURADA:
-npx convex env list --names-only --prod | grep -qx LOGIN_EMAIL_VETO \
-  && echo "inicial: LOGIN_EMAIL_VETO presente" || echo "inicial: LOGIN_EMAIL_VETO ausente (veto activo)"
+  # Evidencia inicial FAIL-CLOSED: un fallo de CLI NO se clasifica como ausencia.
+  names="$(npx convex env list --names-only --prod)" \
+    || { echo "env list falló: estado inicial indeterminado — abortar"; exit 1; }
+  if grep -qx LOGIN_EMAIL_VETO <<<"$names"; then
+    echo "inicial: LOGIN_EMAIL_VETO presente; valor=$(npx convex env get LOGIN_EMAIL_VETO --prod)"
+  else
+    echo "inicial: LOGIN_EMAIL_VETO ausente (veto activo)"
+  fi
 
-# Ejecutar; report (sin secretos) a fichero y CÓDIGO capturado de la MISMA ejecución:
-printf '%s\n%s\n' "$PW" "$KEY" | node scripts/login-verify/index.mjs --prod --confirm prod \
-  | tee "$SCRATCH/mis291-report.json"
-code=${PIPESTATUS[1]}
-echo "exit=$code commit=$(git rev-parse --short HEAD) deployment=greedy-tapir-20 ts=$(date -u +%FT%TZ)"
+  # Ejecutar; report (sin secretos) a fichero y CÓDIGO capturado de la MISMA ejecución:
+  printf '%s\n%s\n' "$PW" "$KEY" | node scripts/login-verify/index.mjs --prod --confirm prod \
+    | tee "$SCRATCH/mis291-report.json"
+  code=${PIPESTATUS[1]}
+  echo "exit=$code commit=$(git rev-parse --short HEAD) deployment=greedy-tapir-20 ts=$(date -u +%FT%TZ)"
+  # La evidencia posterior SOLO es válida si el ejecutor devolvió 0:
+  [ "$code" -eq 0 ] || { echo "ejecutor NO devolvió 0: evidencia posterior no válida"; exit "$code"; }
 
-# Estado final:
-npx convex env get LOGIN_EMAIL_VETO --prod
+  # Estado final:
+  echo "final: LOGIN_EMAIL_VETO=$(npx convex env get LOGIN_EMAIL_VETO --prod)"
+)
 ```
 
 El ejecutor, en una sola pasada (todo verificado y auditado en MIS-295):
@@ -115,7 +133,7 @@ esa misma ejecución**. Junto al report se registra el **sello de ejecución**:
 | Paso | Acción | Esperado | Resultado |
 |------|--------|----------|-----------|
 | Gate | `accountsPendingRotation()` prod | `[]` | ✅ `[]` |
-| Antes | `env get LOGIN_EMAIL_VETO` inicial | ausente (activo) | _pendiente_ |
+| Antes | `env list --names-only` (ausencia = activo) | ausente (activo) | _pendiente_ |
 | Ejecutor | `report` prueba 11 ANTES | `locked` | _pendiente_ |
 | Ejecutor | `report` prueba 11 DESPUÉS | `success` | _pendiente_ |
 | Ejecutor | `report` prueba 12 ROLLBACK | `locked` | _pendiente_ |
