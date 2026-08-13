@@ -3,16 +3,16 @@
 > Documento único para auditoría de código. Contiene el contenido ÍNTEGRO de los
 > ficheros de la entrega `CODIGO/MIS-295-ejecutor-seguro/`. Plan aprobado (GO): `PLANS/MIS-295-plan-ejecutor-seguro.md`.
 >
-> Verificado localmente: `node --test` → 23/23 pass · `eslint --no-ignore` → 0 problemas · `node --check` OK.
+> Verificado localmente: `node --test` → 29/29 pass · `eslint --no-ignore` → 0 problemas · `node --check` OK.
 >
 > Instalación tras el GO de código: copiar `core.mjs`, `index.mjs`, `core.test.mjs` a
-> `scripts/login-verify/` (byte a byte) y añadir a package.json `"test:unit": "node --test scripts/login-verify/"`.
+> `scripts/login-verify/` (byte a byte) y añadir a package.json `"test:unit": "node --test scripts/login-verify/*.test.mjs"`.
 
 ## Índice
 
 1. `core.mjs` — lógica pura (DI): runner/recuperación (M3), preflight fail-closed (B1/M1/M2), secuencia 11-12, finalState (M4), safeRecover, readVetoState focalizada (M5), parseArgs/resolveTarget (B1).
 2. `index.mjs` — entrypoint: adaptadores Convex HTTP + CLI, señales (130/143 vs 3), saneo de secretos, logout (M6).
-3. `core.test.mjs` — 23 tests con adaptadores falsos.
+3. `core.test.mjs` — 29 tests con adaptadores falsos.
 4. `README.md` — uso, códigos de salida, propiedades de seguridad y límites.
 
 ---
@@ -392,11 +392,13 @@ export async function resolveTarget(cli, opts) {
 // gestiona señales con recuperación única y sanea toda salida para que ningún
 // secreto (contraseña, AUTH_SERVER_KEY, token) aparezca en stdout/stderr/errores.
 //
-// Uso (desde la raíz del repo; secretos por STDIN, 2 líneas EXACTAS):
+// Uso (desde la raíz del repo; secretos por STDIN, 2 líneas EXACTAS: contraseña y
+// AUTH_SERVER_KEY). --prod NO admite --mode preview ni --email; en preview, la línea
+// 1 es la contraseña de la cuenta indicada por --email (por defecto carlos@test.local):
 //   printf '%s\n%s\n' "$PASSWORD" "$AUTH_SERVER_KEY" | \
-//     node index.mjs --prod --confirm prod [--mode prod|preview] [--email carlos@test.local]
-//   printf '%s\n%s\n' "$PASSWORD" "$AUTH_SERVER_KEY" | \
-//     node index.mjs --deployment <name> --confirm <name> --mode preview
+//     node index.mjs --prod --confirm prod
+//   printf '%s\n%s\n' "$PASSWORD_DE_LA_CUENTA" "$AUTH_SERVER_KEY" | \
+//     node index.mjs --deployment <name> --mode preview --confirm <name> [--email <cuenta>]
 //
 // Códigos de salida: 0 ok · 2 preflight abortó (sin efecto) · 1 alguna prueba falló ·
 // 130/143 recuperación OK tras SIGINT/SIGTERM · 3 recuperación fallida (intervención).
@@ -974,6 +976,14 @@ test("B1: resolveTarget deriva la URL del MISMO selector, sin URL suelta", async
   assert.equal(t.confirmToken, "greedy-tapir-20");
 });
 
+test("resolveTarget aborta (arranque → código 2) si no resuelve la URL", async () => {
+  const cli = async () => ({ code: 1, stdout: "", stderr: "no such deployment" });
+  await assert.rejects(
+    () => resolveTarget(cli, { selector: ["--deployment", "inexistente"], name: "inexistente", mode: "prod" }),
+    AbortError,
+  );
+});
+
 // --- Saneo de secretos -------------------------------------------------------
 test("makeSanitizer redacta contraseña, serverKey y token en cualquier salida", () => {
   const s = makeSanitizer(["P@ss-w0rd", "SRV-KEY-123", "TOKEN-SENTINEL-xyz"]);
@@ -1019,13 +1029,14 @@ preflight fail-closed, y recuperación verificada ante excepción y señales.
 
 Instalación (la hace MIS-295 tras el GO de código): copiar los tres a
 `scripts/login-verify/` **byte a byte**, y añadir a `package.json`:
-`"test:unit": "node --test scripts/login-verify/"`.
+`"test:unit": "node --test scripts/login-verify/*.test.mjs"`.
 
 ## Uso
 
 Desde la raíz del repo. Los secretos entran por **STDIN, exactamente 2 líneas**:
-línea 1 = contraseña de `carlos@test.local`; línea 2 = `AUTH_SERVER_KEY` del
-deployment. Nunca se pasan por `argv` ni se escriben a disco.
+línea 1 = contraseña de la cuenta bajo prueba (`carlos@test.local` en prod; la cuenta
+de `--email` en preview); línea 2 = `AUTH_SERVER_KEY` del deployment. Nunca se pasan
+por `argv` ni se escriben a disco.
 
 ```sh
 # Producción (MIS-291): exige --confirm prod
