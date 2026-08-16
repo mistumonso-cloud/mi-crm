@@ -20,6 +20,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           alignItems: "center",
           justifyContent: "space-between",
           gap: 12,
+          // MIS-298 (B3): permite que el grupo de botones baje de línea en
+          // pantallas estrechas (320px) en vez de desbordar horizontalmente.
+          flexWrap: "wrap",
           padding: "12px 16px",
           borderBottom: "1px solid var(--color-border)",
           background: "var(--color-surface)",
@@ -29,9 +32,10 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           <Avatar name={user.name} size="sm" />
           <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>{user.name}</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
           {/* MIS-298 (B3): rótulo SIN la subcadena "Cerrar sesión" para que el
-              selector por nombre accesible del botón de logout normal no colisione. */}
+              selector por nombre accesible del botón de logout normal no colisione.
+              flexWrap: los dos botones se apilan a 320px (sin desbordar). */}
           <form action={logoutAllAction}>
             <Button type="submit" variant="ghost" size="sm">
               Cerrar en todos los dispositivos

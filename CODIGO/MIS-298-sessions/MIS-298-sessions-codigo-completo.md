@@ -224,7 +224,17 @@ registra el resultado real tras codegen). Salida mecánica, no auditada a mano.
  import { getUser } from "@/lib/auth/dal";
  
  // Header superior (nombre + logout), común a toda la app. La navegación real
-@@ -29,11 +29,20 @@
+@@ -20,6 +20,9 @@
+           alignItems: "center",
+           justifyContent: "space-between",
+           gap: 12,
++          // MIS-298 (B3): permite que el grupo de botones baje de línea en
++          // pantallas estrechas (320px) en vez de desbordar horizontalmente.
++          flexWrap: "wrap",
+           padding: "12px 16px",
+           borderBottom: "1px solid var(--color-border)",
+           background: "var(--color-surface)",
+@@ -29,11 +32,21 @@
            <Avatar name={user.name} size="sm" />
            <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>{user.name}</span>
          </div>
@@ -233,9 +243,10 @@ registra el resultado real tras codegen). Salida mecánica, no auditada a mano.
 -            Cerrar sesión
 -          </Button>
 -        </form>
-+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
++        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
 +          {/* MIS-298 (B3): rótulo SIN la subcadena "Cerrar sesión" para que el
-+              selector por nombre accesible del botón de logout normal no colisione. */}
++              selector por nombre accesible del botón de logout normal no colisione.
++              flexWrap: los dos botones se apilan a 320px (sin desbordar). */}
 +          <form action={logoutAllAction}>
 +            <Button type="submit" variant="ghost" size="sm">
 +              Cerrar en todos los dispositivos
@@ -254,8 +265,15 @@ registra el resultado real tras codegen). Salida mecánica, no auditada a mano.
 > **Desviación justificada del rótulo (Media):** el plan proponía "Cerrar sesión en todos los
 > dispositivos", pero contiene la subcadena "Cerrar sesión", y `getByRole("button", { name: "Cerrar
 > sesión" })` (subcadena, usado en `session-cookie.spec.ts:56`) matchearía **dos** botones. Se usa
-> **"Cerrar en todos los dispositivos"** → cero colisión, sin tocar specs existentes. Alternativa
-> robusta descartada por más invasiva: conservar el copy y poner `{ exact: true }` en ambos specs.
+> **"Cerrar en todos los dispositivos"** → cero colisión, sin tocar specs existentes.
+>
+> **Fix de regresión cazada por CI (ronda 3):** la primera instalación (dos botones de texto sin
+> `flexWrap`) **desbordaba horizontalmente a 320px** — rompía los tests `edge-cases`/`panel-flow`
+> "no desborda horizontalmente en 320px" (`document.documentElement.scrollWidth === clientWidth`), que
+> aplican a TODA página bajo este layout. Fix: `flexWrap: "wrap"` en el header y en el contenedor de
+> botones → en pantallas estrechas los botones bajan/apilan en vez de desbordar (ningún botón individual
+> supera 320px). Verificado local: los 3 tests de 320px de `edge-cases` en verde. Sin cambio en desktop
+> (el wrap solo actúa cuando el contenido excede el ancho).
 
 ### 3.7 `e2e/helpers/test-support.ts`
 ```diff
@@ -489,6 +507,11 @@ CODIGO/MIS-298-sessions/src/lib/auth/actions.ts
 4. **Media** — toda la preparación con estado (inserciones) va **dentro del `try`**.
 5. **Baja** — `!Number.isFinite(args.ttlMs)` en `testInsertSession`; §5.2 con la ruta citada; wording
    de `_generated` como "podría" (se registra el resultado real de codegen).
+
+**Ronda 3 (regresión cazada por CI):** el segundo botón sin `flexWrap` desbordaba a 320px y rompía los
+tests de overflow horizontal (`edge-cases`/`panel-flow`). Único fichero tocado: `src/app/(app)/layout.tsx`
+(`flexWrap: "wrap"` en header + contenedor de botones). Detalle y verificación en la nota de §3.6. El
+resto de la entrega (lint 0 err, build OK, `chromium-secrets` 34/34) no cambia.
 
 ## 7. Verificación pendiente TRAS instalar byte-idéntico
 1. Copiar los 9 ficheros a su ruta (igualdad byte-a-byte).
