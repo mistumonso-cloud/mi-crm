@@ -48,20 +48,21 @@ Antes de ejecutar el **paso 6** (corte del ingress público) hay que cerrar M4 c
 
 ## Paso 0 — Preparación (sin tocar tráfico)
 
-**0.1 · Transform Rule (gate G0).** En Cloudflare → Rules → Transform Rules, localiza la regla que
-inyecta la cabecera **`X-Origin-Auth`**. Comprueba su **filtro**:
-- Si está acotada a `Host == mistu-monso.com`, **amplíala de forma limitada** a:
-  `Host in {mistu-monso.com, tunnel-canary.mistu-monso.com}`.
-- **No** la amplíes a toda la zona salvo que verifiques que ningún otro hostname proxied mandaría el
-  secreto a otro origen.
-- ⏳ Esta ampliación al canario se **revierte** en el checkpoint final del paso 6.
+**0.1 · Transform Rule (gate G0) — ✅ YA CONFIRMADO, NADA QUE HACER.** Verificado en el dashboard
+(2026-08-18): la regla **"MIS-288 origin auth"** (Rules → Overview → Request Header Transform Rules)
+dispara sobre **`All incoming requests`** — **sin filtro de host**. Por tanto inyecta `X-Origin-Auth`
+en toda petición que pasa por Cloudflare, incluido el canario `tunnel-canary.mistu-monso.com`.
+- **No hay que ampliar ni tocar la regla.** El canario queda auto-cubierto.
+- **No hay ampliación temporal que revertir** en el paso 6 (el checkpoint de limpieza de la TR se
+  vuelve un no-op).
+- ⚠️ La regla contiene el valor del secreto de origen. No exponerlo en capturas/logs compartidos.
 
-**0.2 · Captura del DNS actual (para G-Roll).** En Cloudflare → DNS, apunta el registro actual de
-`mistu-monso.com` **completo**: **tipo, nombre, destino/contenido, estado proxied (naranja/gris) y
-TTL**. Guárdalo (captura o texto). Es el valor exacto a restaurar en rollback.
+**0.2 · Captura del DNS actual (para G-Roll).** En Cloudflare → **DNS → Records**, apunta el registro
+actual de `mistu-monso.com` **completo**: **tipo, nombre, destino/contenido, estado proxied
+(naranja/gris) y TTL**. Guárdalo (captura o texto). Es el valor exacto a restaurar en rollback.
 > Manda esos datos aquí y los dejo registrados como evidencia G-Roll.
 
-- [ ] G0: filtro de la Transform Rule confirmado/ampliado al canario
+- [x] G0: Transform Rule confirmada `All incoming requests` (sin filtro de host) → canario auto-cubierto
 - [ ] DNS previo de `mistu-monso.com` capturado
 
 ---
@@ -191,7 +192,8 @@ healthcheck interno** `/api/health` (Railway lo sonda por red interna, no por Cl
 
 **Limpieza en este checkpoint final:**
 - Retirar el **hostname canario** `tunnel-canary.mistu-monso.com` del Tunnel.
-- **Revertir la ampliación temporal de la Transform Rule** (G0) al filtro original.
+- ~~Revertir la ampliación temporal de la Transform Rule (G0)~~ → **no aplica**: la regla nunca se
+  amplió (dispara sobre `All incoming requests`, ver paso 0.1). Nada que revertir.
 
 - [ ] Ingress público del servicio web eliminado (los 3 puntos)
 - [ ] G5: IP cruda y SNI ya no sirven; `*.up.railway.app` no enruta; Networking vacío
@@ -235,7 +237,7 @@ como origen) + G-Roll si además hay que devolver el DNS.
 
 | Gate | Inicio | Aprobado | Rollback | Notas / evidencia |
 |------|--------|----------|----------|-------------------|
-| G0 | | | | filtro Transform Rule |
+| G0 | 2026-08-18 | 2026-08-18 | — | ✅ TR "MIS-288 origin auth" = `All incoming requests`, sin filtro de host → canario auto-cubierto |
 | DNS previo | | | | tipo/nombre/destino/proxied/TTL |
 | G3 | | | | nº conectores HEALTHY |
 | G3-Fail | | | | (si Opción A) |
