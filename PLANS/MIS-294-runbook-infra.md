@@ -63,7 +63,7 @@ actual de `mistu-monso.com` **completo**: **tipo, nombre, destino/contenido, est
 > Manda esos datos aquí y los dejo registrados como evidencia G-Roll.
 
 - [x] G0: Transform Rule confirmada `All incoming requests` (sin filtro de host) → canario auto-cubierto
-- [ ] DNS previo de `mistu-monso.com` capturado
+- [x] DNS previo de `mistu-monso.com` capturado → CNAME `68d6ddbt.up.railway.app`, Proxied, TTL Auto
 
 ---
 
@@ -207,7 +207,20 @@ como origen) + G-Roll si además hay que devolver el DNS.
 
 ## G-Roll — rollback de DNS explícito
 
-- **Antes** (paso 0) queda registrado el DNS previo completo (tipo/nombre/destino/proxied/TTL).
+**Registro DNS previo capturado (2026-08-18) — valor exacto a restaurar:**
+
+| Campo | Valor |
+|-------|-------|
+| Type | `CNAME` |
+| Name | `mistu-monso.com` (apex) |
+| Content / Target | `68d6ddbt.up.railway.app` |
+| Proxy status | 🟠 Proxied |
+| TTL | Auto |
+
+> Resto de registros de la zona (MX `send`, TXT `_dmarc`/`_railway-verify`/`resend._domainkey`/SPF)
+> son de correo/verificación y **no se tocan** en esta operación. Solo cambia el apex.
+
+- **Antes** (paso 0) queda registrado el DNS previo completo (tipo/nombre/destino/proxied/TTL). ✅ hecho.
 - **Reversión:** en Cloudflare → DNS, retira el public hostname del Tunnel para `mistu-monso.com` y
   **restaura manualmente** el registro **exactamente** al valor capturado (no asumas que reaparece
   solo). **Fuente autoritativa del destino restaurado: el panel/API de Cloudflare** (`dig` solo como
@@ -238,7 +251,7 @@ como origen) + G-Roll si además hay que devolver el DNS.
 | Gate | Inicio | Aprobado | Rollback | Notas / evidencia |
 |------|--------|----------|----------|-------------------|
 | G0 | 2026-08-18 | 2026-08-18 | — | ✅ TR "MIS-288 origin auth" = `All incoming requests`, sin filtro de host → canario auto-cubierto |
-| DNS previo | | | | tipo/nombre/destino/proxied/TTL |
+| DNS previo | 2026-08-18 | 2026-08-18 | — | ✅ CNAME apex → `68d6ddbt.up.railway.app`, Proxied, TTL Auto |
 | G3 | | | | nº conectores HEALTHY |
 | G3-Fail | | | | (si Opción A) |
 | G4a | | | | curl canario + log conector |
