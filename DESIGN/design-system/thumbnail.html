@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="styles.css">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:1280px;height:854px;font-family:'Inter',system-ui,sans-serif}
+  .tile{width:1280px;height:854px;display:flex}
+  .main{flex:1;background:var(--color-accent);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:48px}
+  .main svg{width:220px;height:220px}
+  .name{font:700 92px/1 'Inter',system-ui;letter-spacing:-0.03em;color:#fff;text-align:center}
+  .name span{display:block;font-weight:500;font-size:44px;letter-spacing:0.02em;color:rgba(255,255,255,.7);margin-top:8px}
+  .strip{width:320px;display:flex;flex-direction:column}
+  .strip div{flex:1}
+</style>
+</head>
+<body>
+<div class="tile">
+  <div class="main">
+    <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg"><rect width="120" height="120" rx="28" fill="#fff"></rect><path d="M37 40 L60 82 L83 40" fill="none" stroke="#3B5266" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    <div class="name">Vibe Coder<span>CRM Design System</span></div>
+  </div>
+  <div class="strip">
+    <div style="background:var(--status-lead-bg)"></div>
+    <div style="background:var(--color-success)"></div>
+    <div style="background:var(--color-warning)"></div>
+    <div style="background:var(--color-danger)"></div>
+  </div>
+</div>
+</body>
+</html>
