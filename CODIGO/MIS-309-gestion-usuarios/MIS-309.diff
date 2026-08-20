@@ -1,0 +1,1763 @@
+diff --git a/convex/_generated/api.d.ts b/convex/_generated/api.d.ts
+index 3e3ea61..93e084a 100644
+--- a/convex/_generated/api.d.ts
++++ b/convex/_generated/api.d.ts
+@@ -24,6 +24,7 @@ import type * as notes from "../notes.js";
+ import type * as passwordReset from "../passwordReset.js";
+ import type * as reminders from "../reminders.js";
+ import type * as sales from "../sales.js";
++import type * as team from "../team.js";
+ import type * as testSupport from "../testSupport.js";
+ 
+ import type {
+@@ -49,6 +50,7 @@ declare const fullApi: ApiFromModules<{
+   passwordReset: typeof passwordReset;
+   reminders: typeof reminders;
+   sales: typeof sales;
++  team: typeof team;
+   testSupport: typeof testSupport;
+ }>;
+ 
+diff --git a/convex/auth.ts b/convex/auth.ts
+index 1e37d57..5d556e9 100644
+--- a/convex/auth.ts
++++ b/convex/auth.ts
+@@ -156,10 +156,16 @@ export const finalizeLogin = internalMutation({
+     // NO cambió entre la reserva y ahora (huella coincide). Si un
+     // resetPasswordWithTicket concurrente sustituyó el hash, la huella difiere y
+     // no se crea sesión — sin esto sería una regresión de la invariante de MIS-285.
++    // MIS-309: una cuenta desactivada (baja lógica) no puede iniciar sesión. La
++    // comprobación va al FINAL del `&&` para que el KDF/huella se calcule igual
++    // (el fingerprint ya se evaluó antes): un desactivado con contraseña
++    // correcta cae en el mismo GENERIC_ERROR que unas credenciales incorrectas,
++    // sin diferencia de timing ni de respuesta.
+     const success =
+       user !== null &&
+       args.ok &&
+-      fingerprintsEqual(await fingerprintHash(user.passwordHash), args.fingerprint);
++      fingerprintsEqual(await fingerprintHash(user.passwordHash), args.fingerprint) &&
++      user.deactivatedAt == null;
+ 
+     if (success) {
+       // Limpia las claves de email en el éxito y NUNCA la de IP: si un login
+@@ -315,6 +321,32 @@ export const loginWithGoogle = mutation({
+       .unique();
+     if (!user) return { success: false as const, error: GOOGLE_GENERIC_ERROR };
+ 
++    // MIS-309: una cuenta desactivada (baja lógica) no puede entrar por Google —
++    // mismo error genérico que "email no provisionado" (anti-enumeración).
++    if (user.deactivatedAt != null) {
++      return { success: false as const, error: GOOGLE_GENERIC_ERROR };
++    }
++
++    // MIS-309 (M3): un login con Google correctamente autenticado ES la
++    // aceptación de la invitación. Si la cuenta estaba "pendiente", se limpia
++    // invitePendingSince y se borran los códigos de recuperación no usados,
++    // ATÓMICAMENTE (misma mutation) y ANTES de crear la sesión. Así se sostiene
++    // la invariante "toda sesión válida ⇒ cuenta no pendiente": nadie obtiene
++    // sesión (ni permisos de supervisor) sin que el estado persistido, el badge
++    // y el cómputo de supervisores activos coincidan. El signup sigue cerrado:
++    // esta función solo autentica un email YA provisionado por la invitación de
++    // la propietaria, así que controlar ese email Google = ser el invitado
++    // previsto. Ver PLANS/MIS-309-gestion-usuarios.md §3.
++    if (user.invitePendingSince != null) {
++      await ctx.db.patch(user._id, { invitePendingSince: undefined });
++      for (const row of await ctx.db
++        .query("passwordResetCodes")
++        .withIndex("by_user", (q) => q.eq("userId", user._id))
++        .collect()) {
++        if (!row.usedAt) await ctx.db.delete(row._id);
++      }
++    }
++
+     const { token } = await createSession(ctx, user._id);
+     return { success: true as const, token, role: user.role };
+   },
+diff --git a/convex/lib/authz.ts b/convex/lib/authz.ts
+index 38d0c43..a220a4f 100644
+--- a/convex/lib/authz.ts
++++ b/convex/lib/authz.ts
+@@ -33,6 +33,12 @@ export async function lookupSessionUser(ctx: Ctx, token: string): Promise<Sessio
+   const user = await ctx.db.get(session.userId);
+   if (!user) return null;
+ 
++  // MIS-309: una cuenta desactivada (baja lógica) pierde el acceso al instante.
++  // Este es el punto ÚNICO por el que pasan todas las funciones autenticadas
++  // (requireUser/requireOwner), así que negar aquí expulsa al desactivado de
++  // cualquier request en curso sin tener que comprobarlo en cada call site.
++  if (user.deactivatedAt != null) return null;
++
+   return { id: user._id, name: user.name, role: user.role };
+ }
+ 
+@@ -42,6 +48,28 @@ export async function requireUser(ctx: Ctx, token: string): Promise<SessionUser>
+   return user;
+ }
+ 
++// MIS-309: guard de la capa de ADMINISTRACIÓN DE USUARIOS (convex/team.ts).
++// Reintroduce una comprobación de rol —el requireRole general se retiró en
++// MIS-251— pero ACOTADA a esta capa: no gobierna la escritura de datos del CRM
++// (contactos/notas/ventas), que sigue siendo igual para todos los roles. Marta
++// (`supervisor`) es la administradora; Carlos (`rep`) no.
++//
++// Lanza ConvexError con `data.code` ESTRUCTURADO para que las server actions
++// distingan sin ambigüedad (contrato M2 del plan):
++//   - UNAUTHENTICATED → no hay sesión válida (o cuenta desactivada) → /login.
++//   - FORBIDDEN       → autenticado pero sin permiso de admin → /.
++// No se delega en requireUser a propósito: requireUser lanza el string
++// "No autenticado" que otras funciones ya consumen tal cual; aquí se necesita
++// el objeto con `code`, así que se resuelve la sesión directamente.
++export async function requireOwner(ctx: Ctx, token: string): Promise<SessionUser> {
++  const user = await lookupSessionUser(ctx, token);
++  if (!user) throw new ConvexError({ code: "UNAUTHENTICATED", message: "No autenticado" });
++  if (user.role !== "supervisor") {
++    throw new ConvexError({ code: "FORBIDDEN", message: "No autorizado" });
++  }
++  return user;
++}
++
+ // MIS-251 (reapertura): se retira requireRole — llegó a exigir role==="rep"
+ // en createContact/updateContact/changeContactStatus/closeSale, pero esa
+ // distinción por rol se revierte por decisión de negocio (Marta conserva
+diff --git a/convex/lib/resend.ts b/convex/lib/resend.ts
+index 1be5142..24cb05c 100644
+--- a/convex/lib/resend.ts
++++ b/convex/lib/resend.ts
+@@ -97,6 +97,84 @@ export async function sendPasswordResetCodeEmail(
+   }
+ }
+ 
++// MIS-309: base pública de la app para el enlace de la invitación. Convex no
++// conoce la URL del sitio, así que se lee de una env var OPCIONAL con fallback
++// al dominio de producción — así el email siempre trae un enlace válido en prod
++// sin añadir una dependencia dura, y dev/test pueden sobreescribirlo.
++function getAppBaseUrl(): string {
++  return (process.env.APP_BASE_URL ?? "https://mistu-monso.com").replace(/\/+$/, "");
++}
++
++// MIS-309: email de invitación al equipo. NO transporta ningún secreto ni
++// código —el flujo de "Recuperar contraseña" ya emite su propio código de un
++// solo uso—: solo da la bienvenida y explica las dos vías de aceptación (crear
++// contraseña por "Recuperar contraseña", o entrar con Google con este email).
++// Molde y escape idénticos a passwordResetCodeHtml.
++function inviteHtml(name: string, recoverUrl: string): string {
++  const safeName = escapeHtml(name);
++  const safeUrl = escapeHtml(recoverUrl);
++  return `<!doctype html>
++<html lang="es">
++  <body style="margin:0;padding:0;background-color:#FAFAFA;font-family:'Inter',system-ui,Arial,sans-serif;">
++    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#FAFAFA;padding:32px 16px;">
++      <tr>
++        <td align="center">
++          <table role="presentation" width="100%" style="max-width:420px;background-color:#FFFFFF;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">
++            <tr>
++              <td style="background-color:#3B5266;padding:20px 24px;">
++                <span style="color:#FFFFFF;font-size:16px;font-weight:700;">Vibe Coder CRM</span>
++              </td>
++            </tr>
++            <tr>
++              <td style="padding:28px 24px;">
++                <p style="margin:0 0 8px;color:#1A1D24;font-size:15px;">Hola${safeName ? ` ${safeName}` : ""},</p>
++                <p style="margin:0 0 20px;color:#1A1D24;font-size:15px;">
++                  Te han dado acceso al CRM. Para entrar por primera vez, crea tu contraseña:
++                </p>
++                <div style="text-align:center;margin:0 0 20px;">
++                  <a href="${safeUrl}" style="display:inline-block;padding:12px 24px;border-radius:8px;background-color:#3B5266;color:#FFFFFF;font-size:15px;font-weight:600;text-decoration:none;">
++                    Crear mi contraseña
++                  </a>
++                </div>
++                <p style="margin:0 0 4px;color:#6B7280;font-size:13px;">
++                  Abre «Recuperar contraseña», escribe este email y sigue los pasos. Si el
++                  código no funciona, pide otro reenvío desde esa misma pantalla.
++                </p>
++                <p style="margin:0;color:#6B7280;font-size:13px;">
++                  También puedes entrar directamente con Google usando este mismo correo.
++                </p>
++              </td>
++            </tr>
++          </table>
++        </td>
++      </tr>
++    </table>
++  </body>
++</html>`;
++}
++
++// Como sendPasswordResetCodeEmail: los errores de Resend se relanzan SIN
++// destinatario ni cuerpo — solo el estado HTTP.
++export async function sendInviteEmail(to: string, name: string): Promise<void> {
++  const recoverUrl = `${getAppBaseUrl()}/recuperar-contrasena`;
++  const res = await fetch(RESEND_API_URL, {
++    method: "POST",
++    headers: {
++      Authorization: `Bearer ${getResendApiKey()}`,
++      "Content-Type": "application/json",
++    },
++    body: JSON.stringify({
++      from: getResendFrom(),
++      to,
++      subject: "Te damos acceso al CRM",
++      html: inviteHtml(name, recoverUrl),
++    }),
++  });
++  if (!res.ok) {
++    throw new Error(`Resend respondió ${res.status}`);
++  }
++}
++
+ // MIS-292 (M4): aviso de que la contraseña de la cuenta acaba de cambiar. No
+ // lleva ningún secreto ni enlace de acción — solo informa, para que un cambio no
+ // consentido (si un atacante llegara a completar el flujo de recuperación) deje
+diff --git a/convex/lib/testIdentity.ts b/convex/lib/testIdentity.ts
+index db5e6a9..d18b1be 100644
+--- a/convex/lib/testIdentity.ts
++++ b/convex/lib/testIdentity.ts
+@@ -34,3 +34,14 @@ export const TEST_LOGIN_IP = "203.0.113.42";
+ // sufijo. Ya normalizada (minúsculas, sin espacios): normalizeEmailKey la deja
+ // igual y emailWithinLimits da `false`.
+ export const OVERSIZED_TEST_EMAIL = `${"a".repeat(MAX_EMAIL_LENGTH + 1)}@oversized.test.local`;
++
++// MIS-309: familia de emails RESERVADA para las pruebas e2e de gestión de
++// usuarios (que sí crean cuentas, a diferencia del resto del harness). Extiende
++// el cerrojo 2 (identidad dedicada) a una familia: el harness solo puede BORRAR
++// usuarios cuyo email pertenezca a este dominio — nunca carlos@test.local, la
++// propietaria, la identidad dedicada de recuperación ni una cuenta real. El
++// dominio `.test.local` no es enrutable, así que jamás recibe correo real.
++export const TEAM_TEST_EMAIL_DOMAIN = "team-e2e.test.local";
++export function isTeamTestEmail(normalizedEmail: string): boolean {
++  return normalizedEmail.endsWith(`@${TEAM_TEST_EMAIL_DOMAIN}`);
++}
+diff --git a/convex/passwordReset.ts b/convex/passwordReset.ts
+index d7b3b9e..639880c 100644
+--- a/convex/passwordReset.ts
++++ b/convex/passwordReset.ts
+@@ -298,10 +298,14 @@ export const resetPasswordWithTicket = mutation({
+ 
+     // MIS-290 (I6): el marcador de política se escribe EN EL MISMO patch que el
+     // hash (atomicidad por la transacción): una cuenta rotada nunca queda sin versión.
++    // MIS-309: establecer la contraseña por ticket ES una de las dos vías de
++    // aceptar una invitación → se limpia invitePendingSince en el mismo patch.
++    // Para una cuenta no invitada el campo ya está ausente y esto es un no-op.
+     await ctx.db.patch(row.userId, {
+       passwordHash: await hashPassword(args.newPassword),
+       passwordPolicyVersion: CURRENT_PASSWORD_POLICY_VERSION,
+       passwordChangedAt: Date.now(),
++      invitePendingSince: undefined,
+     });
+     await ctx.db.patch(row._id, { usedAt: Date.now() });
+ 
+diff --git a/convex/schema.ts b/convex/schema.ts
+index 5e8d628..e134356 100644
+--- a/convex/schema.ts
++++ b/convex/schema.ts
+@@ -221,6 +221,19 @@ export default defineSchema({
+     // epoch ms del último cambio de contraseña. Telemetría (no lo consume nada
+     // hoy). Se escribe junto a passwordHash.
+     passwordChangedAt: v.optional(v.number()),
++    // MIS-309 (gestión de usuarios). Todos v.optional a propósito: su AUSENCIA
++    // es el estado por defecto de las cuentas sembradas (Carlos/Marta), así que
++    // no hace falta backfill. Ver PLANS/MIS-309-gestion-usuarios.md.
++    //   - deactivatedAt presente = baja lógica: lookupSessionUser la trata como
++    //     sesión inválida y el login la rechaza (bloquea acceso, reversible).
++    //   - invitePendingSince presente = invitación aún sin aceptar: no cuenta
++    //     como supervisor activo para el guard "último admin"; se limpia al
++    //     establecer la primera contraseña o al aceptar por Google.
++    //   - deactivatedBy / invitedBy: auditoría mínima (quién dio la baja / el alta).
++    deactivatedAt: v.optional(v.number()),
++    deactivatedBy: v.optional(v.id("users")),
++    invitedBy: v.optional(v.id("users")),
++    invitePendingSince: v.optional(v.number()),
+   }).index("by_email", ["email"]),
+ 
+   sessions: defineTable({
+diff --git a/convex/team.ts b/convex/team.ts
+new file mode 100644
+index 0000000..a91687d
+--- /dev/null
++++ b/convex/team.ts
+@@ -0,0 +1,326 @@
++// MIS-309: administración de usuarios ("Usuarios y equipo"). Superficie SOLO
++// para la propietaria (rol `supervisor`) — cada función pública empieza (o
++// delega en una internal que empieza) por `requireOwner`. No toca la escritura
++// de datos del CRM: es una capa de administración de USUARIOS aparte (ver
++// MIS-251 y PLANS/MIS-309-gestion-usuarios.md).
++//
++// Contrato de errores (M2 del plan): los fallos de AUTORIZACIÓN/SESIÓN se
++// LANZAN vía requireOwner (ConvexError con data.code UNAUTHENTICATED/FORBIDDEN);
++// los fallos de NEGOCIO (email duplicado, invitación ya pendiente, "último
++// admin", usuario inexistente) se DEVUELVEN como valor discriminado
++// { success:false, error, field?, code? } y NUNCA se lanzan. Así la server
++// action distingue "redirige a /login" de "muestra el error en /equipo".
++
++import { v } from "convex/values";
++import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
++import { internal } from "./_generated/api";
++import { requireOwner } from "./lib/authz";
++import { hashPassword } from "./lib/password";
++import { generateOpaqueToken } from "./lib/token";
++import { normalizeEmailKey, emailWithinLimits } from "./lib/rateLimit";
++import { CURRENT_PASSWORD_POLICY_VERSION } from "./lib/passwordPolicy";
++import { revokeAllUserSessions } from "./lib/session";
++import { sendInviteEmail } from "./lib/resend";
++
++const roleValidator = v.union(v.literal("rep"), v.literal("supervisor"));
++
++// Validador y tipo del fallo de negocio, compartidos por todas las funciones.
++const failValidator = v.object({
++  success: v.literal(false),
++  error: v.string(),
++  field: v.optional(v.string()),
++  code: v.optional(v.string()),
++});
++type BusinessFail = { success: false; error: string; field?: string; code?: string };
++
++// Tipos de retorno explícitos: rompen la inferencia circular entre las actions
++// (inviteUser/resendInvite) y las internal del MISMO módulo a las que llaman —
++// mismo motivo que LoginResult en convex/auth.ts.
++type CreateResult = { success: true; name: string; email: string } | BusinessFail;
++type ResendLookup = { success: true; name: string; email: string } | BusinessFail;
++type DeliverResult = { success: true; delivered: boolean } | BusinessFail;
++type SimpleResult = { success: true } | BusinessFail;
++
++const EMAIL_FORMAT = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
++const MAX_NAME_LENGTH = 120;
++
++// "Supervisor activo" = administradora que cuenta para el guard "último admin":
++// rol supervisor, sin baja lógica y sin invitación pendiente (una invitación sin
++// aceptar todavía no gobierna nada). Lee la tabla `users` completa a propósito:
++// ese read-set hace que dos operaciones concurrentes que puedan romper la
++// invariante entren en conflicto por OCC (la segunda se reejecuta y se rechaza).
++function isActiveSupervisor(u: {
++  role: "rep" | "supervisor";
++  deactivatedAt?: number;
++  invitePendingSince?: number;
++}): boolean {
++  return u.role === "supervisor" && u.deactivatedAt == null && u.invitePendingSince == null;
++}
++
++// ── Lista del equipo ────────────────────────────────────────────────────────
++// Nunca devuelve passwordHash (returns validator explícito, mismo criterio que
++// getSessionUser). El cliente deriva el badge de estado y marca "Tú".
++export const listTeam = query({
++  args: { token: v.string() },
++  returns: v.array(
++    v.object({
++      id: v.id("users"),
++      name: v.string(),
++      email: v.string(),
++      role: roleValidator,
++      deactivatedAt: v.optional(v.number()),
++      invitePendingSince: v.optional(v.number()),
++    }),
++  ),
++  handler: async (ctx, args) => {
++    await requireOwner(ctx, args.token);
++    const users = await ctx.db.query("users").collect();
++    return users
++      .slice()
++      .sort((a, b) => a._creationTime - b._creationTime)
++      .map((u) => ({
++        id: u._id,
++        name: u.name,
++        email: u.email,
++        role: u.role,
++        deactivatedAt: u.deactivatedAt,
++        invitePendingSince: u.invitePendingSince,
++      }));
++  },
++});
++
++// ── Invitar / dar de alta ───────────────────────────────────────────────────
++// internalMutation: hace el guard y la escritura ANTES de cualquier efecto
++// externo. La action (inviteUser) la llama primero y solo entonces envía el
++// email — así conoce el resultado de la entrega.
++export const createPendingUser = internalMutation({
++  args: { token: v.string(), name: v.string(), email: v.string(), role: roleValidator },
++  returns: v.union(
++    v.object({ success: v.literal(true), name: v.string(), email: v.string() }),
++    failValidator,
++  ),
++  handler: async (ctx, args): Promise<CreateResult> => {
++    const owner = await requireOwner(ctx, args.token);
++
++    const name = args.name.trim();
++    if (!name) return { success: false, error: "El nombre es obligatorio", field: "name" };
++    if (name.length > MAX_NAME_LENGTH) {
++      return { success: false, error: "El nombre es demasiado largo", field: "name" };
++    }
++
++    const emailKey = normalizeEmailKey(args.email);
++    if (!emailWithinLimits(emailKey) || !EMAIL_FORMAT.test(emailKey)) {
++      return { success: false, error: "Email no válido", field: "email" };
++    }
++
++    const existing = await ctx.db
++      .query("users")
++      .withIndex("by_email", (q) => q.eq("email", emailKey))
++      .unique();
++    if (existing) {
++      if (existing.invitePendingSince != null) {
++        return {
++          success: false,
++          code: "already_invited",
++          error: "Ya hay una invitación pendiente para ese email. Usa «Reenviar invitación».",
++          field: "email",
++        };
++      }
++      return { success: false, error: "Ya existe un usuario con ese email", field: "email" };
++    }
++
++    // Contraseña aleatoria INSERVIBLE: el invitado nunca la conoce; solo entra
++    // tras crear la suya (por "Recuperar contraseña") o por Google. passwordPolicy
++    // + passwordChangedAt se fijan como en seedUser para no quedar marcada como
++    // "pendiente de rotación".
++    await ctx.db.insert("users", {
++      name,
++      email: emailKey,
++      passwordHash: await hashPassword(generateOpaqueToken()),
++      role: args.role,
++      passwordPolicyVersion: CURRENT_PASSWORD_POLICY_VERSION,
++      passwordChangedAt: Date.now(),
++      invitedBy: owner.id,
++      invitePendingSince: Date.now(),
++    });
++
++    return { success: true, name, email: emailKey };
++  },
++});
++
++// Action pública: crea el usuario (guard dentro de la internal) y envía la
++// invitación. `delivered:false` = cuenta creada como "Invitación pendiente"
++// pero el email no salió → la UI ofrece "Reenviar invitación" (nunca promete
++// acceso garantizado por el mero hecho de crear la cuenta).
++export const inviteUser = action({
++  args: { token: v.string(), name: v.string(), email: v.string(), role: roleValidator },
++  returns: v.union(
++    v.object({ success: v.literal(true), delivered: v.boolean() }),
++    failValidator,
++  ),
++  handler: async (ctx, args): Promise<DeliverResult> => {
++    const res = await ctx.runMutation(internal.team.createPendingUser, {
++      token: args.token,
++      name: args.name,
++      email: args.email,
++      role: args.role,
++    });
++    if (!res.success) return res;
++
++    let delivered = true;
++    try {
++      await sendInviteEmail(res.email, res.name);
++    } catch (err) {
++      delivered = false;
++      console.error(
++        "inviteUser: fallo al enviar la invitación con Resend",
++        err instanceof Error ? err.message : err,
++      );
++    }
++    return { success: true, delivered };
++  },
++});
++
++// ── Reenviar invitación ─────────────────────────────────────────────────────
++// internalQuery: guard + comprobación de que la cuenta sigue invitable (pendiente
++// y no desactivada). "Idempotente" aquí se refiere al ESTADO PERSISTIDO —no se
++// crea otro usuario ni se muta nada—, no al efecto externo: cada reenvío manda
++// un email nuevo (dos reenvíos ⇒ dos correos). La invitación no transporta
++// secreto (el código lo emite el flujo de contraseña), así que no hay nada que
++// regenerar/serializar.
++export const pendingInviteeForResend = internalQuery({
++  args: { token: v.string(), userId: v.string() },
++  returns: v.union(
++    v.object({ success: v.literal(true), name: v.string(), email: v.string() }),
++    failValidator,
++  ),
++  handler: async (ctx, args): Promise<ResendLookup> => {
++    await requireOwner(ctx, args.token);
++    // v.string() + normalizeId: un id manipulado se resuelve a null de forma
++    // segura (mismo patrón que convex/contacts.ts) en vez de reventar el get.
++    const userId = ctx.db.normalizeId("users", args.userId);
++    if (!userId) return { success: false, error: "Usuario no encontrado" };
++    const target = await ctx.db.get(userId);
++    if (!target) return { success: false, error: "Usuario no encontrado" };
++    if (target.deactivatedAt != null) {
++      return { success: false, error: "Esa cuenta está desactivada" };
++    }
++    if (target.invitePendingSince == null) {
++      return { success: false, error: "Esa invitación ya no está pendiente" };
++    }
++    return { success: true, name: target.name, email: target.email };
++  },
++});
++
++export const resendInvite = action({
++  args: { token: v.string(), userId: v.string() },
++  returns: v.union(
++    v.object({ success: v.literal(true), delivered: v.boolean() }),
++    failValidator,
++  ),
++  handler: async (ctx, args): Promise<DeliverResult> => {
++    const res = await ctx.runQuery(internal.team.pendingInviteeForResend, {
++      token: args.token,
++      userId: args.userId,
++    });
++    if (!res.success) return res;
++
++    let delivered = true;
++    try {
++      await sendInviteEmail(res.email, res.name);
++    } catch (err) {
++      delivered = false;
++      console.error(
++        "resendInvite: fallo al reenviar la invitación con Resend",
++        err instanceof Error ? err.message : err,
++      );
++    }
++    return { success: true, delivered };
++  },
++});
++
++// ── Cambiar rol ─────────────────────────────────────────────────────────────
++export const changeUserRole = mutation({
++  args: { token: v.string(), userId: v.string(), role: roleValidator },
++  returns: v.union(v.object({ success: v.literal(true) }), failValidator),
++  handler: async (ctx, args): Promise<SimpleResult> => {
++    await requireOwner(ctx, args.token);
++
++    const userId = ctx.db.normalizeId("users", args.userId);
++    if (!userId) return { success: false, error: "Usuario no encontrado" };
++    const target = await ctx.db.get(userId);
++    if (!target) return { success: false, error: "Usuario no encontrado" };
++
++    // Guard "último admin": no dejar el CRM sin ninguna administradora activa.
++    // Se lee la tabla completa (read-set → serialización OCC frente a
++    // operaciones concurrentes que también afecten al conjunto de supervisores).
++    if (args.role === "rep" && isActiveSupervisor(target)) {
++      const users = await ctx.db.query("users").collect();
++      const otherActiveSupervisors = users.filter(
++        (u) => u._id !== target._id && isActiveSupervisor(u),
++      );
++      if (otherActiveSupervisors.length === 0) {
++        return {
++          success: false,
++          error: "No puedes dejar el CRM sin ninguna administradora",
++          field: "role",
++        };
++      }
++    }
++
++    if (target.role !== args.role) {
++      await ctx.db.patch(target._id, { role: args.role });
++    }
++    return { success: true };
++  },
++});
++
++// ── Desactivar / reactivar (baja lógica reversible) ─────────────────────────
++export const setUserActive = mutation({
++  args: { token: v.string(), userId: v.string(), active: v.boolean() },
++  returns: v.union(v.object({ success: v.literal(true) }), failValidator),
++  handler: async (ctx, args): Promise<SimpleResult> => {
++    const owner = await requireOwner(ctx, args.token);
++
++    const userId = ctx.db.normalizeId("users", args.userId);
++    if (!userId) return { success: false, error: "Usuario no encontrado" };
++    const target = await ctx.db.get(userId);
++    if (!target) return { success: false, error: "Usuario no encontrado" };
++
++    if (args.active === false) {
++      // Guard "último admin": no desactivar a la última administradora activa
++      // (cubre también "no puedes quitarte a ti misma el último rol admin").
++      if (isActiveSupervisor(target)) {
++        const users = await ctx.db.query("users").collect();
++        const otherActiveSupervisors = users.filter(
++          (u) => u._id !== target._id && isActiveSupervisor(u),
++        );
++        if (otherActiveSupervisors.length === 0) {
++          return {
++            success: false,
++            error: "No puedes desactivar a la última administradora",
++          };
++        }
++      }
++      if (target.deactivatedAt == null) {
++        await ctx.db.patch(target._id, {
++          deactivatedAt: Date.now(),
++          deactivatedBy: owner.id,
++        });
++        // Corta el acceso al instante: revoca todas sus sesiones abiertas.
++        await revokeAllUserSessions(ctx, target._id);
++      }
++      return { success: true };
++    }
++
++    // Reactivar: se limpia la baja. NO se toca passwordHash — el usuario vuelve
++    // a entrar con la contraseña que ya tenía (decisión consciente del plan).
++    if (target.deactivatedAt != null) {
++      await ctx.db.patch(target._id, {
++        deactivatedAt: undefined,
++        deactivatedBy: undefined,
++      });
++    }
++    return { success: true };
++  },
++});
+diff --git a/convex/testSupport.ts b/convex/testSupport.ts
+index 3baac8c..220b6b2 100644
+--- a/convex/testSupport.ts
++++ b/convex/testSupport.ts
+@@ -38,6 +38,7 @@ import {
+   SEED_TEST_EMAIL,
+   TEST_LOGIN_IP,
+   TEST_SUPPORT_ENV_VAR,
++  isTeamTestEmail,
+ } from "./lib/testIdentity";
+ 
+ const FORBIDDEN_IDENTITY = "Identidad no permitida";
+@@ -366,6 +367,41 @@ export const testDeleteIdentity = mutation({
+   },
+ });
+ 
++// MIS-309: limpieza de los usuarios que crean las pruebas e2e de gestión de
++// usuarios. Cerrojo 1 (serverKey, fail-closed) + cerrojo 2 ACOTADO a la familia
++// team-e2e (isTeamTestEmail): NUNCA puede borrar carlos@test.local, la
++// propietaria, la identidad dedicada de recuperación ni una cuenta real —
++// cualquier email fuera del dominio reservado lanza FORBIDDEN_IDENTITY. Borra
++// también sus sesiones y códigos de recuperación para no dejar filas huérfanas.
++export const deleteTeamTestUser = mutation({
++  args: { serverKey: v.string(), email: v.string() },
++  returns: v.null(),
++  handler: async (ctx, args) => {
++    assertTestKey(args.serverKey);
++    const key = normalizeEmailKey(args.email);
++    if (!isTeamTestEmail(key)) throw new Error(FORBIDDEN_IDENTITY);
++    const user = await ctx.db
++      .query("users")
++      .withIndex("by_email", (q) => q.eq("email", key))
++      .unique();
++    if (!user) return null;
++    for (const s of await ctx.db
++      .query("sessions")
++      .withIndex("by_user", (q) => q.eq("userId", user._id))
++      .collect()) {
++      await ctx.db.delete(s._id);
++    }
++    for (const c of await ctx.db
++      .query("passwordResetCodes")
++      .withIndex("by_user", (q) => q.eq("userId", user._id))
++      .collect()) {
++      await ctx.db.delete(c._id);
++    }
++    await ctx.db.delete(user._id);
++    return null;
++  },
++});
++
+ // MIS-290 (M4): limpia la identidad de seed (seedUser lanza si ya existe). Solo
+ // toca SEED_TEST_EMAIL; la llama testSeedFlow antes y después.
+ export const deleteSeedUser = internalMutation({
+diff --git a/e2e/helpers/test-support.ts b/e2e/helpers/test-support.ts
+index ca79441..115b787 100644
+--- a/e2e/helpers/test-support.ts
++++ b/e2e/helpers/test-support.ts
+@@ -208,4 +208,20 @@ export async function countCurrentPasswordChangedNotices(): Promise<number> {
+   });
+ }
+ 
++// MIS-309: helpers de las pruebas e2e de gestión de usuarios. teamTestEmail
++// genera un email único de la familia RESERVADA (dominio team-e2e.test.local, no
++// enrutable). deleteTeamTestUser limpia ese usuario tras el test — el harness
++// solo puede borrar emails de esa familia (convex/testSupport.ts::deleteTeamTestUser).
++export function teamTestEmail(label: string): string {
++  const suffix = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
++  return `e2e-${label}-${suffix}@team-e2e.test.local`;
++}
++
++export async function deleteTeamTestUser(email: string): Promise<void> {
++  await convexClient().mutation(api.testSupport.deleteTeamTestUser, {
++    serverKey: testSupportKey(),
++    email,
++  });
++}
++
+ export { RESET_TEST_EMAIL, TEST_LOGIN_IP, OVERSIZED_TEST_EMAIL, MAX_EMAIL_LENGTH };
+diff --git a/e2e/team-admin.spec.ts b/e2e/team-admin.spec.ts
+new file mode 100644
+index 0000000..e03b9df
+--- /dev/null
++++ b/e2e/team-admin.spec.ts
+@@ -0,0 +1,268 @@
++import { test, expect } from "@playwright/test";
++import { ConvexError } from "convex/values";
++import { convexClient, sessionTokenFrom, api } from "./helpers/convex-client";
++import { teamTestEmail, deleteTeamTestUser } from "./helpers/test-support";
++
++// MIS-309: gestión de usuarios ("Usuarios y equipo"). Corre bajo el project
++// chromium-marta (storageState de Marta = supervisor). Las aserciones de backend
++// van por el cliente Convex directo con el token REAL de Marta (mismo patrón que
++// role-gating.spec.ts); las de UI, por la página.
++//
++// Cobertura DETERMINISTA (ver PLANS/MIS-309-gestion-usuarios.md y el
++// codigo-completo.md): contrato de errores M2, guard "último admin",
++// normalización de email, recuperación de invitación (M1, backend) y gates de
++// navegación. M3 (aceptación por Google), el aviso de reenvío fallido en UI (M4)
++// y "reactivar conserva contraseña" se verifican por lectura + manual (limitación
++// del harness: outbox de la identidad dedicada, sin secreto de Google en test).
++//
++// Un supervisor "activo" = supervisor sin baja y sin invitación pendiente.
++function activeSupervisors<T extends { role: "rep" | "supervisor"; deactivatedAt?: number; invitePendingSince?: number }>(
++  team: T[],
++): T[] {
++  return team.filter((u) => u.role === "supervisor" && u.deactivatedAt == null && u.invitePendingSince == null);
++}
++
++test.describe("MIS-309 · gestión de usuarios (backend, como Marta)", () => {
++  test("listTeam: Marta autorizada; token inválido → UNAUTHENTICATED; sin passwordHash", async ({
++    context,
++  }) => {
++    const client = convexClient();
++    const martaToken = await sessionTokenFrom(context);
++
++    const team = await client.query(api.team.listTeam, { token: martaToken });
++    expect(Array.isArray(team)).toBe(true);
++    expect(team.length).toBeGreaterThanOrEqual(1);
++    for (const u of team) {
++      expect(u).not.toHaveProperty("passwordHash");
++      expect(typeof u.email).toBe("string");
++    }
++
++    // Token inválido → requireOwner lanza ConvexError con code UNAUTHENTICATED (M2).
++    const err = await client.query(api.team.listTeam, { token: "token-invalido" }).catch((e) => e);
++    expect(err).toBeInstanceOf(ConvexError);
++    expect((err as ConvexError<{ code?: string }>).data?.code).toBe("UNAUTHENTICATED");
++  });
++
++  test("inviteUser: los errores de negocio se DEVUELVEN, no se lanzan (M2 + normalización)", async ({
++    context,
++  }) => {
++    const client = convexClient();
++    const martaToken = await sessionTokenFrom(context);
++
++    // Email inválido → { success:false, field:"email" } (devuelto, no lanzado).
++    const bad = await client.action(api.team.inviteUser, {
++      token: martaToken,
++      name: "Nombre",
++      email: "no-es-un-email",
++      role: "rep",
++    });
++    expect(bad.success).toBe(false);
++    if (!bad.success) expect(bad.field).toBe("email");
++
++    // Email ya existente (Carlos), en MAYÚSCULAS → normaliza y detecta duplicado.
++    const carlosEmail = process.env.E2E_CARLOS_EMAIL;
++    if (carlosEmail) {
++      const dup = await client.action(api.team.inviteUser, {
++        token: martaToken,
++        name: "Nombre",
++        email: carlosEmail.toUpperCase(),
++        role: "rep",
++      });
++      expect(dup.success).toBe(false);
++    }
++  });
++
++  test("guard 'último admin': no se puede bajar de rol ni desactivar a la única supervisora", async ({
++    context,
++  }) => {
++    const client = convexClient();
++    const martaToken = await sessionTokenFrom(context);
++
++    const team = await client.query(api.team.listTeam, { token: martaToken });
++    const supers = activeSupervisors(team);
++    // El entorno de test tiene exactamente una supervisora activa (Marta).
++    expect(supers.length).toBe(1);
++    const marta = supers[0];
++
++    const demote = await client.mutation(api.team.changeUserRole, {
++      token: martaToken,
++      userId: marta.id,
++      role: "rep",
++    });
++    expect(demote.success).toBe(false);
++
++    const deactivate = await client.mutation(api.team.setUserActive, {
++      token: martaToken,
++      userId: marta.id,
++      active: false,
++    });
++    expect(deactivate.success).toBe(false);
++
++    // Sigue intacta: supervisora y activa.
++    const after = await client.query(api.team.listTeam, { token: martaToken });
++    const martaAfter = after.find((u) => u.id === marta.id);
++    expect(martaAfter?.role).toBe("supervisor");
++    expect(martaAfter?.deactivatedAt == null).toBe(true);
++  });
++
++  test("invitación recuperable: invitar → pendiente → reenviar sin duplicar (M1)", async ({
++    context,
++  }) => {
++    const client = convexClient();
++    const martaToken = await sessionTokenFrom(context);
++    const email = teamTestEmail("m1");
++    try {
++      const inv = await client.action(api.team.inviteUser, {
++        token: martaToken,
++        name: "Laura E2E",
++        email,
++        role: "rep",
++      });
++      expect(inv.success).toBe(true); // `delivered` puede ser true/false según Resend; no se asume
++
++      // Aparece como invitación pendiente.
++      let team = await client.query(api.team.listTeam, { token: martaToken });
++      const row = team.find((u) => u.email === email);
++      expect(row).toBeTruthy();
++      expect(row!.invitePendingSince != null).toBe(true);
++      expect(row!.deactivatedAt == null).toBe(true);
++
++      // Reinvitar el mismo email → already_invited (NO crea otro usuario).
++      const dup = await client.action(api.team.inviteUser, {
++        token: martaToken,
++        name: "Otra vez",
++        email,
++        role: "rep",
++      });
++      expect(dup.success).toBe(false);
++      if (!dup.success) expect(dup.code).toBe("already_invited");
++
++      // Reenviar → ok, sin crear otro usuario.
++      const re = await client.action(api.team.resendInvite, { token: martaToken, userId: row!.id });
++      expect(re.success).toBe(true);
++      team = await client.query(api.team.listTeam, { token: martaToken });
++      expect(team.filter((u) => u.email === email).length).toBe(1);
++
++      // Reenviar a un id inexistente → rechazado (devuelto).
++      const reBad = await client.action(api.team.resendInvite, {
++        token: martaToken,
++        userId: "id-que-no-existe",
++      });
++      expect(reBad.success).toBe(false);
++    } finally {
++      await deleteTeamTestUser(email);
++    }
++  });
++
++  test("cambiar rol y baja lógica reversible sobre un usuario normal (estado)", async ({ context }) => {
++    const client = convexClient();
++    const martaToken = await sessionTokenFrom(context);
++    const email = teamTestEmail("state");
++    try {
++      await client.action(api.team.inviteUser, {
++        token: martaToken,
++        name: "Temporal E2E",
++        email,
++        role: "rep",
++      });
++      let team = await client.query(api.team.listTeam, { token: martaToken });
++      const id = team.find((u) => u.email === email)!.id;
++
++      // Cambiar rol rep → supervisor (permitido; sigue pendiente, no cuenta como admin activo).
++      const rc = await client.mutation(api.team.changeUserRole, {
++        token: martaToken,
++        userId: id,
++        role: "supervisor",
++      });
++      expect(rc.success).toBe(true);
++      team = await client.query(api.team.listTeam, { token: martaToken });
++      expect(team.find((u) => u.id === id)!.role).toBe("supervisor");
++
++      // Desactivar (no es supervisora activa: está pendiente) → permitido.
++      const d = await client.mutation(api.team.setUserActive, {
++        token: martaToken,
++        userId: id,
++        active: false,
++      });
++      expect(d.success).toBe(true);
++      team = await client.query(api.team.listTeam, { token: martaToken });
++      expect(team.find((u) => u.id === id)!.deactivatedAt != null).toBe(true);
++
++      // Reactivar → se limpia la baja.
++      const r = await client.mutation(api.team.setUserActive, {
++        token: martaToken,
++        userId: id,
++        active: true,
++      });
++      expect(r.success).toBe(true);
++      team = await client.query(api.team.listTeam, { token: martaToken });
++      expect(team.find((u) => u.id === id)!.deactivatedAt == null).toBe(true);
++    } finally {
++      await deleteTeamTestUser(email);
++    }
++  });
++  test("concurrencia (OCC): dos invitaciones simultáneas del mismo email no duplican", async ({
++    context,
++  }) => {
++    const client = convexClient();
++    const martaToken = await sessionTokenFrom(context);
++    const email = teamTestEmail("race");
++    try {
++      // Dos createPendingUser en paralelo: ambas leen el índice by_email (vacío) e
++      // intentan insertar. Convex serializa por OCC — la segunda se reejecuta,
++      // encuentra la fila ya creada y devuelve already_invited. Exactamente una gana.
++      const [a, b] = await Promise.all([
++        client.action(api.team.inviteUser, { token: martaToken, name: "A", email, role: "rep" }),
++        client.action(api.team.inviteUser, { token: martaToken, name: "B", email, role: "rep" }),
++      ]);
++      const successes = [a, b].filter((r) => r.success).length;
++      expect(successes).toBe(1);
++      const team = await client.query(api.team.listTeam, { token: martaToken });
++      expect(team.filter((u) => u.email === email).length).toBe(1);
++    } finally {
++      await deleteTeamTestUser(email);
++    }
++  });
++
++  // Concurrencia del "último supervisor" (desactivar A y degradar B a la vez): NO
++  // se automatiza aquí porque la driver de estas pruebas (Marta) es SIEMPRE una
++  // supervisora activa, así que el invariante "≥1 admin activo" no puede romperse
++  // en este entorno y no habría nada que observar. Queda REGISTRADA como gate
++  // pre-PR razonado: el guard lee el conjunto completo de supervisores
++  // (convex/team.ts::changeUserRole/setUserActive) y Convex serializa por OCC dos
++  // mutaciones que comparten ese read-set (la segunda se reejecuta contra el
++  // estado ya actualizado y su guard la rechaza). La carrera de dedupe de arriba
++  // ejercita esa MISMA serialización OCC sobre el módulo team.
++  test.skip("concurrencia último supervisor: gate pre-PR razonado (ver comentario)", () => {});
++});
++
++test.describe("MIS-309 · navegación y contrato UI (como Marta)", () => {
++  test("Panel muestra 'Usuarios y equipo' y lleva a /equipo", async ({ page }) => {
++    await page.goto("/panel");
++    const card = page.getByRole("link", { name: /Usuarios y equipo/ });
++    await expect(card).toBeVisible();
++    await card.click();
++    await expect(page).toHaveURL(/\/equipo$/);
++    await expect(page.getByRole("heading", { name: "Usuarios y equipo" })).toBeVisible();
++    await expect(page.getByRole("button", { name: /Invitar usuario/ })).toBeVisible();
++  });
++
++  test("un error de negocio (email duplicado) permanece en /equipo, sin logout (M2, UI)", async ({
++    page,
++  }) => {
++    const carlosEmail = process.env.E2E_CARLOS_EMAIL;
++    test.skip(!carlosEmail, "Falta E2E_CARLOS_EMAIL para el caso de email duplicado");
++
++    await page.goto("/equipo");
++    await page.getByRole("button", { name: /Invitar usuario/ }).click();
++    const dialog = page.getByRole("dialog", { name: "Invitar usuario" });
++    await dialog.locator('input[name="name"]').fill("Duplicado E2E");
++    await dialog.locator('input[name="email"]').fill(carlosEmail!);
++    await dialog.getByRole("button", { name: /Enviar invitación/ }).click();
++
++    // El error de negocio vuelve como estado visible: permanece en /equipo (no
++    // redirige a /login ni a /) y muestra el mensaje. Contrato M2 end-to-end.
++    await expect(dialog.getByText(/Ya existe un usuario/i)).toBeVisible();
++    await expect(page).toHaveURL(/\/equipo$/);
++  });
++});
+diff --git a/e2e/team-gating-carlos.spec.ts b/e2e/team-gating-carlos.spec.ts
+new file mode 100644
+index 0000000..870d3cc
+--- /dev/null
++++ b/e2e/team-gating-carlos.spec.ts
+@@ -0,0 +1,46 @@
++import { test, expect } from "@playwright/test";
++import { ConvexError } from "convex/values";
++import { convexClient, sessionTokenFrom, api } from "./helpers/convex-client";
++
++// MIS-309: Carlos (rol `rep`) NO administra usuarios. Corre bajo chromium-carlos
++// (storageState de Carlos). Comprueba el gate de navegación (UI) y, sobre todo,
++// que la autorización REAL vive en Convex: aunque alguien saltara la UI,
++// requireOwner rechaza a Carlos con FORBIDDEN (M2).
++test.describe("MIS-309 · Carlos no administra usuarios", () => {
++  test("/equipo no es accesible para Carlos y el Panel no ofrece administración (UI)", async ({
++    page,
++  }) => {
++    // El server component de /equipo hace redirect("/") si no es supervisor. No
++    // se fija el destino EXACTO del dispatcher (evita acoplarse a /pendientes vs
++    // /panel): lo que importa es que Carlos NO ve la pantalla de administración.
++    await page.goto("/equipo");
++    await expect(page).not.toHaveURL(/\/equipo$/);
++    await expect(page.getByRole("heading", { name: "Usuarios y equipo" })).toHaveCount(0);
++    await expect(page.getByRole("button", { name: /Invitar usuario/ })).toHaveCount(0);
++
++    await page.goto("/panel");
++    await expect(page.getByRole("link", { name: /Usuarios y equipo/ })).toHaveCount(0);
++  });
++
++  test("las funciones de team rechazan a Carlos con FORBIDDEN (backend, M2)", async ({ context }) => {
++    const client = convexClient();
++    const carlosToken = await sessionTokenFrom(context);
++
++    const err = await client.query(api.team.listTeam, { token: carlosToken }).catch((e) => e);
++    expect(err).toBeInstanceOf(ConvexError);
++    expect((err as ConvexError<{ code?: string }>).data?.code).toBe("FORBIDDEN");
++
++    // Una mutation de admin también: inviteUser es action → igualmente pasa por
++    // requireOwner en su internalMutation y lanza FORBIDDEN antes de cualquier efecto.
++    const err2 = await client
++      .action(api.team.inviteUser, {
++        token: carlosToken,
++        name: "X",
++        email: "x@team-e2e.test.local",
++        role: "rep",
++      })
++      .catch((e) => e);
++    expect(err2).toBeInstanceOf(ConvexError);
++    expect((err2 as ConvexError<{ code?: string }>).data?.code).toBe("FORBIDDEN");
++  });
++});
+diff --git a/playwright.config.ts b/playwright.config.ts
+index cb1f8aa..577e033 100644
+--- a/playwright.config.ts
++++ b/playwright.config.ts
+@@ -48,13 +48,13 @@ export default defineConfig({
+ 
+     {
+       name: "chromium-carlos",
+-      testMatch: ["full-flow.spec.ts", "edge-cases.spec.ts"],
++      testMatch: ["full-flow.spec.ts", "edge-cases.spec.ts", "team-gating-carlos.spec.ts"],
+       use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/carlos.json" },
+       dependencies: ["setup-carlos"],
+     },
+     {
+       name: "chromium-marta",
+-      testMatch: ["panel-flow.spec.ts", "role-gating.spec.ts", "realtime-panel.spec.ts"],
++      testMatch: ["panel-flow.spec.ts", "role-gating.spec.ts", "realtime-panel.spec.ts", "team-admin.spec.ts"],
+       use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/marta.json" },
+       // Depende de AMBOS setups: los specs de Marta siembran datos como
+       // Carlos vía carlosTokenFromDisk() (lee e2e/.auth/carlos.json del
+diff --git a/src/app/(app)/(with-nav)/panel/page.tsx b/src/app/(app)/(with-nav)/panel/page.tsx
+index 3a57829..aeb29de 100644
+--- a/src/app/(app)/(with-nav)/panel/page.tsx
++++ b/src/app/(app)/(with-nav)/panel/page.tsx
+@@ -133,6 +133,36 @@ export default async function PanelPage() {
+           </Card>
+         </Link>
+       </section>
++
++      {/* MIS-309: acceso a la administración de usuarios, SOLO para la
++          propietaria (rol supervisor). Carlos (rep) también ve el Panel desde
++          el ADR de MIS-18, así que la entrada se gatea por rol aquí — y la
++          pantalla /equipo y las funciones de Convex la vuelven a gatear
++          (defensa en profundidad; la autoridad real es requireOwner). */}
++      {user.role === "supervisor" && (
++        <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
++          <h2 style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>Administración</h2>
++          <Link href="/equipo" style={{ textDecoration: "none", color: "inherit", display: "block" }}>
++            <Card
++              interactive
++              padding="md"
++              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}
++            >
++              <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
++                <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>
++                  Usuarios y equipo
++                </span>
++                <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
++                  Gestiona quién tiene acceso al CRM
++                </span>
++              </div>
++              <span aria-hidden="true" style={{ fontSize: 20, color: "var(--text-tertiary)" }}>
++                ›
++              </span>
++            </Card>
++          </Link>
++        </section>
++      )}
+     </div>
+   );
+ }
+diff --git a/src/app/(app)/equipo/InviteUserForm.tsx b/src/app/(app)/equipo/InviteUserForm.tsx
+new file mode 100644
+index 0000000..5bf04fb
+--- /dev/null
++++ b/src/app/(app)/equipo/InviteUserForm.tsx
+@@ -0,0 +1,96 @@
++"use client";
++
++import { useActionState, useEffect, useRef } from "react";
++import { Button } from "@/components/ui/core/Button";
++import { Input } from "@/components/ui/forms/Input";
++import { Select } from "@/components/ui/forms/Select";
++import { inviteUserAction, type InviteUserState } from "@/lib/team/actions";
++
++const initialState: InviteUserState = undefined;
++
++// MIS-309: alta por invitación. Mismo patrón progresivo que NewContactForm
++// (useActionState + <form action>; `disabled` solo por isPending, nunca por
++// estado derivado de cliente). En éxito, eleva el resultado al contenedor
++// (onResult) ANTES de cerrar el sheet, para que el aviso de `delivered:false`
++// (email no enviado) viva en la página y no se pierda al desmontarse el sheet.
++export function InviteUserForm({
++  onDone,
++  onResult,
++}: {
++  onDone: () => void;
++  onResult: (state: { delivered: boolean }) => void;
++}) {
++  const [state, formAction, isPending] = useActionState(inviteUserAction, initialState);
++  // Consumo único: BottomSheet desmonta a sus hijos al cerrar, así que este ref
++  // se reinicia en cada apertura; evita procesar el mismo éxito dos veces dentro
++  // de un mismo montaje.
++  const handledRef = useRef(false);
++
++  useEffect(() => {
++    if (state?.success && !handledRef.current) {
++      handledRef.current = true;
++      onResult({ delivered: state.delivered });
++      onDone();
++    }
++  }, [state, onResult, onDone]);
++
++  return (
++    <form action={formAction} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
++      <Input
++        label="Nombre"
++        name="name"
++        placeholder="Nombre y apellido"
++        autoFocus
++        autoComplete="name"
++        required
++        maxLength={120}
++        disabled={isPending}
++        error={state && !state.success && state.field === "name" ? state.error : null}
++      />
++      <Input
++        label="Email"
++        name="email"
++        type="email"
++        placeholder="correo@ejemplo.com"
++        autoComplete="email"
++        required
++        maxLength={254}
++        disabled={isPending}
++        error={state && !state.success && state.field === "email" ? state.error : null}
++      />
++      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
++        <Select
++          label="Rol"
++          name="role"
++          options={[
++            { value: "rep", label: "Comercial" },
++            { value: "supervisor", label: "Propietaria" },
++          ]}
++          defaultValue="rep"
++          disabled={isPending}
++        />
++        {state && !state.success && state.field === "role" && (
++          <span style={{ fontSize: 12, color: "var(--color-danger-fg)" }}>{state.error}</span>
++        )}
++      </div>
++
++      <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: 0 }}>
++        Recibirá un email para establecer su contraseña. También podrá entrar con Google con ese
++        correo.
++      </p>
++
++      {state && !state.success && !state.field && (
++        <div role="alert" style={{ fontSize: 13, color: "var(--color-danger-fg)" }}>
++          {state.error}
++        </div>
++      )}
++
++      <Button type="submit" full size="lg" disabled={isPending}>
++        {isPending ? "Enviando…" : "Enviar invitación"}
++      </Button>
++      <Button type="button" variant="ghost" full onClick={onDone} disabled={isPending}>
++        Cancelar
++      </Button>
++    </form>
++  );
++}
+diff --git a/src/app/(app)/equipo/TeamView.tsx b/src/app/(app)/equipo/TeamView.tsx
+new file mode 100644
+index 0000000..08938a6
+--- /dev/null
++++ b/src/app/(app)/equipo/TeamView.tsx
+@@ -0,0 +1,346 @@
++"use client";
++
++import { useActionState, useEffect, useRef, useState } from "react";
++import type { FunctionReturnType } from "convex/server";
++import type { api } from "../../../../convex/_generated/api";
++import { Avatar } from "@/components/ui/core/Avatar";
++import { Badge } from "@/components/ui/feedback/Badge";
++import { Button } from "@/components/ui/core/Button";
++import { Card } from "@/components/ui/core/Card";
++import { BottomSheet } from "@/components/ui/overlays/BottomSheet";
++import { InviteUserForm } from "./InviteUserForm";
++import {
++  changeRoleAction,
++  setUserActiveAction,
++  resendInviteAction,
++  type ChangeRoleState,
++  type SetUserActiveState,
++  type ResendInviteState,
++} from "@/lib/team/actions";
++
++type TeamMember = FunctionReturnType<typeof api.team.listTeam>[number];
++
++// Un supervisor "activo" cuenta para el guard "último admin": rol supervisor,
++// sin baja y sin invitación pendiente. Espejo EXACTO de isActiveSupervisor en
++// convex/team.ts — aquí es SOLO para deshabilitar visualmente; la autoridad
++// real es el guard del servidor.
++function isActiveSupervisor(u: TeamMember): boolean {
++  return u.role === "supervisor" && u.deactivatedAt == null && u.invitePendingSince == null;
++}
++
++function statusBadge(u: TeamMember) {
++  if (u.deactivatedAt != null) return <Badge tone="neutral">Inactivo</Badge>;
++  if (u.invitePendingSince != null) return <Badge tone="warning">Invitación pendiente</Badge>;
++  return <Badge tone="success">Activo</Badge>;
++}
++
++function roleBadge(u: TeamMember) {
++  return u.role === "supervisor" ? (
++    <Badge tone="accent">Propietaria</Badge>
++  ) : (
++    <Badge tone="neutral">Comercial</Badge>
++  );
++}
++
++export function TeamView({
++  team,
++  currentUserId,
++}: {
++  team: TeamMember[];
++  currentUserId: string;
++}) {
++  const [inviteOpen, setInviteOpen] = useState(false);
++  const [actionsUserId, setActionsUserId] = useState<string | null>(null);
++  const [notice, setNotice] = useState<{ tone: "success" | "warning"; text: string } | null>(null);
++
++  const selected = team.find((u) => u.id === actionsUserId) ?? null;
++  const activeSupervisorCount = team.filter(isActiveSupervisor).length;
++
++  return (
++    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
++      <Button type="button" full size="lg" onClick={() => setInviteOpen(true)}>
++        + Invitar usuario
++      </Button>
++
++      {notice && (
++        <Card
++          padding="md"
++          // Un fallo (warning) se anuncia con role="alert" (más urgente para
++          // lectores de pantalla); una confirmación (success), con role="status".
++          role={notice.tone === "warning" ? "alert" : "status"}
++          style={{ background: `var(--color-${notice.tone}-bg)`, display: "flex", flexDirection: "column", gap: 4 }}
++        >
++          <p style={{ fontSize: 13, color: `var(--color-${notice.tone}-fg)`, margin: 0 }}>{notice.text}</p>
++        </Card>
++      )}
++
++      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
++        {team.map((u) => (
++          <Card key={u.id} padding="md" style={{ display: "flex", alignItems: "center", gap: 12 }}>
++            <Avatar name={u.name} />
++            <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0, flex: 1 }}>
++              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
++                <span
++                  style={{
++                    fontSize: 15,
++                    fontWeight: 600,
++                    color: "var(--text-primary)",
++                    overflow: "hidden",
++                    textOverflow: "ellipsis",
++                    whiteSpace: "nowrap",
++                  }}
++                >
++                  {u.name}
++                </span>
++                {u.id === currentUserId && (
++                  <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)" }}>Tú</span>
++                )}
++              </div>
++              <span
++                style={{
++                  fontSize: 13,
++                  color: "var(--text-secondary)",
++                  overflow: "hidden",
++                  textOverflow: "ellipsis",
++                  whiteSpace: "nowrap",
++                }}
++              >
++                {u.email}
++              </span>
++              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
++                {roleBadge(u)}
++                {statusBadge(u)}
++              </div>
++            </div>
++            <button
++              type="button"
++              aria-label={`Acciones de ${u.name}`}
++              onClick={() => setActionsUserId(u.id)}
++              style={{
++                border: "none",
++                background: "none",
++                cursor: "pointer",
++                padding: 8,
++                fontSize: 20,
++                lineHeight: 1,
++                color: "var(--text-tertiary)",
++                borderRadius: "var(--radius-md)",
++                flexShrink: 0,
++              }}
++            >
++              ⋯
++            </button>
++          </Card>
++        ))}
++      </div>
++
++      <BottomSheet open={inviteOpen} onClose={() => setInviteOpen(false)} title="Invitar usuario">
++        <InviteUserForm
++          onDone={() => setInviteOpen(false)}
++          onResult={({ delivered }) =>
++            setNotice(
++              delivered
++                ? { tone: "success", text: "Invitación enviada." }
++                : {
++                    tone: "warning",
++                    text: "Usuario creado como «Invitación pendiente», pero el email no se pudo enviar. Usa «Reenviar invitación» en su ficha.",
++                  },
++            )
++          }
++        />
++      </BottomSheet>
++
++      <BottomSheet
++        open={selected != null}
++        onClose={() => setActionsUserId(null)}
++        title={selected?.name}
++      >
++        {selected && (
++          <UserActions
++            user={selected}
++            isLastActiveSupervisor={isActiveSupervisor(selected) && activeSupervisorCount === 1}
++            isSelf={selected.id === currentUserId}
++            onResult={(n) => setNotice(n)}
++            onDone={() => setActionsUserId(null)}
++          />
++        )}
++      </BottomSheet>
++    </div>
++  );
++}
++
++const changeRoleInitial: ChangeRoleState = undefined;
++const setActiveInitial: SetUserActiveState = undefined;
++const resendInitial: ResendInviteState = undefined;
++
++function UserActions({
++  user,
++  isLastActiveSupervisor,
++  isSelf,
++  onResult,
++  onDone,
++}: {
++  user: TeamMember;
++  isLastActiveSupervisor: boolean;
++  isSelf: boolean;
++  onResult: (n: { tone: "success" | "warning"; text: string } | null) => void;
++  onDone: () => void;
++}) {
++  const [roleState, roleAction, rolePending] = useActionState(changeRoleAction, changeRoleInitial);
++  const [activeState, activeAction, activePending] = useActionState(
++    setUserActiveAction,
++    setActiveInitial,
++  );
++  const [resendState, resendAction, resendPending] = useActionState(resendInviteAction, resendInitial);
++  const [confirmingDeactivate, setConfirmingDeactivate] = useState(false);
++  // Consumo ÚNICO de un resultado con éxito: aunque BottomSheet desmonta a sus
++  // hijos al cerrar (`if (!open) return null` en BottomSheet.jsx, así que este
++  // ref se reinicia en cada apertura), este cerrojo evita procesar dos veces el
++  // mismo estado dentro de un mismo montaje.
++  const handledRef = useRef(false);
++
++  // Cambiar rol / (des)activar con éxito cierra la hoja: el refresh() del
++  // servidor ya ha actualizado la lista antes de que el estado llegue a `success`.
++  // Al completar, se LIMPIA cualquier aviso previo (invitación/reenvío) para que
++  // no quede colgando un mensaje de una operación anterior.
++  useEffect(() => {
++    if ((roleState?.success || activeState?.success) && !handledRef.current) {
++      handledRef.current = true;
++      onResult(null);
++      onDone();
++    }
++  }, [roleState, activeState, onResult, onDone]);
++
++  // M4: el reenvío NO se trata como éxito silencioso. Se consume `delivered`
++  // ANTES de cerrar y se eleva un aviso persistente a /equipo — un reenvío que
++  // no salió (delivered:false) deja señal visible (la fila sigue pendiente, que
++  // por sí sola no distingue "no entregado" de "aún sin aceptar").
++  useEffect(() => {
++    if (resendState?.success && !handledRef.current) {
++      handledRef.current = true;
++      onResult(
++        resendState.delivered
++          ? { tone: "success", text: `Invitación reenviada a ${user.name}.` }
++          : {
++              tone: "warning",
++              text: `No se pudo reenviar la invitación a ${user.name}. Vuelve a intentarlo.`,
++            },
++      );
++      onDone();
++    }
++  }, [resendState, onResult, onDone, user.name]);
++
++  const pending = rolePending || activePending || resendPending;
++  const nextRole = user.role === "supervisor" ? "rep" : "supervisor";
++  const nextRoleLabel = nextRole === "rep" ? "Hacer Comercial" : "Hacer Propietaria";
++  const isDeactivated = user.deactivatedAt != null;
++  const isPendingInvite = user.invitePendingSince != null;
++
++  const errorText =
++    (roleState && !roleState.success && roleState.error) ||
++    (activeState && !activeState.success && activeState.error) ||
++    (resendState && !resendState.success && resendState.error) ||
++    null;
++
++  return (
++    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
++      {isPendingInvite && !isDeactivated && (
++        <form action={resendAction}>
++          <input type="hidden" name="userId" value={user.id} />
++          <Button type="submit" variant="secondary" full disabled={pending} style={{ justifyContent: "flex-start" }}>
++            Reenviar invitación
++          </Button>
++        </form>
++      )}
++
++      {/* Cambiar rol. Bajar a Comercial al último supervisor activo va
++          deshabilitado (reflejo visual; el guard real está en el servidor). */}
++      <form action={roleAction}>
++        <input type="hidden" name="userId" value={user.id} />
++        <input type="hidden" name="role" value={nextRole} />
++        <Button
++          type="submit"
++          variant="secondary"
++          full
++          disabled={pending || (nextRole === "rep" && isLastActiveSupervisor)}
++          style={{ justifyContent: "flex-start" }}
++        >
++          {nextRoleLabel}
++        </Button>
++      </form>
++
++      {/* Desactivar / reactivar. */}
++      {isDeactivated ? (
++        <form action={activeAction}>
++          <input type="hidden" name="userId" value={user.id} />
++          <Button
++            type="submit"
++            name="active"
++            value="true"
++            variant="secondary"
++            full
++            disabled={pending}
++            style={{ justifyContent: "flex-start" }}
++          >
++            Reactivar acceso
++          </Button>
++        </form>
++      ) : confirmingDeactivate ? (
++        <Card padding="md" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
++          <p style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
++            ¿Quitar el acceso a {user.name}?
++          </p>
++          <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: 0 }}>
++            {isSelf
++              ? "Perderás el acceso al CRM. Podrás recuperarlo solo si otra administradora te reactiva."
++              : "No podrá entrar al CRM. Podrás reactivarle más adelante."}
++          </p>
++          <div style={{ display: "flex", gap: 8 }}>
++            <Button
++              type="button"
++              variant="ghost"
++              full
++              onClick={() => setConfirmingDeactivate(false)}
++              disabled={pending}
++            >
++              Cancelar
++            </Button>
++            <form action={activeAction} style={{ flex: 1 }}>
++              <input type="hidden" name="userId" value={user.id} />
++              <Button type="submit" name="active" value="false" variant="danger" full disabled={pending}>
++                Quitar acceso
++              </Button>
++            </form>
++          </div>
++        </Card>
++      ) : (
++        <Button
++          type="button"
++          variant="danger"
++          full
++          onClick={() => setConfirmingDeactivate(true)}
++          disabled={pending || isLastActiveSupervisor}
++          style={{ justifyContent: "flex-start" }}
++        >
++          Quitar acceso
++        </Button>
++      )}
++
++      {isLastActiveSupervisor && !isDeactivated && (
++        <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: 0 }}>
++          Es la única administradora activa: no puede quedarse el CRM sin administración.
++        </p>
++      )}
++
++      {errorText && (
++        <div role="alert" style={{ fontSize: 13, color: "var(--color-danger-fg)" }}>
++          {errorText}
++        </div>
++      )}
++
++      <Button type="button" variant="ghost" full onClick={onDone} disabled={pending}>
++        Cerrar
++      </Button>
++    </div>
++  );
++}
+diff --git a/src/app/(app)/equipo/page.tsx b/src/app/(app)/equipo/page.tsx
+new file mode 100644
+index 0000000..d3bed8c
+--- /dev/null
++++ b/src/app/(app)/equipo/page.tsx
+@@ -0,0 +1,48 @@
++import Link from "next/link";
++import { redirect } from "next/navigation";
++import { fetchQuery } from "convex/nextjs";
++import { api } from "../../../../convex/_generated/api";
++import { getUser } from "@/lib/auth/dal";
++import { readSessionToken } from "@/lib/auth/cookie";
++import { TeamView } from "./TeamView";
++
++// MIS-309: pantalla de administración de usuarios ("Usuarios y equipo"). Vive
++// FUERA de (with-nav) —pantalla completa, como contactos/nuevo—: se llega desde
++// una tarjeta del Panel visible solo para la propietaria, no desde una pestaña.
++//
++// El gate de rol aquí es defensa en profundidad para la NAVEGACIÓN (evita
++// renderizar la pantalla a Carlos): la autorización real vive en Convex
++// (requireOwner en cada función de team.ts), que es lo que impide de verdad
++// administrar usuarios aunque alguien llame directamente al endpoint.
++export default async function EquipoPage() {
++  const user = await getUser();
++  if (user.role !== "supervisor") redirect("/");
++
++  const token = await readSessionToken(); // getUser() ya garantiza sesión válida aquí
++  const team = await fetchQuery(api.team.listTeam, { token: token! });
++
++  return (
++    <div className="flex flex-1 flex-col" style={{ padding: "16px 20px 32px" }}>
++      <Link
++        href="/panel"
++        style={{
++          fontSize: 14,
++          fontWeight: 600,
++          color: "var(--color-accent)",
++          textDecoration: "none",
++          alignSelf: "flex-start",
++          marginBottom: 16,
++        }}
++      >
++        ‹ Volver al panel
++      </Link>
++      <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
++        Usuarios y equipo
++      </h1>
++      <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: "4px 0 20px" }}>
++        Gestiona quién tiene acceso al CRM
++      </p>
++      <TeamView team={team} currentUserId={user.id} />
++    </div>
++  );
++}
+diff --git a/src/lib/team/actions.ts b/src/lib/team/actions.ts
+new file mode 100644
+index 0000000..aefb6e4
+--- /dev/null
++++ b/src/lib/team/actions.ts
+@@ -0,0 +1,179 @@
++"use server";
++
++import { ConvexError } from "convex/values";
++import { redirect } from "next/navigation";
++import { refresh } from "next/cache";
++import { fetchAction, fetchMutation } from "convex/nextjs";
++import { api } from "../../../convex/_generated/api";
++import { readSessionToken } from "@/lib/auth/cookie";
++
++// MIS-309: server actions de "Usuarios y equipo". Espejo endurecido del patrón
++// de src/lib/contacts/actions.ts, con el CONTRATO DE ERRORES del plan (M2):
++//
++//   - requireOwner (en convex/team.ts) LANZA ConvexError con data.code:
++//       · FORBIDDEN → autenticada pero sin permiso de admin → redirect("/").
++//       · UNAUTHENTICATED (o cualquier otra ConvexError de sesión) → /login.
++//   - Los errores de NEGOCIO (duplicado, "ya invitado", último admin, usuario
++//     inexistente, validación) NO se lanzan: vuelven como { success:false,... }
++//     y se devuelven al formulario → permanece en /equipo y muestra el mensaje.
++//
++// Solo una sesión ausente/ inválida saca de la pantalla; ningún error de negocio
++// provoca logout.
++
++const TEAM_ROLES = ["rep", "supervisor"] as const;
++type TeamRole = (typeof TEAM_ROLES)[number];
++type TeamField = "name" | "email" | "role";
++
++// Traducción centralizada de una ConvexError lanzada por requireOwner a un
++// redirect. No retorna: siempre redirige. Los errores no-ConvexError se
++// relanzan al error boundary desde el call site.
++function redirectForAuthError(err: unknown): never {
++  if (err instanceof ConvexError) {
++    const data = err.data as { code?: string } | string | undefined;
++    const code = typeof data === "object" && data ? data.code : undefined;
++    if (code === "FORBIDDEN") redirect("/");
++    if (code === "UNAUTHENTICATED") redirect("/login");
++    // ConvexError inesperada: team.* solo lanza esos dos códigos (vía
++    // requireOwner), así que cualquier otra ConvexError NO es pérdida de sesión
++    // y no debe enmascararse como logout — se relanza al error boundary (M2 estricto).
++  }
++  throw err;
++}
++
++export type InviteUserState =
++  | { success: true; delivered: boolean }
++  | { success: false; error: string; field?: TeamField }
++  | undefined;
++
++export async function inviteUserAction(
++  _prevState: InviteUserState,
++  formData: FormData,
++): Promise<InviteUserState> {
++  const token = await readSessionToken();
++  if (!token) redirect("/login");
++
++  const name = String(formData.get("name") ?? "");
++  const email = String(formData.get("email") ?? "");
++
++  // Validado contra el enum ANTES de llamar a Convex — mismo patrón que el
++  // "channel"/"status" de contacts/actions.ts (hasOwnProperty/includes, no `in`).
++  const roleRaw = String(formData.get("role") ?? "");
++  if (!TEAM_ROLES.includes(roleRaw as TeamRole)) {
++    return { success: false, error: "Rol inválido", field: "role" };
++  }
++  const role = roleRaw as TeamRole;
++
++  let result;
++  try {
++    result = await fetchAction(api.team.inviteUser, { token, name, email, role });
++  } catch (err) {
++    redirectForAuthError(err);
++  }
++
++  if (!result.success) {
++    return { success: false, error: result.error, field: result.field as TeamField | undefined };
++  }
++
++  refresh(); // Next 16: re-renderiza /equipo (lista actualizada) en la misma respuesta
++  return { success: true, delivered: result.delivered };
++}
++
++export type ChangeRoleState =
++  | { success: true }
++  | { success: false; error: string }
++  | undefined;
++
++export async function changeRoleAction(
++  _prevState: ChangeRoleState,
++  formData: FormData,
++): Promise<ChangeRoleState> {
++  const token = await readSessionToken();
++  if (!token) redirect("/login");
++
++  const userId = String(formData.get("userId") ?? "");
++  const roleRaw = String(formData.get("role") ?? "");
++  if (!TEAM_ROLES.includes(roleRaw as TeamRole)) {
++    return { success: false, error: "Rol inválido" };
++  }
++  const role = roleRaw as TeamRole;
++
++  let result;
++  try {
++    result = await fetchMutation(api.team.changeUserRole, { token, userId, role });
++  } catch (err) {
++    redirectForAuthError(err);
++  }
++
++  if (!result.success) {
++    return { success: false, error: result.error };
++  }
++
++  refresh();
++  return { success: true };
++}
++
++export type SetUserActiveState =
++  | { success: true }
++  | { success: false; error: string }
++  | undefined;
++
++export async function setUserActiveAction(
++  _prevState: SetUserActiveState,
++  formData: FormData,
++): Promise<SetUserActiveState> {
++  const token = await readSessionToken();
++  if (!token) redirect("/login");
++
++  const userId = String(formData.get("userId") ?? "");
++  // Llega como "true"/"false" desde un <button type="submit" name="active" value=…>.
++  // Se valida EXACTAMENTE: un valor ausente o manipulado NO debe interpretarse
++  // como "false" (la operación destructiva) por defecto.
++  const activeRaw = String(formData.get("active") ?? "");
++  if (activeRaw !== "true" && activeRaw !== "false") {
++    return { success: false, error: "Acción inválida" };
++  }
++  const active = activeRaw === "true";
++
++  let result;
++  try {
++    result = await fetchMutation(api.team.setUserActive, { token, userId, active });
++  } catch (err) {
++    redirectForAuthError(err);
++  }
++
++  if (!result.success) {
++    return { success: false, error: result.error };
++  }
++
++  refresh();
++  return { success: true };
++}
++
++export type ResendInviteState =
++  | { success: true; delivered: boolean }
++  | { success: false; error: string }
++  | undefined;
++
++export async function resendInviteAction(
++  _prevState: ResendInviteState,
++  formData: FormData,
++): Promise<ResendInviteState> {
++  const token = await readSessionToken();
++  if (!token) redirect("/login");
++
++  const userId = String(formData.get("userId") ?? "");
++
++  let result;
++  try {
++    result = await fetchAction(api.team.resendInvite, { token, userId });
++  } catch (err) {
++    redirectForAuthError(err);
++  }
++
++  if (!result.success) {
++    return { success: false, error: result.error };
++  }
++
++  refresh();
++  return { success: true, delivered: result.delivered };
++}

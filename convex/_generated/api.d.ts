@@ -24,6 +24,7 @@ import type * as notes from "../notes.js";
 import type * as passwordReset from "../passwordReset.js";
 import type * as reminders from "../reminders.js";
 import type * as sales from "../sales.js";
+import type * as team from "../team.js";
 import type * as testSupport from "../testSupport.js";
 
 import type {
@@ -49,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   passwordReset: typeof passwordReset;
   reminders: typeof reminders;
   sales: typeof sales;
+  team: typeof team;
   testSupport: typeof testSupport;
 }>;
 
