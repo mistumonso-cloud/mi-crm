@@ -128,28 +128,23 @@
       </button>
 
       <button
-        style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 0; background:none; border:none; cursor:pointer; color:#9CA3AF; transition:color .15s;"
-        style-hover="color:#6B7280;">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-        <span style="font:500 11px/1 'Inter',system-ui;">Panel</span>
-      </button>
-
-      <button
         style="flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 0; background:none; border:none; cursor:pointer; color:#3B5266; transition:opacity .15s;"
         style-hover="opacity:0.75;">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-        <span style="font:600 11px/1 'Inter',system-ui;">Ventas</span>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span style="font:600 11px/1 'Inter',system-ui;">Panel</span>
       </button>
 
     </div>
 
-    <!-- FAB -->
-    <button
-      style="position:absolute; bottom:84px; right:16px; width:52px; height:52px; border-radius:999px; background:#3B5266; color:#fff; border:none; cursor:pointer; font:300 26px/1 'Inter',system-ui; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 12px rgba(59,82,102,.35); transition:background .15s, transform .1s;"
-      style-hover="background:#2E4252;"
-      style-active="transform:scale(0.94); background:#233442;">
-      +
-    </button>
+    <!-- FAB (solo visible para Carlos) -->
+    <sc-if value="{{ showFab }}" hint-placeholder-val="{{ true }}">
+      <button
+        style="position:absolute; bottom:84px; right:16px; width:52px; height:52px; border-radius:999px; background:#3B5266; color:#fff; border:none; cursor:pointer; font:300 26px/1 'Inter',system-ui; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 12px rgba(59,82,102,.35); transition:background .15s, transform .1s;"
+        style-hover="background:#2E4252;"
+        style-active="transform:scale(0.94); background:#233442;">
+        +
+      </button>
+    </sc-if>
 
   </div>
 </div>
@@ -161,6 +156,12 @@
     &quot;options&quot;: [&quot;list&quot;, &quot;empty&quot;],
     &quot;default&quot;: &quot;list&quot;,
     &quot;section&quot;: &quot;Estado de demo&quot;
+  },
+  &quot;role&quot;: {
+    &quot;editor&quot;: &quot;enum&quot;,
+    &quot;options&quot;: [&quot;carlos&quot;, &quot;marta&quot;],
+    &quot;default&quot;: &quot;carlos&quot;,
+    &quot;section&quot;: &quot;Rol (FAB solo para Carlos)&quot;
   }
 }">
 class Component extends DCLogic {
@@ -175,6 +176,8 @@ class Component extends DCLogic {
   renderVals() {
     const period = this.state.period;
     const forceEmpty = this.props.demoState === 'empty';
+    // Rol: Marta (propietaria) solo consulta -> sin FAB. Carlos sí puede crear.
+    const showFab = (this.props.role ?? 'carlos') === 'carlos';
 
     const PERIODS = [
       { id: 'month',   label: 'Mes',       range: 'Julio 2026' },
@@ -252,6 +255,7 @@ class Component extends DCLogic {
       sales,
       isEmpty,
       notEmpty: !isEmpty,
+      showFab,
     };
   }
 }

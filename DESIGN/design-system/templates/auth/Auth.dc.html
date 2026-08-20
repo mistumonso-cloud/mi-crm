@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="Acceso (identifier-first)" description="Flujo de acceso en 4 pasos: email → contraseña (usuario existente) o código OTP → crear contraseña (usuario nuevo). Sin registro público. Móvil primero." -->
+<helmet>
+  <script src="./ds-base.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    input { font-family: 'Inter', system-ui, sans-serif; }
+    input:focus { outline: none; }
+  </style>
+</helmet>
+
+<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; background:#E5E7EB;">
+  <div style="width:375px; height:812px; background:#FFFFFF; border-radius:40px; box-shadow:0 8px 24px rgba(16,24,40,.12), 0 32px 64px rgba(16,24,40,.16); overflow:hidden; position:relative; display:flex; flex-direction:column;">
+
+    <!-- Status bar -->
+    <div style="height:44px; display:flex; align-items:center; justify-content:space-between; padding:0 24px; flex-shrink:0;">
+      <span style="font:600 14px/1 'Inter',system-ui; color:#1A1D24;">9:41</span>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <svg width="16" height="12" viewBox="0 0 16 12" fill="#1A1D24"><rect x="0" y="4" width="3" height="8" rx="1"/><rect x="4.5" y="2.5" width="3" height="9.5" rx="1"/><rect x="9" y="0.5" width="3" height="11.5" rx="1"/><rect x="13.5" y="0" width="2.5" height="12" rx="1"/></svg>
+        <svg width="20" height="12" viewBox="0 0 20 12" fill="none"><rect x=".75" y=".75" width="17" height="10.5" rx="2.25" stroke="#1A1D24" stroke-width="1.5"/><rect x="18.25" y="3.5" width="1.25" height="5" rx=".625" fill="#1A1D24"/><rect x="2" y="2" width="12" height="8" rx="1.5" fill="#1A1D24"/></svg>
+      </div>
+    </div>
+
+    <!-- Barra de paso (solo pasos 2-4) -->
+    <div style="height:48px; display:flex; align-items:center; padding:0 12px; flex-shrink:0;">
+      <sc-if value="{{ canGoBack }}" hint-placeholder-val="{{ false }}">
+        <button
+          onClick="{{ goBack }}"
+          style="width:40px; height:40px; border:none; background:none; cursor:pointer; display:flex; align-items:center; justify-content:center; border-radius:999px; color:#374151; transition:background .15s;"
+          style-hover="background:#F3F4F6;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+      </sc-if>
+    </div>
+
+    <div style="flex:1; overflow-y:auto; padding:12px 28px 32px; display:flex; flex-direction:column;">
+
+      <!-- ============ A1 · Paso 1 — Email ============ -->
+      <sc-if value="{{ isStepEmail }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex; flex-direction:column; gap:44px;">
+
+          <div style="display:flex; flex-direction:column; align-items:center; gap:18px; text-align:center; padding-top:24px;">
+            <div style="width:56px; height:56px; background:#3B5266; border-radius:14px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+              <svg width="28" height="28" viewBox="0 0 26 26" fill="none"><path d="M5.5 8h15M5.5 13h9.5M5.5 18h12" stroke="white" stroke-width="2.2" stroke-linecap="round"/></svg>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:9px; align-items:center;">
+              <h1 style="font:700 24px/1.2 'Inter',system-ui; color:#1A1D24; letter-spacing:-0.025em;">CRM</h1>
+              <p style="font:400 14px/1.55 'Inter',system-ui; color:#6B7280; max-width:248px;">Entra con tu correo de trabajo para acceder a tus contactos y ventas</p>
+            </div>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:14px;">
+            <div style="display:flex; flex-direction:column; gap:7px;">
+              <label style="font:600 13px/1 'Inter',system-ui; color:#374151;">Email</label>
+              <input
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                placeholder="tucorreo@empresa.com"
+                value="{{ email }}"
+                onChange="{{ onEmail }}"
+                style="width:100%; height:50px; padding:0 14px; background:#fff; border:1.5px solid #D1D5DB; border-radius:10px; font:400 15px/1 'Inter',system-ui; color:#1A1D24; transition:border-color .15s, box-shadow .15s;"
+                style-focus="border-color:#3B5266; box-shadow:0 0 0 3px rgba(59,82,102,.12);">
+            </div>
+
+            <sc-if value="{{ showEmailError }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex; align-items:flex-start; gap:8px;">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style="flex-shrink:0; margin-top:2px;"><circle cx="8" cy="8" r="6.5" stroke="#B91C1C" stroke-width="1.5"/><path d="M8 4.5v4" stroke="#B91C1C" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="10.75" r=".85" fill="#B91C1C"/></svg>
+                <span style="font:400 13px/1.45 'Inter',system-ui; color:#B91C1C;">{{ emailErrorText }}</span>
+              </div>
+            </sc-if>
+
+            <button
+              onClick="{{ submitEmail }}"
+              style="width:100%; height:50px; margin-top:6px; background:#3B5266; color:#fff; border:none; border-radius:10px; font:600 15px/1 'Inter',system-ui; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .15s, transform .1s;"
+              style-hover="background:#2E4252;"
+              style-active="transform:scale(0.98); background:#233442;">
+              Continuar
+            </button>
+
+            <p style="font:400 12px/1.5 'Inter',system-ui; color:#9CA3AF; text-align:center; margin-top:10px;">Solo pueden entrar las personas invitadas por un administrador</p>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ============ A2 · Paso 2a — Contraseña ============ -->
+      <sc-if value="{{ isStepPassword }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex; flex-direction:column; gap:32px;">
+
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <h1 style="font:700 22px/1.25 'Inter',system-ui; color:#1A1D24; letter-spacing:-0.02em;">Introduce tu contraseña</h1>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <span style="font:400 14px/1.4 'Inter',system-ui; color:#6B7280;">{{ email }}</span>
+              <button
+                onClick="{{ changeEmail }}"
+                style="background:none; border:none; padding:0; cursor:pointer; font:600 14px/1.4 'Inter',system-ui; color:#3B5266; text-decoration:underline; text-underline-offset:2px;"
+                style-hover="color:#2E4252;">
+                Cambiar
+              </button>
+            </div>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:14px;">
+            <div style="display:flex; flex-direction:column; gap:7px;">
+              <label style="font:600 13px/1 'Inter',system-ui; color:#374151;">Contraseña</label>
+              <div style="position:relative; display:flex; align-items:center;">
+                <input
+                  type="{{ passType }}"
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  value="{{ password }}"
+                  onChange="{{ onPassword }}"
+                  style="width:100%; height:50px; padding:0 46px 0 14px; background:#fff; border:1.5px solid #D1D5DB; border-radius:10px; font:400 15px/1 'Inter',system-ui; color:#1A1D24; transition:border-color .15s, box-shadow .15s;"
+                  style-focus="border-color:#3B5266; box-shadow:0 0 0 3px rgba(59,82,102,.12);">
+                <button
+                  onClick="{{ toggleShowPass }}"
+                  title="{{ passToggleTitle }}"
+                  style="position:absolute; right:6px; width:36px; height:36px; border:none; background:none; cursor:pointer; display:flex; align-items:center; justify-content:center; border-radius:8px; color:#9CA3AF; transition:color .15s, background .15s;"
+                  style-hover="color:#374151; background:#F3F4F6;">
+                  {{ eyeIcon }}
+                </button>
+              </div>
+            </div>
+
+            <sc-if value="{{ showPassError }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex; align-items:flex-start; gap:8px;">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style="flex-shrink:0; margin-top:2px;"><circle cx="8" cy="8" r="6.5" stroke="#B91C1C" stroke-width="1.5"/><path d="M8 4.5v4" stroke="#B91C1C" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="10.75" r=".85" fill="#B91C1C"/></svg>
+                <span style="font:400 13px/1.45 'Inter',system-ui; color:#B91C1C;">Email o contraseña incorrectos</span>
+              </div>
+            </sc-if>
+
+            <button
+              onClick="{{ submitPassword }}"
+              style="width:100%; height:50px; margin-top:6px; background:#3B5266; color:#fff; border:none; border-radius:10px; font:600 15px/1 'Inter',system-ui; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .15s, transform .1s;"
+              style-hover="background:#2E4252;"
+              style-active="transform:scale(0.98); background:#233442;">
+              Entrar
+            </button>
+
+            <button
+              style="background:none; border:none; padding:8px 0; cursor:pointer; font:500 14px/1 'Inter',system-ui; color:#3B5266; align-self:center; margin-top:4px;"
+              style-hover="color:#2E4252;">
+              ¿Olvidaste tu contraseña?
+            </button>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ============ A3 · Paso 2b — Código ============ -->
+      <sc-if value="{{ isStepCode }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex; flex-direction:column; gap:32px;">
+
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <div style="width:48px; height:48px; border-radius:12px; background:#EAEFF3; display:flex; align-items:center; justify-content:center; margin-bottom:4px;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3B5266" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><polyline points="2.5 6 12 13 21.5 6"/></svg>
+            </div>
+            <h1 style="font:700 22px/1.25 'Inter',system-ui; color:#1A1D24; letter-spacing:-0.02em;">Revisa tu correo</h1>
+            <p style="font:400 14px/1.6 'Inter',system-ui; color:#6B7280;">Te hemos enviado un código a tu correo para que configures tu contraseña.</p>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <span style="font:600 14px/1.4 'Inter',system-ui; color:#1A1D24;">{{ email }}</span>
+              <button
+                onClick="{{ changeEmail }}"
+                style="background:none; border:none; padding:0; cursor:pointer; font:600 14px/1.4 'Inter',system-ui; color:#3B5266; text-decoration:underline; text-underline-offset:2px;"
+                style-hover="color:#2E4252;">
+                Cambiar
+              </button>
+            </div>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:16px;">
+            <div style="display:flex; flex-direction:column; gap:9px;">
+              <label style="font:600 13px/1 'Inter',system-ui; color:#374151;">Código de 6 dígitos</label>
+              <div style="display:flex; gap:8px;">
+                <sc-for list="{{ codeBoxes }}" as="box" hint-placeholder-count="6">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength="1"
+                    value="{{ box.value }}"
+                    onChange="{{ box.onChange }}"
+                    onKeyDown="{{ box.onKeyDown }}"
+                    ref="{{ box.ref }}"
+                    style="flex:1; min-width:0; height:56px; text-align:center; background:#fff; border:1.5px solid #D1D5DB; border-radius:10px; font:600 22px/1 'Inter',system-ui; color:#1A1D24; transition:border-color .15s, box-shadow .15s;"
+                    style-focus="border-color:#3B5266; box-shadow:0 0 0 3px rgba(59,82,102,.12);">
+                </sc-for>
+              </div>
+            </div>
+
+            <sc-if value="{{ showCodeError }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex; align-items:flex-start; gap:8px;">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style="flex-shrink:0; margin-top:2px;"><circle cx="8" cy="8" r="6.5" stroke="#B91C1C" stroke-width="1.5"/><path d="M8 4.5v4" stroke="#B91C1C" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="10.75" r=".85" fill="#B91C1C"/></svg>
+                <span style="font:400 13px/1.45 'Inter',system-ui; color:#B91C1C;">El código no es correcto o ha caducado</span>
+              </div>
+            </sc-if>
+
+            <button
+              onClick="{{ submitCode }}"
+              style="width:100%; height:50px; margin-top:4px; background:#3B5266; color:#fff; border:none; border-radius:10px; font:600 15px/1 'Inter',system-ui; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .15s, transform .1s;"
+              style-hover="background:#2E4252;"
+              style-active="transform:scale(0.98); background:#233442;">
+              Verificar código
+            </button>
+
+            <button
+              style="background:none; border:none; padding:8px 0; cursor:pointer; font:500 14px/1 'Inter',system-ui; color:#3B5266; align-self:center;"
+              style-hover="color:#2E4252;">
+              Reenviar código
+            </button>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ============ A4 · Configurar contraseña ============ -->
+      <sc-if value="{{ isStepSetPass }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex; flex-direction:column; gap:30px;">
+
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <h1 style="font:700 22px/1.25 'Inter',system-ui; color:#1A1D24; letter-spacing:-0.02em;">Crea tu contraseña</h1>
+            <p style="font:400 14px/1.6 'Inter',system-ui; color:#6B7280;">La usarás cada vez que entres. Guárdala en un sitio seguro.</p>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:16px;">
+
+            <div style="display:flex; flex-direction:column; gap:7px;">
+              <label style="font:600 13px/1 'Inter',system-ui; color:#374151;">Nueva contraseña</label>
+              <div style="position:relative; display:flex; align-items:center;">
+                <input
+                  type="{{ passType }}"
+                  autoComplete="new-password"
+                  placeholder="Mínimo 8 caracteres"
+                  value="{{ newPass }}"
+                  onChange="{{ onNewPass }}"
+                  style="width:100%; height:50px; padding:0 46px 0 14px; background:#fff; border:1.5px solid #D1D5DB; border-radius:10px; font:400 15px/1 'Inter',system-ui; color:#1A1D24; transition:border-color .15s, box-shadow .15s;"
+                  style-focus="border-color:#3B5266; box-shadow:0 0 0 3px rgba(59,82,102,.12);">
+                <button
+                  onClick="{{ toggleShowPass }}"
+                  title="{{ passToggleTitle }}"
+                  style="position:absolute; right:6px; width:36px; height:36px; border:none; background:none; cursor:pointer; display:flex; align-items:center; justify-content:center; border-radius:8px; color:#9CA3AF; transition:color .15s, background .15s;"
+                  style-hover="color:#374151; background:#F3F4F6;">
+                  {{ eyeIcon }}
+                </button>
+              </div>
+            </div>
+
+            <div style="display:flex; flex-direction:column; gap:7px;">
+              <label style="font:600 13px/1 'Inter',system-ui; color:#374151;">Repite la contraseña</label>
+              <input
+                type="{{ passType }}"
+                autoComplete="new-password"
+                placeholder="••••••••"
+                value="{{ confirmPass }}"
+                onChange="{{ onConfirmPass }}"
+                style="width:100%; height:50px; padding:0 14px; background:#fff; border:1.5px solid #D1D5DB; border-radius:10px; font:400 15px/1 'Inter',system-ui; color:#1A1D24; transition:border-color .15s, box-shadow .15s;"
+                style-focus="border-color:#3B5266; box-shadow:0 0 0 3px rgba(59,82,102,.12);">
+            </div>
+
+            <!-- Requisitos -->
+            <div style="display:flex; flex-direction:column; gap:9px; padding:14px 16px; background:#FAFAFA; border:1px solid #E5E7EB; border-radius:12px;">
+              <sc-for list="{{ rules }}" as="rule" hint-placeholder-count="3">
+                <div style="display:flex; align-items:center; gap:9px;">
+                  {{ rule.icon }}
+                  <sc-if value="{{ rule.ok }}" hint-placeholder-val="{{ false }}">
+                    <span style="font:500 13px/1.4 'Inter',system-ui; color:#15803D;">{{ rule.label }}</span>
+                  </sc-if>
+                  <sc-if value="{{ rule.pending }}" hint-placeholder-val="{{ true }}">
+                    <span style="font:400 13px/1.4 'Inter',system-ui; color:#6B7280;">{{ rule.label }}</span>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+
+            <sc-if value="{{ savePassReady }}" hint-placeholder-val="{{ false }}">
+              <button
+                onClick="{{ submitNewPass }}"
+                style="width:100%; height:50px; margin-top:4px; border:none; border-radius:10px; font:600 15px/1 'Inter',system-ui; display:flex; align-items:center; justify-content:center; background:#3B5266; color:#fff; cursor:pointer; transition:background .15s, transform .1s;"
+                style-hover="background:#2E4252;"
+                style-active="transform:scale(0.98); background:#233442;">
+                Guardar y entrar
+              </button>
+            </sc-if>
+            <sc-if value="{{ savePassDisabled }}" hint-placeholder-val="{{ true }}">
+              <button
+                disabled="{{ true }}"
+                style="width:100%; height:50px; margin-top:4px; border:none; border-radius:10px; font:600 15px/1 'Inter',system-ui; display:flex; align-items:center; justify-content:center; background:#E5E7EB; color:#9CA3AF; cursor:not-allowed;">
+                Guardar y entrar
+              </button>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 423, &quot;height&quot;: 860 },
+  &quot;demoStep&quot;: {
+    &quot;editor&quot;: &quot;enum&quot;,
+    &quot;options&quot;: [&quot;interactive&quot;, &quot;a1-empty&quot;, &quot;a1-filled&quot;, &quot;a2-password&quot;, &quot;a3-code&quot;, &quot;a4-setpass&quot;],
+    &quot;default&quot;: &quot;interactive&quot;,
+    &quot;section&quot;: &quot;Estado de demo&quot;
+  }
+}">
+class Component extends DCLogic {
+  // Emails de demo que YA tienen contraseña -> rama A2. Cualquier otro -> rama A3 (código).
+  static EXISTING = ['marta@vibecoder.com', 'carlos@vibecoder.com'];
+
+  state = {
+    step: 'email',
+    email: '',
+    password: '',
+    showPass: false,
+    code: ['', '', '', '', '', ''],
+    newPass: '',
+    confirmPass: '',
+    emailError: '',
+    passError: false,
+    codeError: false,
+  };
+
+  constructor(props) {
+    super(props);
+    this.codeRefs = [0, 1, 2, 3, 4, 5].map(() => React.createRef());
+  }
+
+  submitEmail() {
+    const email = this.state.email.trim().toLowerCase();
+    if (!email) return this.setState({ emailError: 'Escribe tu email para continuar' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return this.setState({ emailError: 'Ese email no parece válido' });
+    }
+    const known = Component.EXISTING.indexOf(email) !== -1;
+    this.setState({ emailError: '', step: known ? 'password' : 'code' });
+  }
+
+  submitPassword() {
+    if (!this.state.password) return this.setState({ passError: true });
+    this.setState({ passError: true });
+  }
+
+  submitCode() {
+    const code = this.state.code.join('');
+    if (code.length < 6) return this.setState({ codeError: true });
+    this.setState({ codeError: false, step: 'setpass' });
+  }
+
+  setDigit(i, raw) {
+    const ch = (raw || '').replace(/\D/g, '').slice(-1);
+    const code = this.state.code.slice();
+    code[i] = ch;
+    this.setState({ code, codeError: false });
+    if (ch && i < 5) {
+      const next = this.codeRefs[i + 1].current;
+      if (next) next.focus();
+    }
+  }
+
+  onDigitKey(i, e) {
+    if (e.key === 'Backspace' && !this.state.code[i] && i > 0) {
+      const prev = this.codeRefs[i - 1].current;
+      if (prev) prev.focus();
+    }
+  }
+
+  goBack() {
+    const step = this.state.step;
+    if (step === 'setpass') return this.setState({ step: 'code' });
+    this.setState({ step: 'email', passError: false, codeError: false });
+  }
+
+  eye(open) {
+    const parts = [
+      React.createElement('path', { key: 'e', d: 'M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z' }),
+      React.createElement('circle', { key: 'c', cx: 8, cy: 8, r: 2.5 }),
+    ];
+    if (open) parts.push(React.createElement('line', { key: 'l', x1: 2, y1: 2, x2: 14, y2: 14 }));
+    return React.createElement('svg', {
+      width: 17, height: 17, viewBox: '0 0 16 16', fill: 'none',
+      stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round',
+    }, parts);
+  }
+
+  check(ok) {
+    return React.createElement('svg', {
+      width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', style: { flexShrink: 0 },
+    }, ok
+      ? [
+          React.createElement('circle', { key: 'b', cx: 8, cy: 8, r: 7, fill: '#DCFCE7' }),
+          React.createElement('polyline', { key: 'c', points: '4.8 8.2 6.9 10.3 11.2 5.9', stroke: '#15803D', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' }),
+        ]
+      : [
+          React.createElement('circle', { key: 'b', cx: 8, cy: 8, r: 7, fill: '#F3F4F6' }),
+          React.createElement('circle', { key: 'd', cx: 8, cy: 8, r: 2, fill: '#C6CBD3' }),
+        ]
+    );
+  }
+
+  renderVals() {
+    const demo = this.props.demoStep || 'interactive';
+    const s = this.state;
+
+    const step = demo === 'interactive' ? s.step
+      : demo === 'a1-empty' || demo === 'a1-filled' ? 'email'
+      : demo === 'a2-password' ? 'password'
+      : demo === 'a3-code' ? 'code'
+      : 'setpass';
+
+    // Emails de demo por rama
+    const email = demo === 'interactive' ? s.email
+      : demo === 'a1-empty' ? ''
+      : demo === 'a2-password' ? 'marta@vibecoder.com'
+      : 'ana.nueva@vibecoder.com';
+
+    const showEmailError = demo === 'interactive' ? !!s.emailError : false;
+    const showPassError = demo === 'a2-password' ? true : (demo === 'interactive' && s.passError);
+    const showCodeError = demo === 'interactive' && s.codeError;
+
+    const demoCode = demo === 'a3-code' ? ['4', '9', '2', '', '', ''] : null;
+    const codeBoxes = [0, 1, 2, 3, 4, 5].map(i => ({
+      value: demoCode ? demoCode[i] : s.code[i],
+      ref: this.codeRefs[i],
+      onChange: (e) => this.setDigit(i, e.target.value),
+      onKeyDown: (e) => this.onDigitKey(i, e),
+    }));
+
+    const newPass = demo === 'a4-setpass' ? 'ventas2026' : s.newPass;
+    const confirmPass = demo === 'a4-setpass' ? 'ventas2026' : s.confirmPass;
+
+    const okLength = newPass.length >= 8;
+    const okNumber = /\d/.test(newPass);
+    const okMatch = newPass.length > 0 && newPass === confirmPass;
+    const allOk = okLength && okNumber && okMatch;
+
+    const rules = [
+      { label: 'Al menos 8 caracteres', ok: okLength },
+      { label: 'Incluye algún número', ok: okNumber },
+      { label: 'Las dos contraseñas coinciden', ok: okMatch },
+    ].map(r => ({ label: r.label, ok: r.ok, pending: !r.ok, icon: this.check(r.ok) }));
+
+    return {
+      email,
+      password: s.password,
+      newPass,
+      confirmPass,
+      passType: s.showPass ? 'text' : 'password',
+      passToggleTitle: s.showPass ? 'Ocultar contraseña' : 'Mostrar contraseña',
+      eyeIcon: this.eye(s.showPass),
+
+      isStepEmail: step === 'email',
+      isStepPassword: step === 'password',
+      isStepCode: step === 'code',
+      isStepSetPass: step === 'setpass',
+      canGoBack: step !== 'email',
+
+      showEmailError,
+      emailErrorText: s.emailError,
+      showPassError,
+      showCodeError,
+      codeBoxes,
+      rules,
+      savePassReady: allOk,
+      savePassDisabled: !allOk,
+
+      onEmail: (e) => this.setState({ email: e.target.value, emailError: '' }),
+      onPassword: (e) => this.setState({ password: e.target.value, passError: false }),
+      onNewPass: (e) => this.setState({ newPass: e.target.value }),
+      onConfirmPass: (e) => this.setState({ confirmPass: e.target.value }),
+      toggleShowPass: () => this.setState(p => ({ showPass: !p.showPass })),
+      submitEmail: () => this.submitEmail(),
+      submitPassword: () => this.submitPassword(),
+      submitCode: () => this.submitCode(),
+      submitNewPass: () => {},
+      changeEmail: () => this.setState({ step: 'email', passError: false, codeError: false }),
+      goBack: () => this.goBack(),
+    };
+  }
+}
+</script>
+</body>
+</html>

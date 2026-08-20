@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="Usuarios y equipo" description="Administración del equipo (solo admin): lista con roles y estados, menú de acciones por fila, modal de invitación y diálogo de confirmación destructivo. Protege a la última propietaria. Móvil 375px." -->
+<helmet>
+  <script src="./ds-base.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    input { font-family: 'Inter', system-ui, sans-serif; }
+    input:focus { outline: none; }
+    @keyframes ua-pop { from { opacity: 0; transform: scale(.97) translateY(6px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+    @keyframes ua-fade { from { opacity: 0; } to { opacity: 1; } }
+  </style>
+</helmet>
+
+<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; background:#E5E7EB;">
+  <div style="width:375px; height:812px; background:#FAFAFA; border-radius:40px; box-shadow:0 8px 24px rgba(26,29,36,.12), 0 32px 64px rgba(26,29,36,.16); overflow:hidden; position:relative; display:flex; flex-direction:column;">
+
+    <!-- Status bar -->
+    <div style="height:44px; background:#fff; display:flex; align-items:center; justify-content:space-between; padding:0 24px; flex-shrink:0;">
+      <span style="font:600 14px/1 'Inter',system-ui; color:#1A1D24;">9:41</span>
+      <div style="display:flex; align-items:center; gap:6px;">
+        <svg width="16" height="12" viewBox="0 0 16 12" fill="#1A1D24"><rect x="0" y="4" width="3" height="8" rx="1"/><rect x="4.5" y="2.5" width="3" height="9.5" rx="1"/><rect x="9" y="0.5" width="3" height="11.5" rx="1"/><rect x="13.5" y="0" width="2.5" height="12" rx="1"/></svg>
+        <svg width="20" height="12" viewBox="0 0 20 12" fill="none"><rect x=".75" y=".75" width="17" height="10.5" rx="2.25" stroke="#1A1D24" stroke-width="1.5"/><rect x="18.25" y="3.5" width="1.25" height="5" rx=".625" fill="#1A1D24"/><rect x="2" y="2" width="12" height="8" rx="1.5" fill="#1A1D24"/></svg>
+      </div>
+    </div>
+
+    <!-- Header -->
+    <div style="background:#fff; border-bottom:1px solid #E5E7EB; padding:12px 20px 16px; flex-shrink:0; display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
+      <div style="display:flex; flex-direction:column; gap:3px; min-width:0;">
+        <h1 style="font:700 20px/1.2 'Inter',system-ui; color:#1A1D24; letter-spacing:-0.02em;">Usuarios y equipo</h1>
+        <p style="font:400 13px/1.4 'Inter',system-ui; color:#6B7280;">Gestiona quién tiene acceso al CRM</p>
+      </div>
+      <button
+        onClick="{{ openInvite }}"
+        style="flex-shrink:0; height:44px; padding:0 14px; background:#3B5266; color:#fff; border:none; border-radius:8px; font:600 13px/1 'Inter',system-ui; cursor:pointer; display:flex; align-items:center; gap:6px; box-shadow:0 1px 3px rgba(59,82,102,.25); transition:background .15s, transform .1s;"
+        style-hover="background:#2E4252;"
+        style-active="transform:scale(0.97); background:#233442;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Invitar usuario
+      </button>
+    </div>
+
+    <!-- Lista -->
+    <div style="flex:1; overflow-y:auto; padding:16px 16px 32px;">
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <sc-for list="{{ users }}" as="u" hint-placeholder-count="3">
+          <div style="position:relative;">
+
+            <sc-if value="{{ u.isActive }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex; align-items:center; gap:12px; padding:14px; background:#fff; border:1px solid #E5E7EB; border-radius:12px;">
+                {{ u.avatarEl }}
+                <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:4px;">
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <span style="font:600 14px/1.2 'Inter',system-ui; color:#1A1D24; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ u.name }}</span>
+                    <sc-if value="{{ u.isYou }}" hint-placeholder-val="{{ false }}">
+                      <span style="flex-shrink:0; padding:2px 7px; background:#EAEFF3; border-radius:999px; font:600 10px/1.3 'Inter',system-ui; color:#3B5266; letter-spacing:0.03em;">Tú</span>
+                    </sc-if>
+                  </div>
+                  <span style="font:400 12px/1.3 'Inter',system-ui; color:#6B7280; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ u.email }}</span>
+                  <div style="display:flex; align-items:center; gap:6px; margin-top:2px;">
+                    {{ u.roleBadge }}
+                    <span style="display:inline-flex; align-items:center; gap:5px; padding:3px 8px; background:#DCFCE7; border-radius:999px; font:600 11px/1.35 'Inter',system-ui; color:#15803D;"><span style="width:5px; height:5px; border-radius:999px; background:#16A34A;"></span>Activo</span>
+                  </div>
+                </div>
+                <button
+                  onClick="{{ u.toggleMenu }}"
+                  style="flex-shrink:0; width:44px; height:44px; margin:-6px -8px -6px 0; border:none; background:none; cursor:pointer; display:flex; align-items:center; justify-content:center; border-radius:8px; color:#6B7280; transition:background .15s, color .15s;"
+                  style-hover="background:#F3F4F6; color:#1A1D24;">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+                </button>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ u.isInactive }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex; align-items:center; gap:12px; padding:14px; background:#fff; border:1px solid #E5E7EB; border-radius:12px; opacity:.62;">
+                {{ u.avatarEl }}
+                <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:4px;">
+                  <span style="font:600 14px/1.2 'Inter',system-ui; color:#1A1D24; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ u.name }}</span>
+                  <span style="font:400 12px/1.3 'Inter',system-ui; color:#6B7280; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ u.email }}</span>
+                  <div style="display:flex; align-items:center; gap:6px; margin-top:2px;">
+                    {{ u.roleBadge }}
+                    <span style="display:inline-flex; align-items:center; gap:5px; padding:3px 8px; background:#F3F4F6; border-radius:999px; font:600 11px/1.35 'Inter',system-ui; color:#6B7280;"><span style="width:5px; height:5px; border-radius:999px; background:#9CA3AF;"></span>Inactivo</span>
+                  </div>
+                </div>
+                <button
+                  onClick="{{ u.toggleMenu }}"
+                  style="flex-shrink:0; width:44px; height:44px; margin:-6px -8px -6px 0; border:none; background:none; cursor:pointer; display:flex; align-items:center; justify-content:center; border-radius:8px; color:#6B7280; transition:background .15s, color .15s;"
+                  style-hover="background:#F3F4F6; color:#1A1D24;">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+                </button>
+              </div>
+            </sc-if>
+
+            <!-- Menú de acciones -->
+            <sc-if value="{{ u.menuOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute; top:52px; right:8px; z-index:20; width:224px; background:#fff; border:1px solid #E5E7EB; border-radius:12px; box-shadow:0 8px 24px rgba(26,29,36,.14), 0 2px 6px rgba(26,29,36,.08); padding:5px; animation:ua-pop .14s ease-out; display:flex; flex-direction:column;">
+
+                <sc-if value="{{ u.canManage }}" hint-placeholder-val="{{ true }}">
+                  <button
+                    onClick="{{ u.closeMenu }}"
+                    style="display:flex; align-items:center; gap:10px; height:44px; padding:0 11px; background:none; border:none; border-radius:8px; cursor:pointer; font:500 13.5px/1 'Inter',system-ui; color:#1A1D24; text-align:left; transition:background .12s;"
+                    style-hover="background:#F3F4F6;">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>
+                    Cambiar rol
+                  </button>
+                </sc-if>
+                <sc-if value="{{ u.isProtected }}" hint-placeholder-val="{{ false }}">
+                  <button
+                    disabled="{{ true }}"
+                    title="Debe quedar al menos una propietaria"
+                    style="display:flex; align-items:center; gap:10px; height:44px; padding:0 11px; background:none; border:none; border-radius:8px; cursor:not-allowed; font:500 13.5px/1 'Inter',system-ui; color:#C6CBD3; text-align:left;">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>
+                    Cambiar rol
+                  </button>
+                </sc-if>
+
+                <button
+                  onClick="{{ u.closeMenu }}"
+                  style="display:flex; align-items:center; gap:10px; height:44px; padding:0 11px; background:none; border:none; border-radius:8px; cursor:pointer; font:500 13.5px/1 'Inter',system-ui; color:#1A1D24; text-align:left; transition:background .12s;"
+                  style-hover="background:#F3F4F6;">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  Restablecer contraseña
+                </button>
+
+                <div style="height:1px; background:#F3F4F6; margin:4px 7px;"></div>
+
+                <sc-if value="{{ u.canManage }}" hint-placeholder-val="{{ true }}">
+                  <button
+                    onClick="{{ u.askDeactivate }}"
+                    style="display:flex; align-items:center; gap:10px; height:44px; padding:0 11px; background:none; border:none; border-radius:8px; cursor:pointer; font:500 13.5px/1 'Inter',system-ui; color:#B91C1C; text-align:left; transition:background .12s;"
+                    style-hover="background:#FEF2F2;">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+                    Desactivar acceso
+                  </button>
+                </sc-if>
+                <sc-if value="{{ u.isProtected }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex; flex-direction:column; gap:2px; padding:8px 11px 9px;">
+                    <span style="display:flex; align-items:center; gap:10px; font:500 13.5px/1 'Inter',system-ui; color:#C6CBD3;">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+                      Desactivar acceso
+                    </span>
+                    <span style="font:400 11px/1.45 'Inter',system-ui; color:#9CA3AF; padding-left:25px;">Debe quedar al menos una propietaria</span>
+                  </div>
+                </sc-if>
+
+              </div>
+            </sc-if>
+
+          </div>
+        </sc-for>
+      </div>
+
+      <p style="font:400 12px/1.55 'Inter',system-ui; color:#9CA3AF; margin-top:18px; padding:0 4px;">Solo la propietaria puede gestionar el equipo. Los comerciales ven contactos, notas y ventas.</p>
+    </div>
+
+    <!-- ===== Backdrop ===== -->
+    <sc-if value="{{ anyOverlay }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeAll }}" style="position:absolute; inset:0; z-index:30; background:rgba(26,29,36,.45); animation:ua-fade .16s ease-out;"></div>
+    </sc-if>
+
+    <!-- ===== Modal · Invitar usuario ===== -->
+    <sc-if value="{{ isInvite }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute; left:16px; right:16px; top:50%; transform:translateY(-50%); z-index:40; background:#fff; border-radius:12px; padding:22px 20px 20px; box-shadow:0 16px 48px rgba(26,29,36,.22); animation:ua-pop .18s ease-out; max-height:88%; overflow-y:auto;">
+
+        <h2 style="font:700 18px/1.25 'Inter',system-ui; color:#1A1D24; letter-spacing:-0.015em;">Invitar usuario</h2>
+
+        <div style="display:flex; flex-direction:column; gap:15px; margin-top:18px;">
+
+          <div style="display:flex; flex-direction:column; gap:7px;">
+            <label style="font:600 13px/1 'Inter',system-ui; color:#374151;">Nombre</label>
+            <input
+              type="text"
+              placeholder="Nombre y apellido"
+              value="{{ inviteName }}"
+              onChange="{{ onInviteName }}"
+              style="width:100%; height:46px; padding:0 13px; background:#fff; border:1.5px solid #D1D5DB; border-radius:8px; font:400 14px/1 'Inter',system-ui; color:#1A1D24; transition:border-color .15s, box-shadow .15s;"
+              style-focus="border-color:#3B5266; box-shadow:0 0 0 3px rgba(59,82,102,.12);">
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:7px;">
+            <label style="font:600 13px/1 'Inter',system-ui; color:#374151;">Email</label>
+            <input
+              type="email"
+              inputMode="email"
+              placeholder="nombre@empresa.com"
+              value="{{ inviteEmail }}"
+              onChange="{{ onInviteEmail }}"
+              style="width:100%; height:46px; padding:0 13px; background:#fff; border:1.5px solid #D1D5DB; border-radius:8px; font:400 14px/1 'Inter',system-ui; color:#1A1D24; transition:border-color .15s, box-shadow .15s;"
+              style-focus="border-color:#3B5266; box-shadow:0 0 0 3px rgba(59,82,102,.12);">
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <label style="font:600 13px/1 'Inter',system-ui; color:#374151;">Rol</label>
+            <div style="display:flex; gap:8px;">
+              <sc-for list="{{ roleOptions }}" as="r" hint-placeholder-count="2">
+                <sc-if value="{{ r.on }}" hint-placeholder-val="{{ false }}">
+                  <button
+                    style="flex:1; height:44px; border-radius:8px; cursor:pointer; font:600 13px/1 'Inter',system-ui; background:#EAEFF3; color:#3B5266; border:1.5px solid #3B5266;">
+                    {{ r.label }}
+                  </button>
+                </sc-if>
+                <sc-if value="{{ r.off }}" hint-placeholder-val="{{ true }}">
+                  <button
+                    onClick="{{ r.select }}"
+                    style="flex:1; height:44px; border-radius:8px; cursor:pointer; font:500 13px/1 'Inter',system-ui; background:#fff; color:#6B7280; border:1.5px solid #E5E7EB; transition:border-color .15s, color .15s;"
+                    style-hover="border-color:#D1D5DB; color:#374151;">
+                    {{ r.label }}
+                  </button>
+                </sc-if>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:flex; gap:9px; padding:11px 12px; background:#EAEFF3; border-radius:8px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3B5266" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <span style="font:400 12.5px/1.5 'Inter',system-ui; color:#374151;">Recibirá un email para establecer su contraseña</span>
+          </div>
+
+          <div style="display:flex; gap:9px; margin-top:2px;">
+            <button
+              onClick="{{ closeAll }}"
+              style="flex:1; height:46px; background:#fff; color:#374151; border:1.5px solid #E5E7EB; border-radius:8px; font:600 14px/1 'Inter',system-ui; cursor:pointer; transition:background .15s, border-color .15s;"
+              style-hover="background:#F9FAFB; border-color:#D1D5DB;">
+              Cancelar
+            </button>
+            <button
+              onClick="{{ closeAll }}"
+              style="flex:1.4; height:46px; background:#3B5266; color:#fff; border:none; border-radius:8px; font:600 14px/1 'Inter',system-ui; cursor:pointer; box-shadow:0 1px 3px rgba(59,82,102,.25); transition:background .15s, transform .1s;"
+              style-hover="background:#2E4252;"
+              style-active="transform:scale(0.98); background:#233442;">
+              Enviar invitación
+            </button>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ===== Diálogo · Quitar acceso ===== -->
+    <sc-if value="{{ isConfirm }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute; left:24px; right:24px; top:50%; transform:translateY(-50%); z-index:40; background:#fff; border-radius:12px; padding:24px 20px 20px; box-shadow:0 16px 48px rgba(26,29,36,.22); animation:ua-pop .18s ease-out; text-align:center;">
+        <div style="width:48px; height:48px; border-radius:999px; background:#FEE2E2; display:flex; align-items:center; justify-content:center; margin:0 auto;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#B91C1C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+        </div>
+        <h2 style="font:700 17px/1.3 'Inter',system-ui; color:#1A1D24; letter-spacing:-0.015em; margin-top:14px;">{{ confirmTitle }}</h2>
+        <p style="font:400 13.5px/1.6 'Inter',system-ui; color:#6B7280; margin-top:8px;">No podrá entrar al CRM. Podrás reactivarle más adelante.</p>
+        <div style="display:flex; gap:9px; margin-top:20px;">
+          <button
+            onClick="{{ closeAll }}"
+            style="flex:1; height:46px; background:#fff; color:#374151; border:1.5px solid #E5E7EB; border-radius:8px; font:600 14px/1 'Inter',system-ui; cursor:pointer; transition:background .15s, border-color .15s;"
+            style-hover="background:#F9FAFB; border-color:#D1D5DB;">
+            Cancelar
+          </button>
+          <button
+            onClick="{{ confirmDeactivate }}"
+            style="flex:1; height:46px; background:#EF4444; color:#fff; border:none; border-radius:8px; font:600 14px/1 'Inter',system-ui; cursor:pointer; transition:background .15s, transform .1s;"
+            style-hover="background:#DC2626;"
+            style-active="transform:scale(0.98); background:#B91C1C;">
+            Quitar acceso
+          </button>
+        </div>
+      </div>
+    </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 423, &quot;height&quot;: 860 },
+  &quot;demoState&quot;: {
+    &quot;editor&quot;: &quot;enum&quot;,
+    &quot;options&quot;: [&quot;interactive&quot;, &quot;lista&quot;, &quot;modal-invitar&quot;, &quot;dialogo-quitar&quot;],
+    &quot;default&quot;: &quot;interactive&quot;,
+    &quot;section&quot;: &quot;Estado de demo&quot;
+  }
+}">
+class Component extends DCLogic {
+  state = {
+    overlay: null,        // null | 'invite' | 'confirm'
+    menuId: null,
+    confirmId: null,
+    inviteName: '',
+    inviteEmail: '',
+    inviteRole: 'comercial',
+    users: [
+      { id: 1, name: 'Marta García', email: 'marta@vibecoder.com',  role: 'propietaria', status: 'active',   you: true },
+      { id: 2, name: 'Carlos Ruiz',  email: 'carlos@vibecoder.com', role: 'comercial',   status: 'active',   you: false },
+      { id: 3, name: 'Laura Vidal',  email: 'laura@vibecoder.com',  role: 'comercial',   status: 'inactive', you: false },
+    ],
+  };
+
+  AV = [
+    { bg: '#EAEFF3', fg: '#3B5266' },
+    { bg: '#E0F2FE', fg: '#0369A1' },
+    { bg: '#FEF3C7', fg: '#B45309' },
+  ];
+
+  avatar(name, i) {
+    const c = this.AV[i % this.AV.length];
+    const initials = name.split(' ').map(w => w.charAt(0)).slice(0, 2).join('').toUpperCase();
+    return React.createElement('div', {
+      style: {
+        width: '42px', height: '42px', borderRadius: '999px',
+        background: c.bg, color: c.fg, display: 'flex',
+        alignItems: 'center', justifyContent: 'center',
+        font: "700 14px/1 'Inter',system-ui", flexShrink: 0,
+      },
+    }, initials);
+  }
+
+  roleBadge(role) {
+    const owner = role === 'propietaria';
+    return React.createElement('span', {
+      style: {
+        display: 'inline-flex', alignItems: 'center', padding: '3px 8px',
+        background: owner ? '#EAEFF3' : '#F3F4F6',
+        color: owner ? '#3B5266' : '#374151',
+        borderRadius: '999px', font: "600 11px/1.35 'Inter',system-ui", whiteSpace: 'nowrap',
+      },
+    }, owner ? 'Propietaria' : 'Comercial');
+  }
+
+  deactivate(id) {
+    this.setState(s => ({
+      overlay: null, confirmId: null, menuId: null,
+      users: s.users.map(u => (u.id === id ? Object.assign({}, u, { status: 'inactive' }) : u)),
+    }));
+  }
+
+  renderVals() {
+    const demo = this.props.demoState || 'interactive';
+    const s = this.state;
+
+    const overlay = demo === 'interactive' ? s.overlay
+      : demo === 'modal-invitar' ? 'invite'
+      : demo === 'dialogo-quitar' ? 'confirm'
+      : null;
+
+    const owners = s.users.filter(u => u.role === 'propietaria' && u.status === 'active').length;
+
+    const confirmId = demo === 'dialogo-quitar' ? 2 : s.confirmId;
+    const confirmUser = s.users.find(u => u.id === confirmId) || null;
+
+    const users = s.users.map((u, i) => {
+      const isProtected = u.you && u.role === 'propietaria' && owners <= 1;
+      return {
+        name: u.name,
+        email: u.email,
+        isYou: u.you,
+        isActive: u.status === 'active',
+        isInactive: u.status === 'inactive',
+        avatarEl: this.avatar(u.name, i),
+        roleBadge: this.roleBadge(u.role),
+        menuOpen: demo === 'interactive' && s.menuId === u.id && !s.overlay,
+        isProtected,
+        canManage: !isProtected,
+        toggleMenu: () => this.setState(p => ({ menuId: p.menuId === u.id ? null : u.id })),
+        closeMenu: () => this.setState({ menuId: null }),
+        askDeactivate: () => this.setState({ menuId: null, overlay: 'confirm', confirmId: u.id }),
+      };
+    });
+
+    const roleOptions = ['comercial', 'propietaria'].map(r => ({
+      label: r === 'comercial' ? 'Comercial' : 'Propietaria',
+      on: s.inviteRole === r,
+      off: s.inviteRole !== r,
+      select: () => this.setState({ inviteRole: r }),
+    }));
+
+    return {
+      users,
+      roleOptions,
+      anyOverlay: overlay !== null,
+      isInvite: overlay === 'invite',
+      isConfirm: overlay === 'confirm',
+      confirmTitle: confirmUser ? '¿Quitar el acceso a ' + confirmUser.name.split(' ')[0] + '?' : '¿Quitar el acceso?',
+      inviteName: s.inviteName,
+      inviteEmail: s.inviteEmail,
+      onInviteName: (e) => this.setState({ inviteName: e.target.value }),
+      onInviteEmail: (e) => this.setState({ inviteEmail: e.target.value }),
+      openInvite: () => this.setState({ overlay: 'invite', menuId: null }),
+      closeAll: () => this.setState({ overlay: null, confirmId: null, menuId: null }),
+      confirmDeactivate: () => (confirmUser ? this.deactivate(confirmUser.id) : this.setState({ overlay: null })),
+    };
+  }
+}
+</script>
+</body>
+</html>
