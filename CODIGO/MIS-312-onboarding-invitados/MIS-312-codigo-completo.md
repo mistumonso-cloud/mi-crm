@@ -1,49 +1,39 @@
-# MIS-312 — Código completo (onboarding de primera contraseña para invitados) — Ronda 2
+# MIS-312 — Código completo (onboarding de primera contraseña para invitados) — Ronda 3
 
-Entregable para la **auditoría de código**. La ronda 1 dio **GO CONDICIONADO** (aprobada la
-estrategia `__Host-reset_ticket` + fallback transitorio; condición: afinar la prueba de migración).
-Esta ronda 2 **cierra esa condición**. Plan: `PLANS/MIS-312-onboarding-invitados.md`. Rama
-`mis-312-onboarding-invitados` (base `main` @ `a536613`).
+Entregable para la **auditoría de código**. Ronda 1 → GO CONDICIONADO; ronda 2 cerró la condición
+(prueba de migración); **ronda 3 corrige un bug que cazó el CI**. Plan:
+`PLANS/MIS-312-onboarding-invitados.md`. Rama `mis-312-onboarding-invitados` (base `main` @ `a536613`).
 
 Documento **autocontenido**: contenido íntegro de los **2 ficheros nuevos** y diff completo de los
 **8 modificados**. Copias byte-idénticas en el directorio + `MIS-312.diff`.
 
-## Ronda 2 — cierre de la condición del GO (prueba de migración)
-`e2e/onboarding.spec.ts` se reescribió para cubrir la migración en los dos frentes que pedía el §8:
-- **Lectura dual (recuperación en vuelo)**: un test lleva el wizard al paso de contraseña (emite el
-  ticket válido en `__Host-`), **lee su valor** (Playwright lee cookies httpOnly), **borra `__Host-`
-  y coloca ese ticket en `__Secure-reset_ticket`** (path estrecho) — reproduciendo el estado
-  "verificó antes del despliegue" — y envía la contraseña: `resetPasswordAction` cae al **fallback
-  `__Secure-`** y **completa** el cambio (login con la nueva funciona).
-- **Transición + expiración**: otro test **siembra las DOS generaciones antiguas** —
-  `__Secure-reset_ticket` (MIS-293→MIS-312) y el legado `reset_ticket` (pre-MIS-293)— con su path
-  histórico, corre el flujo nuevo y comprueba que tras emitir `__Host-reset_ticket` (path `/`, con
-  atributos correctos) **no queda ninguna** de las dos antiguas (nombres/paths inspeccionados en la
-  respuesta). Cada test resetea la identidad (tickets distintos, single-use).
-
-Además (sugerencias baja): se retiró el bloque `[SUPERADO]` del plan, se corrigió la redacción del
-contrato ("no debe quedar la `__Secure-` tras emitir la `__Host-`"), y se **registró el follow-up**
-para retirar la lectura dual y el legado tras la ventana de 15 min (**MIS-315**).
+## Ronda 3 — fix cazado por el e2e en CI (bug REAL, no de test)
+El e2e de CI ejecutó todo verde salvo el test "migración (transición)", que reveló un **bug real**:
+la expiración de la cookie `__Secure-reset_ticket` en `setResetTicketCookie`/`clearResetTicketCookie`
+se emitía **sin `Secure`**. El navegador **RECHAZA** borrar una cookie con prefijo `__Secure-` si el
+`Set-Cookie` de expiración no lleva `Secure` → **la cookie vieja no se retiraría en producción**.
+Corrección: la expiración de `__Secure-reset_ticket` ahora incluye `httpOnly + secure + sameSite`
+(atributos con los que se emitió). Con esto la migración retira de verdad la variante antigua.
+(Los otros 49 tests del project de secretos, incluidos onboarding-happy y migración-lectura-dual,
+pasaron en verde en esa misma corrida de CI.)
 
 ## Verificación
 - `npm run lint` → **0 errores** (1 warning preexistente ajeno: `<img>` en `Avatar.jsx`).
 - `npx tsc --noEmit` (TODO el proyecto, e2e incluido) → **verde**.
 - `npm run build` (Next 16.2.10) → **verde**; `/configurar-contrasena` registrada (dynamic ƒ).
-- Smoke de servidor: `/configurar-contrasena` → **200**, `/recuperar-contrasena` → **200**.
-- **e2e Playwright**: escritos; **no ejecutables en esta máquina** (~5,7 GB RAM, load ~50 → OOM mata
-  Next dev + Chromium). Se verifican en **CI** (runner limpio; check `e2e` obligatorio del PR).
+- **e2e Playwright en CI**: build ✔; en la corrida anterior, 49/50 verdes y el único fallo fue el
+  bug de arriba (ya corregido) — se re-ejecuta en CI tras este fix. (No ejecutable en esta máquina
+  por límite de RAM.)
 
-## DESVIACIÓN DECLARADA respecto al plan aprobado (contexto de la ronda 1)
-El plan aprobado (rev2) cerraba M1 con *"un único nombre `reset_ticket`, expirar el path viejo en el
-mismo set"*. **No es realizable con Next.js**: `ResponseCookies` **indexa por NOMBRE**
-(`_parsed.set(name, …)` en `node_modules/next/dist/compiled/@edge-runtime/cookies/index.js`) → dos
-`Set-Cookie` del mismo nombre en una respuesta se deduplican. Se adoptó la alternativa que la propia
-auditoría listó como válida:
-- Ticket → **`__Host-reset_ticket`** (path `/`; sube de `__Secure-` a `__Host-`, más fuerte).
+## Estrategia de migración de la cookie (contrato final)
+La cookie del ticket → **`__Host-reset_ticket`** (path `/`; sube de `__Secure-` a `__Host-`). La API
+de cookies de Next indexa por NOMBRE (`ResponseCookies._parsed.set(name,…)`), así que no se pueden
+emitir dos `Set-Cookie` del mismo nombre en una respuesta → se usan **nombres distintos**:
 - `setResetTicketCookie`: emite `__Host-` (path `/`) **y** expira `__Secure-reset_ticket` (path
-  estrecho) + el legado `reset_ticket` (nombres distintos ⇒ ambos `Set-Cookie` se emiten).
-- `readResetTicketCookie`: `__Host-` con **fallback transitorio** a `__Secure-` (in-flight).
-- `clearResetTicketCookie`: expira las tres generaciones en su path.
+  estrecho, **con `Secure`** — fix ronda 3) + el legado `reset_ticket`.
+- `readResetTicketCookie`: `__Host-` con **fallback transitorio** a `__Secure-` (recuperaciones en
+  vuelo). Retirada registrada en **MIS-315**.
+- `clearResetTicketCookie`: expira las tres generaciones en su path (la `__Secure-` con `Secure`).
 
 ## Mapa de cambios
 
@@ -54,10 +44,9 @@ auditoría listó como válida:
 
 ### Ficheros MODIFICADOS (diff completo abajo)
 - `src/lib/auth/constants.ts` — `RESET_TICKET_COOKIE_NAME` → `__Host-reset_ticket`.
-- `src/lib/auth/cookie.ts` — set/read/clear (path `/`, migración M1, lectura dual); constantes
-  `LEGACY_SECURE_RESET_TICKET_COOKIE_NAME` y `LEGACY_RESET_TICKET_PATH`.
-- `src/app/(auth)/recuperar-contrasena/RecoverForm.tsx` — parametrizado (`copy` + `initialEmail`;
-  defaults = recuperación → ruta existente sin cambios).
+- `src/lib/auth/cookie.ts` — set/read/clear (path `/`, migración M1 con expiración `Secure` de la
+  `__Secure-`, lectura dual); constantes `LEGACY_SECURE_RESET_TICKET_COOKIE_NAME` y `LEGACY_RESET_TICKET_PATH`.
+- `src/app/(auth)/recuperar-contrasena/RecoverForm.tsx` — parametrizado (`copy` + `initialEmail`).
 - `src/app/(auth)/login/page.tsx` — mensaje `?reset=ok` neutro.
 - `src/app/(auth)/login/LoginForm.tsx` — pista "¿Primera vez?…".
 - `convex/lib/resend.ts` — invitación → `/configurar-contrasena?email=…`, copy sin "«Recuperar contraseña»".
@@ -69,9 +58,9 @@ auditoría listó como válida:
   (siempre `{ok:true}`) / `verifyResetCode` / `resetPasswordWithTicket` (ya limpia `invitePendingSince`
   y revoca sesiones). Login sin identifier-first.
 - **Cookie del ticket**: `__Host-` (Secure + Path=/ + sin Domain), httpOnly, sameSite lax, single-use,
-  TTL 15 min. Migración sin coexistencia + lectura dual transitoria (retirada registrada en MIS-315).
+  TTL 15 min. Migración sin coexistencia (expira las viejas, la `__Secure-` con `Secure`) + lectura
+  dual transitoria (retirada en MIS-315).
 - **`?email=`**: solo prellena; se **descarta** (no se trunca) si array/vacío/>254/sin forma de email.
-  Deuda aceptada: el email en la URL queda en historial/logs (no concede acceso).
 
 ---
 
@@ -354,29 +343,6 @@ test.describe("onboarding de primera contraseña (MIS-312)", () => {
 ## `src/lib/auth/constants.ts`
 
 ```diff
-diff --git a/src/lib/auth/constants.ts b/src/lib/auth/constants.ts
-index 2c33c97..cd9b812 100644
---- a/src/lib/auth/constants.ts
-+++ b/src/lib/auth/constants.ts
-@@ -21,7 +21,14 @@ export const PKCE_VERIFIER_COOKIE_NAME = "__Secure-google_pkce_verifier";
- // MIS-292 (M3): cookie httpOnly de corta duración (15 min) que transporta el
- // ticket de reseteo entre verificar el código y fijar la nueva contraseña.
- // Antes viajaba en estado React + <input type="hidden">, accesible a JS; ahora
--// solo existe aquí, fuera del alcance del navegador. Scope al flujo de
--// recuperación por su `path`.
--// MIS-293 (B2): prefijo `__Secure-` (mismo motivo que la de OAuth: su `path` ≠ `/`).
--export const RESET_TICKET_COOKIE_NAME = "__Secure-reset_ticket";
-+// solo existe aquí, fuera del alcance del navegador.
-+// MIS-312: el `path` pasa de `/recuperar-contrasena` a `/` para que el mismo
-+// ticket sirva también a la pantalla de onboarding `/configurar-contrasena`
-+// (server actions compartidas). Con `Secure` + `Path=/` + sin `Domain` ya cumple
-+// el prefijo `__Host-` (más fuerte que el `__Secure-` anterior). El rename es a
-+// propósito: durante la migración conviven SIN ambigüedad la cookie nueva
-+// (`__Host-`, path `/`) y la anterior (`__Secure-reset_ticket`, path estrecho),
-+// porque la API de cookies de Next indexa por NOMBRE y no permite emitir dos
-+// `Set-Cookie` del mismo nombre en una respuesta. Ver cookie.ts (lectura dual
-+// transitoria + expiración de la variante vieja) y PLANS/MIS-312.
-+export const RESET_TICKET_COOKIE_NAME = "__Host-reset_ticket";
 
 ```
 
@@ -384,79 +350,43 @@ index 2c33c97..cd9b812 100644
 
 ```diff
 diff --git a/src/lib/auth/cookie.ts b/src/lib/auth/cookie.ts
-index 0ea4ffa..5ff81a8 100644
+index 5ff81a8..1778c91 100644
 --- a/src/lib/auth/cookie.ts
 +++ b/src/lib/auth/cookie.ts
-@@ -29,6 +29,17 @@ const LEGACY_SESSION_COOKIE_NAME = "session";
- const LEGACY_OAUTH_STATE_COOKIE_NAME = "google_oauth_state";
- const LEGACY_RESET_TICKET_COOKIE_NAME = "reset_ticket";
- 
-+// MIS-312: nombre del ticket de reseteo ANTES de MIS-312 (prefijo `__Secure-`,
-+// path estrecho `/recuperar-contrasena`). Se EXPIRA en set/clear y se LEE como
-+// fallback transitorio para recuperaciones en vuelo iniciadas antes del
-+// despliegue (que verificaron el código con el nombre/ path viejos). Retirar
-+// este nombre y su lectura dual en un follow-up pasada la ventana de 15 min
-+// (TTL del ticket) desde el despliegue de MIS-312.
-+const LEGACY_SECURE_RESET_TICKET_COOKIE_NAME = "__Secure-reset_ticket";
-+// Path estrecho del ticket anterior. Constante compartida por set/clear para
-+// evitar divergencias tipográficas.
-+const LEGACY_RESET_TICKET_PATH = "/recuperar-contrasena";
-+
- const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 días — sesión persistente
- 
- // path:"/" explícito en set y clear: sin esto, un cambio futuro de ruta de
-@@ -154,19 +165,35 @@ const RESET_TICKET_TTL_SECONDS = 15 * 60;
- 
- export async function setResetTicketCookie(ticket: string): Promise<void> {
-   const cookieStore = await cookies();
-+  // MIS-312: `path:"/"` (antes `/recuperar-contrasena`) para que el ticket sirva
-+  // también a `/configurar-contrasena`; con Secure + Path=/ + sin Domain cumple `__Host-`.
-   cookieStore.set(RESET_TICKET_COOKIE_NAME, ticket, {
-     httpOnly: true,
-     secure: true,
-     sameSite: "lax",
--    path: "/recuperar-contrasena",
-+    path: "/",
-     maxAge: RESET_TICKET_TTL_SECONDS,
-   });
--  cookieStore.set(LEGACY_RESET_TICKET_COOKIE_NAME, "", { path: "/recuperar-contrasena", maxAge: 0 });
-+  // MIS-312 (M1): expira la variante ANTERIOR del ticket (`__Secure-`, path
-+  // estrecho) para que no coexistan dos cookies del ticket durante la migración.
-+  // Nombre DISTINTO al de arriba ⇒ la API de Next (indexa por nombre) no lo
-+  // deduplica y emite ambos `Set-Cookie`.
-+  cookieStore.set(LEGACY_SECURE_RESET_TICKET_COOKIE_NAME, "", { path: LEGACY_RESET_TICKET_PATH, maxAge: 0 });
-+  // Legacy pre-B2 (nombre sin prefijo), en su path original.
-+  cookieStore.set(LEGACY_RESET_TICKET_COOKIE_NAME, "", { path: LEGACY_RESET_TICKET_PATH, maxAge: 0 });
+@@ -178,7 +178,16 @@ export async function setResetTicketCookie(ticket: string): Promise<void> {
+   // estrecho) para que no coexistan dos cookies del ticket durante la migración.
+   // Nombre DISTINTO al de arriba ⇒ la API de Next (indexa por nombre) no lo
+   // deduplica y emite ambos `Set-Cookie`.
+-  cookieStore.set(LEGACY_SECURE_RESET_TICKET_COOKIE_NAME, "", { path: LEGACY_RESET_TICKET_PATH, maxAge: 0 });
++  // OBLIGATORIO `secure: true`: el navegador RECHAZA borrar una cookie con prefijo
++  // `__Secure-` si el Set-Cookie de expiración no lleva `Secure` (sin esto, la
++  // cookie vieja NO se retira). Se replican los atributos con que se emitió.
++  cookieStore.set(LEGACY_SECURE_RESET_TICKET_COOKIE_NAME, "", {
++    httpOnly: true,
++    secure: true,
++    sameSite: "lax",
++    path: LEGACY_RESET_TICKET_PATH,
++    maxAge: 0,
++  });
+   // Legacy pre-B2 (nombre sin prefijo), en su path original.
+   cookieStore.set(LEGACY_RESET_TICKET_COOKIE_NAME, "", { path: LEGACY_RESET_TICKET_PATH, maxAge: 0 });
  }
- 
- export async function readResetTicketCookie(): Promise<string | null> {
-   const cookieStore = await cookies();
--  return cookieStore.get(RESET_TICKET_COOKIE_NAME)?.value ?? null;
-+  // MIS-312: lee el ticket nuevo (`__Host-`, path `/`) y, como fallback
-+  // TRANSITORIO de migración, cae al anterior (`__Secure-`, path estrecho) para
-+  // recuperaciones que verificaron el código ANTES del despliegue. Retirar el
-+  // fallback pasada la ventana de 15 min.
-+  return (
-+    cookieStore.get(RESET_TICKET_COOKIE_NAME)?.value ??
-+    cookieStore.get(LEGACY_SECURE_RESET_TICKET_COOKIE_NAME)?.value ??
-+    null
-+  );
- }
- 
- export async function clearResetTicketCookie(): Promise<void> {
-@@ -175,8 +202,11 @@ export async function clearResetTicketCookie(): Promise<void> {
-     httpOnly: true,
-     secure: true,
-     sameSite: "lax",
--    path: "/recuperar-contrasena",
-+    path: "/",
-     maxAge: 0,
+@@ -207,6 +216,15 @@ export async function clearResetTicketCookie(): Promise<void> {
    });
--  cookieStore.set(LEGACY_RESET_TICKET_COOKIE_NAME, "", { path: "/recuperar-contrasena", maxAge: 0 });
-+  // MIS-312: expira también las variantes de migración en su path estrecho
-+  // (borrar una cookie exige repetir su `path` exacto). Nombres distintos ⇒ sin colisión.
-+  cookieStore.set(LEGACY_SECURE_RESET_TICKET_COOKIE_NAME, "", { path: LEGACY_RESET_TICKET_PATH, maxAge: 0 });
-+  cookieStore.set(LEGACY_RESET_TICKET_COOKIE_NAME, "", { path: LEGACY_RESET_TICKET_PATH, maxAge: 0 });
+   // MIS-312: expira también las variantes de migración en su path estrecho
+   // (borrar una cookie exige repetir su `path` exacto). Nombres distintos ⇒ sin colisión.
+-  cookieStore.set(LEGACY_SECURE_RESET_TICKET_COOKIE_NAME, "", { path: LEGACY_RESET_TICKET_PATH, maxAge: 0 });
++  // OBLIGATORIO `secure: true`: el navegador RECHAZA borrar una cookie con prefijo
++  // `__Secure-` si el Set-Cookie de expiración no lleva `Secure` (sin esto, la
++  // cookie vieja NO se retira). Se replican los atributos con que se emitió.
++  cookieStore.set(LEGACY_SECURE_RESET_TICKET_COOKIE_NAME, "", {
++    httpOnly: true,
++    secure: true,
++    sameSite: "lax",
++    path: LEGACY_RESET_TICKET_PATH,
++    maxAge: 0,
++  });
+   cookieStore.set(LEGACY_RESET_TICKET_COOKIE_NAME, "", { path: LEGACY_RESET_TICKET_PATH, maxAge: 0 });
  }
 
 ```
@@ -464,266 +394,36 @@ index 0ea4ffa..5ff81a8 100644
 ## `src/app/(auth)/recuperar-contrasena/RecoverForm.tsx`
 
 ```diff
-diff --git a/src/app/(auth)/recuperar-contrasena/RecoverForm.tsx b/src/app/(auth)/recuperar-contrasena/RecoverForm.tsx
-index 8f0d613..f662fbf 100644
---- a/src/app/(auth)/recuperar-contrasena/RecoverForm.tsx
-+++ b/src/app/(auth)/recuperar-contrasena/RecoverForm.tsx
-@@ -12,6 +12,33 @@ import {
- 
- const initialState: RecoverActionState = { step: "email" };
- 
-+// MIS-312: textos parametrizables para reutilizar el MISMO wizard en dos rutas
-+// —recuperación (`/recuperar-contrasena`) y onboarding de invitados
-+// (`/configurar-contrasena`)— sin duplicar la lógica de los 3 pasos ni las
-+// server actions. Los valores por defecto son los de recuperación, así que la
-+// ruta existente no cambia de comportamiento.
-+export type RecoverCopy = {
-+  title: string;
-+  subtitleEmail: string;
-+  subtitleCode: string;
-+  subtitlePassword: string;
-+  submitEmailIdle: string;
-+  submitPasswordIdle: string;
-+  footerHref: string;
-+  footerLabel: string;
-+};
-+
-+const RECOVER_COPY: RecoverCopy = {
-+  title: "Recuperar contraseña",
-+  subtitleEmail: "Te enviaremos un código a tu email",
-+  subtitleCode: "Introduce el código de 6 dígitos que te hemos enviado",
-+  subtitlePassword: "Elige tu nueva contraseña",
-+  submitEmailIdle: "Enviar código",
-+  submitPasswordIdle: "Guardar nueva contraseña",
-+  footerHref: "/login",
-+  footerLabel: "Volver al login",
-+};
-+
- // MIS-285: 3 pasos (email → código → nueva contraseña) en un único
- // componente cliente. No usa useActionState (un hook por form obligaría a
- // sincronizar 3 estados independientes para saber "cuál fue el último en
-@@ -19,7 +46,13 @@ const initialState: RecoverActionState = { step: "email" };
- // server actions se invocan directamente pasándoles el FormData del form que
- // disparó el submit — siguen siendo Server Actions normales, solo que el
- // resultado se enruta a mano al estado del wizard.
--export function RecoverForm() {
-+export function RecoverForm({
-+  copy = RECOVER_COPY,
-+  initialEmail,
-+}: {
-+  copy?: RecoverCopy;
-+  initialEmail?: string;
-+} = {}) {
-   const [state, setState] = useState<RecoverActionState>(initialState);
-   const [isPending, startTransition] = useTransition();
- 
-@@ -49,12 +82,12 @@ export function RecoverForm() {
-       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, textAlign: "center" }}>
-         <div>
-           <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>
--            Recuperar contraseña
-+            {copy.title}
-           </h1>
-           <p style={{ fontSize: 14, color: "var(--text-secondary)", margin: "4px 0 0" }}>
--            {state.step === "email" && "Te enviaremos un código a tu email"}
--            {state.step === "code" && "Introduce el código de 6 dígitos que te hemos enviado"}
--            {state.step === "password" && "Elige tu nueva contraseña"}
-+            {state.step === "email" && copy.subtitleEmail}
-+            {state.step === "code" && copy.subtitleCode}
-+            {state.step === "password" && copy.subtitlePassword}
-           </p>
-         </div>
-       </div>
-@@ -67,11 +100,12 @@ export function RecoverForm() {
-             type="email"
-             placeholder="tucorreo@email.com"
-             autoComplete="email"
-+            defaultValue={initialEmail}
-             required
-             disabled={isPending}
-           />
-           <Button type="submit" full size="lg" disabled={isPending}>
--            {isPending ? "Enviando…" : "Enviar código"}
-+            {isPending ? "Enviando…" : copy.submitEmailIdle}
-           </Button>
-         </form>
-       )}
-@@ -151,16 +185,16 @@ export function RecoverForm() {
-           {state.error && <ErrorBox message={state.error} />}
- 
-           <Button type="submit" full size="lg" disabled={isPending}>
--            {isPending ? "Guardando…" : "Guardar nueva contraseña"}
-+            {isPending ? "Guardando…" : copy.submitPasswordIdle}
-           </Button>
-         </form>
-       )}
- 
-       <a
--        href="/login"
-+        href={copy.footerHref}
-         style={{ textAlign: "center", fontSize: 13, color: "var(--text-secondary)", textDecoration: "none" }}
-       >
--        Volver al login
-+        {copy.footerLabel}
-       </a>
-     </div>
-   );
 
 ```
 
 ## `src/app/(auth)/login/page.tsx`
 
 ```diff
-diff --git a/src/app/(auth)/login/page.tsx b/src/app/(auth)/login/page.tsx
-index 4da5e17..20afd8b 100644
---- a/src/app/(auth)/login/page.tsx
-+++ b/src/app/(auth)/login/page.tsx
-@@ -31,7 +31,7 @@ export default async function LoginPage({
-     <div className="flex flex-1 items-center justify-center bg-[var(--color-bg)] px-4 py-16">
-       <LoginForm
-         initialError={googleError ? GOOGLE_LOGIN_ERROR_MESSAGE : undefined}
--        initialSuccess={reset === "ok" ? "Contraseña actualizada. Ya puedes iniciar sesión." : undefined}
-+        initialSuccess={reset === "ok" ? "Contraseña guardada. Ya puedes iniciar sesión." : undefined}
-       />
-     </div>
-   );
 
 ```
 
 ## `src/app/(auth)/login/LoginForm.tsx`
 
 ```diff
-diff --git a/src/app/(auth)/login/LoginForm.tsx b/src/app/(auth)/login/LoginForm.tsx
-index 35194d4..7583663 100644
---- a/src/app/(auth)/login/LoginForm.tsx
-+++ b/src/app/(auth)/login/LoginForm.tsx
-@@ -114,6 +114,11 @@ export function LoginForm({ initialError, initialSuccess }: LoginFormProps) {
-           ¿Olvidaste tu contraseña?
-         </a>
- 
-+        {/* MIS-312: pista para quien ha sido invitado y aún no tiene contraseña. */}
-+        <p style={{ fontSize: 12, color: "var(--text-tertiary)", margin: 0 }}>
-+          ¿Primera vez? Revisa tu email de invitación para crear tu contraseña.
-+        </p>
-+
-         {displayError && (
-           <div
-             role="alert"
 
 ```
 
 ## `convex/lib/resend.ts`
 
 ```diff
-diff --git a/convex/lib/resend.ts b/convex/lib/resend.ts
-index 24cb05c..1371442 100644
---- a/convex/lib/resend.ts
-+++ b/convex/lib/resend.ts
-@@ -105,14 +105,14 @@ function getAppBaseUrl(): string {
-   return (process.env.APP_BASE_URL ?? "https://mistu-monso.com").replace(/\/+$/, "");
- }
- 
--// MIS-309: email de invitación al equipo. NO transporta ningún secreto ni
--// código —el flujo de "Recuperar contraseña" ya emite su propio código de un
--// solo uso—: solo da la bienvenida y explica las dos vías de aceptación (crear
--// contraseña por "Recuperar contraseña", o entrar con Google con este email).
--// Molde y escape idénticos a passwordResetCodeHtml.
--function inviteHtml(name: string, recoverUrl: string): string {
-+// MIS-309/MIS-312: email de invitación al equipo. NO transporta ningún secreto ni
-+// código —la pantalla de bienvenida (`/configurar-contrasena`) emite su propio
-+// código de un solo uso—: solo da la bienvenida y explica las dos vías de
-+// aceptación (crear la contraseña en esa pantalla, o entrar con Google con este
-+// email). Molde y escape idénticos a passwordResetCodeHtml.
-+function inviteHtml(name: string, setupUrl: string): string {
-   const safeName = escapeHtml(name);
--  const safeUrl = escapeHtml(recoverUrl);
-+  const safeUrl = escapeHtml(setupUrl);
-   return `<!doctype html>
- <html lang="es">
-   <body style="margin:0;padding:0;background-color:#FAFAFA;font-family:'Inter',system-ui,Arial,sans-serif;">
-@@ -137,8 +137,8 @@ function inviteHtml(name: string, recoverUrl: string): string {
-                   </a>
-                 </div>
-                 <p style="margin:0 0 4px;color:#6B7280;font-size:13px;">
--                  Abre «Recuperar contraseña», escribe este email y sigue los pasos. Si el
--                  código no funciona, pide otro reenvío desde esa misma pantalla.
-+                  Pulsa el botón para crear tu contraseña. Si el código no funciona, pide
-+                  otro en esa misma pantalla.
-                 </p>
-                 <p style="margin:0;color:#6B7280;font-size:13px;">
-                   También puedes entrar directamente con Google usando este mismo correo.
-@@ -156,7 +156,10 @@ function inviteHtml(name: string, recoverUrl: string): string {
- // Como sendPasswordResetCodeEmail: los errores de Resend se relanzan SIN
- // destinatario ni cuerpo — solo el estado HTTP.
- export async function sendInviteEmail(to: string, name: string): Promise<void> {
--  const recoverUrl = `${getAppBaseUrl()}/recuperar-contrasena`;
-+  // MIS-312: enlace a la pantalla de bienvenida (onboarding) con el email
-+  // prellenado. El correo va en la URL solo para prellenar el campo; no concede
-+  // acceso (el código sigue llegando al buzón y el servidor revalida).
-+  const setupUrl = `${getAppBaseUrl()}/configurar-contrasena?email=${encodeURIComponent(to)}`;
-   const res = await fetch(RESEND_API_URL, {
-     method: "POST",
-     headers: {
-@@ -167,7 +170,7 @@ export async function sendInviteEmail(to: string, name: string): Promise<void> {
-       from: getResendFrom(),
-       to,
-       subject: "Te damos acceso al CRM",
--      html: inviteHtml(name, recoverUrl),
-+      html: inviteHtml(name, setupUrl),
-     }),
-   });
-   if (!res.ok) {
 
 ```
 
 ## `e2e/password-reset.spec.ts`
 
 ```diff
-diff --git a/e2e/password-reset.spec.ts b/e2e/password-reset.spec.ts
-index edb6ff1..6fdfef3 100644
---- a/e2e/password-reset.spec.ts
-+++ b/e2e/password-reset.spec.ts
-@@ -68,9 +68,11 @@ test.describe("recuperación de contraseña por código (MIS-285)", () => {
-     // literal exacto (detecta un rename mal hecho en la constante); su aceptación
-     // por el navegador prueba que se emitió con `Secure`.
-     expect(ticketCookie!.secure).toBe(true);
--    expect(ticketCookie!.name).toBe("__Secure-reset_ticket");
-+    // MIS-312: `path:"/"` (para servir también a /configurar-contrasena) → sube a
-+    // prefijo `__Host-`. Se fija el literal exacto (detecta un rename mal hecho).
-+    expect(ticketCookie!.name).toBe("__Host-reset_ticket");
-     expect(ticketCookie!.sameSite).toBe("Lax");
--    expect(ticketCookie!.path).toBe("/recuperar-contrasena");
-+    expect(ticketCookie!.path).toBe("/");
-     // maxAge 15 min → expires ≈ ahora + 900 s (con tolerancia amplia).
-     const nowSec = Date.now() / 1000;
-     expect(ticketCookie!.expires).toBeGreaterThan(nowSec + 800);
-@@ -85,7 +87,7 @@ test.describe("recuperación de contraseña por código (MIS-285)", () => {
-     await page.getByRole("button", { name: "Guardar nueva contraseña" }).click();
- 
-     await page.waitForURL(/\/login\?reset=ok/);
--    await expect(page.getByText("Contraseña actualizada")).toBeVisible();
-+    await expect(page.getByText("Contraseña guardada")).toBeVisible();
- 
-     expect(await loginSucceeds(newPassword)).toBe(true);
-     expect(await loginSucceeds(oldPassword)).toBe(false);
 
 ```
 
 ## `playwright.config.ts`
 
 ```diff
-diff --git a/playwright.config.ts b/playwright.config.ts
-index 577e033..cb95707 100644
---- a/playwright.config.ts
-+++ b/playwright.config.ts
-@@ -97,6 +97,7 @@ export default defineConfig({
-         "password-reset.spec.ts",
-         "password-reset-invariants.spec.ts",
-         "password-reset-daily-cap.spec.ts",
-+        "onboarding.spec.ts",
-         "session-cookie.spec.ts",
-         "session-revoke-all.spec.ts",
-       ],
 
 ```
 
