@@ -1,0 +1,39 @@
+diff --git a/src/lib/auth/cookie.ts b/src/lib/auth/cookie.ts
+index 5ff81a8..1778c91 100644
+--- a/src/lib/auth/cookie.ts
++++ b/src/lib/auth/cookie.ts
+@@ -178,7 +178,16 @@ export async function setResetTicketCookie(ticket: string): Promise<void> {
+   // estrecho) para que no coexistan dos cookies del ticket durante la migración.
+   // Nombre DISTINTO al de arriba ⇒ la API de Next (indexa por nombre) no lo
+   // deduplica y emite ambos `Set-Cookie`.
+-  cookieStore.set(LEGACY_SECURE_RESET_TICKET_COOKIE_NAME, "", { path: LEGACY_RESET_TICKET_PATH, maxAge: 0 });
++  // OBLIGATORIO `secure: true`: el navegador RECHAZA borrar una cookie con prefijo
++  // `__Secure-` si el Set-Cookie de expiración no lleva `Secure` (sin esto, la
++  // cookie vieja NO se retira). Se replican los atributos con que se emitió.
++  cookieStore.set(LEGACY_SECURE_RESET_TICKET_COOKIE_NAME, "", {
++    httpOnly: true,
++    secure: true,
++    sameSite: "lax",
++    path: LEGACY_RESET_TICKET_PATH,
++    maxAge: 0,
++  });
+   // Legacy pre-B2 (nombre sin prefijo), en su path original.
+   cookieStore.set(LEGACY_RESET_TICKET_COOKIE_NAME, "", { path: LEGACY_RESET_TICKET_PATH, maxAge: 0 });
+ }
+@@ -207,6 +216,15 @@ export async function clearResetTicketCookie(): Promise<void> {
+   });
+   // MIS-312: expira también las variantes de migración en su path estrecho
+   // (borrar una cookie exige repetir su `path` exacto). Nombres distintos ⇒ sin colisión.
+-  cookieStore.set(LEGACY_SECURE_RESET_TICKET_COOKIE_NAME, "", { path: LEGACY_RESET_TICKET_PATH, maxAge: 0 });
++  // OBLIGATORIO `secure: true`: el navegador RECHAZA borrar una cookie con prefijo
++  // `__Secure-` si el Set-Cookie de expiración no lleva `Secure` (sin esto, la
++  // cookie vieja NO se retira). Se replican los atributos con que se emitió.
++  cookieStore.set(LEGACY_SECURE_RESET_TICKET_COOKIE_NAME, "", {
++    httpOnly: true,
++    secure: true,
++    sameSite: "lax",
++    path: LEGACY_RESET_TICKET_PATH,
++    maxAge: 0,
++  });
+   cookieStore.set(LEGACY_RESET_TICKET_COOKIE_NAME, "", { path: LEGACY_RESET_TICKET_PATH, maxAge: 0 });
+ }
