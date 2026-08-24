@@ -1,0 +1,279 @@
+diff --git a/e2e/onboarding.spec.ts b/e2e/onboarding.spec.ts
+index f570832..68b66e9 100644
+--- a/e2e/onboarding.spec.ts
++++ b/e2e/onboarding.spec.ts
+@@ -2,13 +2,12 @@
+ // Reutiliza el motor de código+ticket de MIS-285, así que corre en el project
+ // "chromium-secrets" (circula la contraseña efímera de la identidad dedicada y la
+ // nueva que fija el propio spec, ninguna como literal). Cubre: el wizard en la
+-// ruta nueva, los atributos de la cookie del ticket (ahora `__Host-`, path `/`),
+-// su ausencia tras consumir, y la MIGRACIÓN M1 en dos frentes:
+-//   - lectura dual: una recuperación en vuelo completa con la cookie ANTIGUA
+-//     `__Secure-reset_ticket`;
+-//   - transición + expiración: el flujo nuevo emite `__Host-reset_ticket` y expira
+-//     las dos generaciones antiguas (`__Secure-reset_ticket` de MIS-293 y el legado
+-//     pre-MIS-293 `reset_ticket`), sin coexistencia.
++// ruta nueva, los atributos de la cookie del ticket (`__Host-`, path `/`) y su
++// ausencia tras consumir.
++// MIS-315: retirada la compatibilidad transitoria de la migración de MIS-312. Se
++// sustituyeron los dos tests de migración (lectura dual / transición) por una
++// prueba NEGATIVA que fija el contrato nuevo: un ticket que solo vive en el nombre
++// antiguo (`__Secure-reset_ticket`) ya NO autoriza el cambio de contraseña.
+ import { randomBytes } from "node:crypto";
+ import { test, expect } from "./helpers/secure-test";
+ import { RESET_TEST_EMAIL, getLastResetCode, loginSucceeds, resetTestIdentity } from "./helpers/test-support";
+@@ -30,8 +29,9 @@ async function waitForResetCode(): Promise<string> {
+ }
+ 
+ // Avanza el wizard (en la ruta dada) hasta el paso de contraseña, dejando emitido
+-// el ticket nuevo en `__Host-reset_ticket`. Devuelve el valor del ticket (Playwright
+-// lee cookies httpOnly). El botón del paso 1 depende del copy de cada ruta.
++// el ticket nuevo en `__Host-reset_ticket`. No devuelve nada (Promise<void>): quien
++// necesite el valor del ticket lo lee con `context.cookies()` (Playwright lee
++// cookies httpOnly). El botón del paso 1 depende del copy de cada ruta.
+ async function advanceToPasswordStep(
+   page: import("@playwright/test").Page,
+   route: string,
+@@ -95,7 +95,10 @@ test.describe("onboarding de primera contraseña (MIS-312)", () => {
+     expect(cookieAfter, "la cookie del ticket debe borrarse tras crear la contraseña").toBeFalsy();
+   });
+ 
+-  test("migración (lectura dual): una recuperación en vuelo completa con la cookie __Secure- antigua", async ({
++  // MIS-315: prueba NEGATIVA del contrato nuevo. Antes (MIS-312) un ticket que solo
++  // vivía en `__Secure-reset_ticket` completaba el cambio por lectura dual; retirada
++  // esa compatibilidad, ese mismo estado ya NO debe autorizar nada.
++  test("MIS-315: un ticket que solo vive en el nombre antiguo (__Secure-reset_ticket) ya NO autoriza", async ({
+     page,
+     context,
+   }) => {
+@@ -109,8 +112,9 @@ test.describe("onboarding de primera contraseña (MIS-312)", () => {
+     expect(host, "debería existir __Host-reset_ticket tras verificar").toBeTruthy();
+     const ticket = host!.value;
+ 
+-    // Reproduce el estado "en vuelo antes del despliegue": el ticket válido solo
+-    // vive en la cookie ANTIGUA `__Secure-reset_ticket` (path estrecho), sin __Host-.
++    // Reproduce el estado que MIS-315 deja de soportar: el ticket (válido en el
++    // servidor, aún sin consumir) vive SOLO en la cookie ANTIGUA
++    // `__Secure-reset_ticket` (path estrecho), sin `__Host-`.
+     await context.clearCookies();
+     await context.addCookies([
+       {
+@@ -124,75 +128,22 @@ test.describe("onboarding de primera contraseña (MIS-312)", () => {
+       },
+     ]);
+ 
+-    // Al enviar la contraseña, resetPasswordAction no encuentra __Host- y cae al
+-    // fallback __Secure- (lectura dual) → completa el cambio.
++    // Al enviar la contraseña, readResetTicketCookie ya NO cae al nombre antiguo →
++    // el ticket llega vacío → resetPasswordAction devuelve error y NO redirige.
+     await page.getByLabel("Nueva contraseña").fill(newPassword);
+     await page.getByLabel("Repite la contraseña").fill(newPassword);
+     await page.getByRole("button", { name: "Guardar nueva contraseña" }).click();
+ 
+-    await page.waitForURL(/\/login\?reset=ok/);
+-    expect(await loginSucceeds(newPassword)).toBe(true);
+-    expect(await loginSucceeds(oldPassword)).toBe(false);
+-  });
+-
+-  test("migración (transición): el flujo nuevo emite __Host- y expira las dos cookies antiguas", async ({
+-    page,
+-    context,
+-  }) => {
+-    // Siembra las DOS generaciones antiguas en su path estrecho (tickets ficticios;
+-    // aquí solo se prueba la migración de cookies, no su validez):
+-    //  - `__Secure-reset_ticket` (MIS-293 → MIS-312)
+-    //  - `reset_ticket` (legado pre-MIS-293)
+-    await context.addCookies([
+-      {
+-        name: "__Secure-reset_ticket",
+-        value: "stale-secure-pre-mis312",
+-        domain: "localhost",
+-        path: "/recuperar-contrasena",
+-        httpOnly: true,
+-        secure: true,
+-        sameSite: "Lax",
+-      },
+-      {
+-        name: "reset_ticket",
+-        value: "stale-legacy-pre-mis293",
+-        domain: "localhost",
+-        path: "/recuperar-contrasena",
+-        httpOnly: true,
+-        secure: true,
+-        sameSite: "Lax",
+-      },
+-    ]);
+-
+-    const oldPassword = await resetTestIdentity();
+-    const newPassword = freshPassword();
+-
+-    await advanceToPasswordStep(page, "/recuperar-contrasena", "Enviar código");
+-
+-    // Tras emitir el ticket nuevo, en la MISMA respuesta: existe __Host-reset_ticket
+-    // (path "/", con atributos correctos) y NINGUNA de las dos cookies antiguas
+-    // queda (no coexisten cookies del ticket).
+-    const cookies = await context.cookies();
+-    const host = cookies.find((c) => c.name === "__Host-reset_ticket");
+-    expect(host, "debe existir __Host-reset_ticket").toBeTruthy();
+-    expect(host!.path).toBe("/");
+-    expect(host!.httpOnly).toBe(true);
+-    expect(host!.secure).toBe(true);
+-    expect(host!.sameSite).toBe("Lax");
+-    expect(
+-      cookies.find((c) => c.name === "__Secure-reset_ticket"),
+-      "la __Secure- antigua no debe quedar tras emitir la __Host-",
+-    ).toBeFalsy();
+-    expect(
+-      cookies.find((c) => c.name === "reset_ticket"),
+-      "el legado reset_ticket no debe quedar",
+-    ).toBeFalsy();
+-
+-    // Y el flujo completa con el ticket nuevo.
+-    await page.getByLabel("Nueva contraseña").fill(newPassword);
+-    await page.getByLabel("Repite la contraseña").fill(newPassword);
+-    await page.getByRole("button", { name: "Guardar nueva contraseña" }).click();
+-    await page.waitForURL(/\/login\?reset=ok/);
+-    expect(await loginSucceeds(newPassword)).toBe(true);
++    // Señal INEQUÍVOCA de que la Server Action terminó (y falló): el ticket vacío
++    // hace que resetPasswordWithTicket devuelva {ok:false} → se pinta el ErrorBox
++    // (role="alert"). Esperarlo evita una carrera al comprobar la URL/credenciales.
++    await expect(page.getByRole("alert")).toBeVisible();
++    // No hubo redirect al éxito: seguimos en el paso de contraseña.
++    await expect(page).not.toHaveURL(/\/login\?reset=ok/);
++
++    // Contrato duro (vía ConvexHttpClient, independiente del render): la contraseña
++    // NO cambió — la nueva no entra y la anterior sigue valiendo.
++    expect(await loginSucceeds(newPassword)).toBe(false);
++    expect(await loginSucceeds(oldPassword)).toBe(true);
+   });
+ });
+diff --git a/src/lib/auth/constants.ts b/src/lib/auth/constants.ts
+index cd9b812..48807e4 100644
+--- a/src/lib/auth/constants.ts
++++ b/src/lib/auth/constants.ts
+@@ -22,13 +22,11 @@ export const PKCE_VERIFIER_COOKIE_NAME = "__Secure-google_pkce_verifier";
+ // ticket de reseteo entre verificar el código y fijar la nueva contraseña.
+ // Antes viajaba en estado React + <input type="hidden">, accesible a JS; ahora
+ // solo existe aquí, fuera del alcance del navegador.
+-// MIS-312: el `path` pasa de `/recuperar-contrasena` a `/` para que el mismo
+-// ticket sirva también a la pantalla de onboarding `/configurar-contrasena`
+-// (server actions compartidas). Con `Secure` + `Path=/` + sin `Domain` ya cumple
+-// el prefijo `__Host-` (más fuerte que el `__Secure-` anterior). El rename es a
+-// propósito: durante la migración conviven SIN ambigüedad la cookie nueva
+-// (`__Host-`, path `/`) y la anterior (`__Secure-reset_ticket`, path estrecho),
+-// porque la API de cookies de Next indexa por NOMBRE y no permite emitir dos
+-// `Set-Cookie` del mismo nombre en una respuesta. Ver cookie.ts (lectura dual
+-// transitoria + expiración de la variante vieja) y PLANS/MIS-312.
++// MIS-312: el `path` es `/` (antes `/recuperar-contrasena`) para que el mismo
++// ticket sirva tanto a `/recuperar-contrasena` como a la pantalla de onboarding
++// `/configurar-contrasena` (server actions compartidas). Con `Secure` + `Path=/`
++// + sin `Domain` cumple el prefijo `__Host-`, que el navegador REFUERZA.
++// MIS-315: retirada la compatibilidad transitoria con el nombre anterior
++// `__Secure-reset_ticket` (lectura dual + expiración), superada la ventana del
++// TTL del ticket (15 min) desde el despliegue de MIS-312. Ver cookie.ts.
+ export const RESET_TICKET_COOKIE_NAME = "__Host-reset_ticket";
+diff --git a/src/lib/auth/cookie.ts b/src/lib/auth/cookie.ts
+index 1778c91..2889025 100644
+--- a/src/lib/auth/cookie.ts
++++ b/src/lib/auth/cookie.ts
+@@ -27,18 +27,11 @@ import {
+ // la última versión desplegable que emitía estos nombres. Ver PLANS/MIS-293-cookies.md.
+ const LEGACY_SESSION_COOKIE_NAME = "session";
+ const LEGACY_OAUTH_STATE_COOKIE_NAME = "google_oauth_state";
+-const LEGACY_RESET_TICKET_COOKIE_NAME = "reset_ticket";
+-
+-// MIS-312: nombre del ticket de reseteo ANTES de MIS-312 (prefijo `__Secure-`,
+-// path estrecho `/recuperar-contrasena`). Se EXPIRA en set/clear y se LEE como
+-// fallback transitorio para recuperaciones en vuelo iniciadas antes del
+-// despliegue (que verificaron el código con el nombre/ path viejos). Retirar
+-// este nombre y su lectura dual en un follow-up pasada la ventana de 15 min
+-// (TTL del ticket) desde el despliegue de MIS-312.
+-const LEGACY_SECURE_RESET_TICKET_COOKIE_NAME = "__Secure-reset_ticket";
+-// Path estrecho del ticket anterior. Constante compartida por set/clear para
+-// evitar divergencias tipográficas.
+-const LEGACY_RESET_TICKET_PATH = "/recuperar-contrasena";
++// MIS-315: las constantes de los nombres ANTIGUOS del ticket de reseteo
++// (`__Secure-reset_ticket` de MIS-293→MIS-312 y el legado pre-B2 `reset_ticket`)
++// se retiraron aquí: superada la ventana del TTL del ticket (15 min) desde el
++// despliegue de MIS-312, ningún navegador conserva ya uno válido, así que ni se
++// leen ni se expiran. Ver PLANS/MIS-315.
+ 
+ const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 días — sesión persistente
+ 
+@@ -166,7 +159,10 @@ const RESET_TICKET_TTL_SECONDS = 15 * 60;
+ export async function setResetTicketCookie(ticket: string): Promise<void> {
+   const cookieStore = await cookies();
+   // MIS-312: `path:"/"` (antes `/recuperar-contrasena`) para que el ticket sirva
+-  // también a `/configurar-contrasena`; con Secure + Path=/ + sin Domain cumple `__Host-`.
++  // tanto a `/recuperar-contrasena` como a `/configurar-contrasena`; con Secure +
++  // Path=/ + sin Domain cumple `__Host-`.
++  // MIS-315: se emite SOLO `__Host-reset_ticket`; ya no se expiran las variantes
++  // antiguas (migración de MIS-312 completada, ver comentario arriba).
+   cookieStore.set(RESET_TICKET_COOKIE_NAME, ticket, {
+     httpOnly: true,
+     secure: true,
+@@ -174,39 +170,21 @@ export async function setResetTicketCookie(ticket: string): Promise<void> {
+     path: "/",
+     maxAge: RESET_TICKET_TTL_SECONDS,
+   });
+-  // MIS-312 (M1): expira la variante ANTERIOR del ticket (`__Secure-`, path
+-  // estrecho) para que no coexistan dos cookies del ticket durante la migración.
+-  // Nombre DISTINTO al de arriba ⇒ la API de Next (indexa por nombre) no lo
+-  // deduplica y emite ambos `Set-Cookie`.
+-  // OBLIGATORIO `secure: true`: el navegador RECHAZA borrar una cookie con prefijo
+-  // `__Secure-` si el Set-Cookie de expiración no lleva `Secure` (sin esto, la
+-  // cookie vieja NO se retira). Se replican los atributos con que se emitió.
+-  cookieStore.set(LEGACY_SECURE_RESET_TICKET_COOKIE_NAME, "", {
+-    httpOnly: true,
+-    secure: true,
+-    sameSite: "lax",
+-    path: LEGACY_RESET_TICKET_PATH,
+-    maxAge: 0,
+-  });
+-  // Legacy pre-B2 (nombre sin prefijo), en su path original.
+-  cookieStore.set(LEGACY_RESET_TICKET_COOKIE_NAME, "", { path: LEGACY_RESET_TICKET_PATH, maxAge: 0 });
+ }
+ 
+ export async function readResetTicketCookie(): Promise<string | null> {
+   const cookieStore = await cookies();
+-  // MIS-312: lee el ticket nuevo (`__Host-`, path `/`) y, como fallback
+-  // TRANSITORIO de migración, cae al anterior (`__Secure-`, path estrecho) para
+-  // recuperaciones que verificaron el código ANTES del despliegue. Retirar el
+-  // fallback pasada la ventana de 15 min.
+-  return (
+-    cookieStore.get(RESET_TICKET_COOKIE_NAME)?.value ??
+-    cookieStore.get(LEGACY_SECURE_RESET_TICKET_COOKIE_NAME)?.value ??
+-    null
+-  );
++  // MIS-315: se lee EXCLUSIVAMENTE `__Host-reset_ticket`. La lectura dual al
++  // nombre anterior (`__Secure-reset_ticket`) fue una compatibilidad transitoria
++  // de la migración de MIS-312 (comportamiento posterior a esa migración: solo el
++  // nombre nuevo autoriza) y se retiró pasada la ventana del TTL del ticket (15 min).
++  return cookieStore.get(RESET_TICKET_COOKIE_NAME)?.value ?? null;
+ }
+ 
+ export async function clearResetTicketCookie(): Promise<void> {
+   const cookieStore = await cookies();
++  // MIS-315: se limpia SOLO `__Host-reset_ticket` (migración de MIS-312 completada;
++  // ya no hay variantes antiguas que expirar).
+   cookieStore.set(RESET_TICKET_COOKIE_NAME, "", {
+     httpOnly: true,
+     secure: true,
+@@ -214,17 +192,4 @@ export async function clearResetTicketCookie(): Promise<void> {
+     path: "/",
+     maxAge: 0,
+   });
+-  // MIS-312: expira también las variantes de migración en su path estrecho
+-  // (borrar una cookie exige repetir su `path` exacto). Nombres distintos ⇒ sin colisión.
+-  // OBLIGATORIO `secure: true`: el navegador RECHAZA borrar una cookie con prefijo
+-  // `__Secure-` si el Set-Cookie de expiración no lleva `Secure` (sin esto, la
+-  // cookie vieja NO se retira). Se replican los atributos con que se emitió.
+-  cookieStore.set(LEGACY_SECURE_RESET_TICKET_COOKIE_NAME, "", {
+-    httpOnly: true,
+-    secure: true,
+-    sameSite: "lax",
+-    path: LEGACY_RESET_TICKET_PATH,
+-    maxAge: 0,
+-  });
+-  cookieStore.set(LEGACY_RESET_TICKET_COOKIE_NAME, "", { path: LEGACY_RESET_TICKET_PATH, maxAge: 0 });
+ }
